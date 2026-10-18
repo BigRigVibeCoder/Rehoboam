@@ -51,7 +51,8 @@ Goal (ADR-0035): a dynasty lives, dies and inherits deterministically, and the t
 | SPR-030 | P1.14 | Determinism and performance at scale: allocations to budget (A-32), benches 1–3, the dynastic fixture world's goldens, CRN pairing (V-DET-17), the G1a performance run | SPR-019, SPR-022, SPR-025 | C1 with C3 (new golden worlds) | dynastic fixture and 10k dynastic manifests (drafting: `twin_vales.yaml`, `kingdom_10k.yaml`, `specs/worldgen/fixture_worlds.md`, `specs/determinism/crn_pairing_v0.md`); `08` §9 (exists) | P1 |
 | SPR-031 | P1.18 | **Moved to P1b (D33).** `S5.daily_life` F1: virtual telemetry, `rh-cli where` / `who`, `DECISION_TRACE`; exact lags (A-28) | SPR-018, SPR-024 | C3 (lags) with C2 | `S5.daily_life` (draft); its reads of `person.residence` (S3), `person.occupation` (M4), `region.conditions` (M6) have no owner in P1a | P3: in P1b (D33; ruling M-4) |
 | SPR-032 | P1.8 | **Moved to P1b (D33).** M1 Regions F1: route modes and costs, settlement growth | SPR-018 | C3 | `M1.regions` F1 (missing) | P3: in P1b (D33; ruling M-5) |
-| SPR-038 | P1.14 (prep; BCK-002 A-60) | Per-instant engine cost: owned columns moved by index; compaction, `Ledger::check`, the invariants and the lagged snapshot only after a change; no `format!` or allocation on a quiet instant; the ledger write guards' O(rows) value checks in debug and test builds only, the state invariants yearly in release unless a run asks for every change (D60); SPR-014's known narrowing removed (a drain-only binding with an empty inbox must do nothing); `StepCtx::inserted()` for S3's newborn selector; the `instant` bench of the per-instant cost against ledger and life-course rows. Behaviour-neutral: no baseline moves | SPR-014, SPR-020, SPR-015 merged; before SPR-018 and SPR-021 recommended; before SPR-030's G1a run | C2 with `[perf-baseline]`; about 3.25–3.5 agent-days; outside the one-C3 slot | No system spec; `05.1` §2 rule 2, §4.2 and §9 sentences by the Architect in the PR; `docs/08` §9 line. Plan: `SPR-038_PerInstantCost.md` (PLANNING; D60) | P1 |
+| SPR-038a | P1.14 (prep; BCK-002 A-60), stage A | Per-instant engine cost, stage A (exact): owned columns moved by `ColumnId` slots; compaction, `Ledger::check`, the invariants and the lagged snapshot only after a change, with `every-change` semantics in every build; the write guards' pre-image at a column's first `write()` (SPR-014's known narrowing removed); `Ledger::check` and M2's invariants in O(N + L); positional compaction; no `format!` or allocation on a quiet instant; the cached plane hash equal to the full one after every instant; the `instant` bench. Behaviour-neutral: no baseline moves | SPR-014 merged; SPR-020 in either order; **before SPR-015** (REV-SPR-038 S6: CI's core part at the hard limit) | C2 with `[perf-baseline]`; about 3 agent-days; outside the one-C3 slot | No system spec; a `05.1` §9 sentence by the Architect; `docs/08` §9 line. Plan: `SPR-038_PerInstantCost.md` stage A (PLANNING revision 1; D60) | P1 |
+| SPR-038b | P1.14 (prep; BCK-002 A-60), stage B | Per-instant engine cost, stage B: the check cadence as a run parameter (`--check-cadence`, default `every-change` in every build, `yearly` opt-in for production and G1a), `Engine::check_now()` at run end and before each keyframe, cross-cadence replay refused; the write guards' value checks compiled out of release; a debug soak of every ledger-writing world with an inventory gate (`twin_vales` joins when its genesis runs); the month-end digest incremental and hash-identical (A-68 if a part cannot be); the instant log (P1a shared ruling X1: `inserted()` for SPR-018 and `exited()` for SPR-023, which SPR-021's EVO-002 extends with merged events); real `solo` and `hamlet` year benches. Behaviour-neutral: no baseline moves | SPR-038a merged; before SPR-018 if possible; before SPR-023 (it consumes `exited()`); before SPR-030's G1a run | C2 with `[perf-baseline]`; about 3 agent-days; outside the one-C3 slot | No system spec; `05.1` §2 rule 2, §4.2 and §9 sentences by the Architect; `docs/03` SIM-8 and `docs/09` V-INV-01 wording (D60). Plan: `SPR-038_PerInstantCost.md` stage B | P1 |
 
 **Out of P1a:** P1.4 and P1.5a (M3, M4: P1b in `docs/11`, although the old §2 listed "household food for `solo`" here; SPR-011 ruling 2, D31); P1.8 and P1.18 (P1b, D33: SPR-032 and SPR-031 keep their rows above); P1.11 (P1b); P1.16 (P1b); channel A's kind-7 `RESIDENCE_INTERVAL` record and `rh-cli tail --digest region` (S3 F1, P1b: D57 item 2; BCK-002 A-61).
 
@@ -102,12 +103,13 @@ flowchart LR
   S018 --> S031[SPR-031<br/>P1.18 S5 F1: P1b, D33]
   S024 --> S031
   S018 --> S032[SPR-032<br/>P1.8 M1 F1: P1b, D33]
-  S014 --> S038[SPR-038<br/>A-60 per-instant cost, C2]
-  S015 --> S038
-  S020 --> S038
-  S038 -.recommended before.-> S018
-  S038 -.recommended before.-> S021
-  S038 --> S030
+  S014 --> S038a[SPR-038a<br/>A-60 stage A, C2]
+  S038a -.either order.- S020
+  S038a -.merge order.-> S015
+  S038a --> S038b[SPR-038b<br/>A-60 stage B, C2]
+  S038b -.recommended before.-> S018
+  S038b --> S023
+  S038b --> S030
   S027 --> G1a([G1a])
   S028 --> G1a
   S029 --> G1a
@@ -136,7 +138,7 @@ Three development lanes. The director set 3–4 active agent sessions as the nor
 | 9 | SPR-030 (goldens, G1a runs) | SPR-028 | — | The harness and the scale run read everything the systems produce, so they come last |
 | P1b | SPR-031, SPR-032 (D33) | — | — | Not on the G1a path (rulings M-4, M-5) |
 
-**SPR-038** (BCK-002 A-60, C2, no baseline move) runs after wave 5 in any lane with a free session and merges in a gap between C3 merges; recommended before SPR-018 and SPR-021, required before SPR-030's G1a performance run (D60). Its number follows SPR-033 to SPR-037, which PRJ-003's viewer lane holds.
+**SPR-038** (BCK-002 A-60) runs as two C2 stages with no baseline move, outside the one-C3 slot (REV-SPR-038; D60): **stage A (`SPR-038a`)** right after SPR-014, in either order with SPR-020 and **before SPR-015**, which rebases onto it and hooks its derived index onto stage A's write set; **stage B (`SPR-038b`)** in any gap after stage A, before SPR-018 if possible, before SPR-023 (which consumes its instant log), and before SPR-030's G1a performance run in any case (shared ruling X9). SPR-038 is necessary for G1a; SPR-030 measures whether it is sufficient. Its number follows SPR-033 to SPR-037, which PRJ-003's viewer lane holds.
 
 ## 5. What each sprint gives Gate G1a
 
@@ -215,7 +217,7 @@ Approved with the plan at G0 (D30, 2026-10-16) and binding. The director decided
 | A-04 sealed held-out bands | Before P1b tuning; not P1a |
 | A-19, A-23, A-25, A-26 | Not P1a (A-23 only if a hand-written manifest hits it) |
 | Bench 4 baseline (G0 ruling) | SPR-018, the first sprint that builds a raster |
-| A-60 per-instant engine cost | SPR-014 (part, `1bd05a6`); the rest SPR-038, which also takes A-32's single-thread quiet-instant allocations (A-32 keeps the worker pool and multi-thread buffers, SPR-030) |
+| A-60 per-instant engine cost | SPR-014 (part, `1bd05a6`); SPR-038a (exact gating, O(N + L) checks, positional compaction, A-32's single-thread quiet-instant allocations) and SPR-038b (the cadence, the compile-out, the incremental digest). A-32 keeps the worker pool and multi-thread buffers (SPR-030); A-68 only if SPR-038b's digest fallback is used |
 
 ## 9. Load on the director
 

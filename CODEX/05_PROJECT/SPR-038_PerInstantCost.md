@@ -1,429 +1,514 @@
 ---
 id: SPR-038
-title: "Per-instant engine cost: owned columns by index, checks only after a change, the release-build rule for the ledger guards, the rows inserted this instant, and the per-instant benches (BCK-002 A-60)"
+title: "Per-instant engine cost in two stages: (A) owned columns by index, exact gating of every check after a change, O(N+L) checks, positional compaction; (B) the check cadence as a run parameter, the release compile-out of the write guards' value checks, the incremental month-end digest, the instant log (`inserted()`, `exited()`), and the real-world benches (BCK-002 A-60)"
 type: how-to
 status: PLANNING
 owner: architect
 agents: [coder, tester]
 tags: [sprint, determinism]
-related: [BCK-002, PRJ-002, REV-WAVE5, REV-WAVE6, SPR-007, SPR-009, SPR-011, SPR-014, SPR-015, SPR-016, SPR-018, SPR-020, SPR-021, SPR-030, ADR-0006, ADR-0007, ADR-0024, ADR-0025]
+related: [BCK-002, PRJ-002, REV-WAVE5, REV-WAVE6, SPR-007, SPR-009, SPR-011, SPR-014, SPR-015, SPR-016, SPR-018, SPR-019, SPR-020, SPR-021, SPR-030, ADR-0006, ADR-0007, ADR-0024, ADR-0025]
 created: 2026-10-18
 updated: 2026-10-18
-version: 0.1.0
+version: 0.2.0
 ---
 
-> **BLUF:** Removes the fixed per-instant engine overhead that SPR-014 exposed when it bound M2's `Day`/`Vital` drain to every day start (BCK-002 A-60: about 360 instants a year where there were 12–14).
+> **BLUF:** Removes the fixed per-instant engine overhead that SPR-014 exposed when it bound M2's `Day`/`Vital` drain to every day start (BCK-002 A-60: about 360 instants a year where there were 12–14), and the costs that grow with the life-course log, **in two stages in one plan, as SPR-019 has. Each stage is its own PR, Tester pass and audit.**
 >
-> **Scope:**
-> - **Owned columns move by index, not by name.** A job's columns are taken and returned through column slots resolved once when the engine is built, with no `String` key and no `BTreeMap` per job.
-> - **Every check runs only after a change.** Compaction, `Ledger::check`, each system's `invariants()` and the lagged-read snapshot run or refresh only when a column they cover was written, inserted or compacted since they last ran.
-> - **No `format!` and no per-phase allocation on a quiet instant.** A quiet instant at 1 thread allocates nothing.
-> - **A release-build rule for the checks** (D60 item 2, 75%):
->   - the ledger write guards' O(rows) value checks run in debug and test builds only, compiled out of release with a test that proves it (SPR-007's unsynced-guard pattern);
->   - their O(1) parts run in every build;
->   - the state invariants run after every change in debug builds, and yearly in release unless a run asks for every change.
-> - **SPR-014's known narrowing is removed.** A drain-only binding with an empty inbox must do nothing, and `rh-core` refuses it by name in every build if it does. Debug builds check every write.
-> - **`StepCtx::inserted()`** hands a step the rows inserted earlier in the instant, so S3's newborn selector is O(births), not O(persons).
-> - **A per-instant bench** measures the cost against the ledger's and the life-course log's row counts.
+> - **Stage A, PR `SPR-038a`** (C2, exact, about 3 agent-days; T-01 to T-04):
+>   - the before-figures and the `instant` bench, with release `every-change` priced on the CI gates;
+>   - owned columns moved by `ColumnId` slots, every put-back still taking a new version;
+>   - compaction, `Ledger::check`, each system's `invariants()` and the lagged-read snapshot run only after a change, with **`every-change` semantics in every build**;
+>   - the write guards' pre-images copied at a column's first `write()`, which removes SPR-014's known narrowing;
+>   - `Ledger::check` and M2's `invariants()` in O(N + L);
+>   - positional compaction;
+>   - no `format!` and no allocation on a quiet instant;
+>   - the test that the cached plane hash equals the full hash after every instant.
+>   - Merges after SPR-014, in either order with SPR-020, **before SPR-015** (CI's core part is at 14:48 against a 15:00 hard limit).
+> - **Stage B, PR `SPR-038b`** (C2, about 3–3.5 agent-days; T-05 to T-08):
+>   - **the check cadence as a run parameter**, `--check-cadence {every-change,yearly}`, whose default is `every-change` in every build;
+>   - `Engine::check_now()` at run end and before each keyframe;
+>   - cross-cadence replay and resume refused by name;
+>   - the write guards' O(rows) value checks compiled out of release, with a test that proves it (SPR-007's pattern);
+>   - a debug soak of every world that registers a ledger-writing system, with an inventory gate;
+>   - **the month-end digest made incremental and hash-identical** (one plane-A Merkle cache across stops, no clone except for keyframes and dumps);
+>   - **the instant log** (P1a shared ruling X1): an engine-owned, per-instant record, read-only to steps, filled only at the serial merges and outside every hash, keyframe and journal. It holds (a) `inserted()`, consumed by SPR-018, and (b) `exited()`, consumed by SPR-023. SPR-021's EVO-002 later adds (c) without changing (a) or (b);
+>   - one-sim-year `solo` and `hamlet` benches and a greedy-writer case in the gate;
+>   - "do not dispatch a job without work", only as the fallback if the quiet-instant target is missed.
+>   - Lands in any gap after stage A, before SPR-018 if possible, **before SPR-023** (it consumes `exited()`), and before SPR-030 in any case.
 >
-> **Behaviour-neutral: no baseline moves.** Every ladder, channel-A file, keyframe, `draws_golden` line and `m2_system` figure stays byte-identical, before and after.
+> **Behaviour-neutral: no baseline moves in either stage.** Every ladder, channel-A file, keyframe, `draws_golden` line and `m2_system` figure stays byte-identical, before and after.
 >
-> **Targets (proposed, 70%):**
-> - a quiet instant costs **at most 20,000 instructions**, and the same within 5% at 10⁴ ledger rows and 10⁵ life-course rows (from about 93k per instant today);
-> - a busy instant in release has no term in the life-course log's size;
-> - each rung runs **at least 4× faster** than the merge base;
-> - M2's system gates fall from 227 s to **at most 90 s**, and the debug `m2_system` gate returns to part core at **at most 15 s**.
+> **Targets (70%):**
+> - a quiet instant costs at most 20,000 instructions on the bench's arena, about 4× the stub floor, and the same within 5% at 10⁴ ledger rows and 10⁵ log rows;
+> - zero allocations on a quiet instant;
+> - `solo` at most 23k instructions per instant, every rung at least 4× faster;
+> - the debug `m2_system` gate's target is set from T-01's measurement (probably ≤ 30 s, from 82 s);
+> - CI's per-part median step time is lower in every part (`core`, `golden`, `stream`, assuming PR #89), with each added gate within its ×1.5 budget.
 >
-> **CI:** both parts' gate-time sums must fall against the merge base, measured; no gate moves to the nightly tier.
+> **G1a:** SPR-038 is **necessary** for G1a. With positional compaction and the incremental digest it is expected to remove the terms the core controls, but **SPR-030 measures whether it is sufficient**. T-01 states the arithmetic after both stages.
 >
-> - **Developer:** AGT-002-CORE (`rh-core`, `rh-sys-demography`'s `invariants()`), with AGT-002-TOOLS for `rh-bench`, `bin/perf_gate.py` and the gates. One session may hold both.
-> - **Testers:** AGT-003-DET (byte identity, the gates' exactness, the cadence, the release compile-out) and AGT-003-IF (the C2 surfaces: the no-work rule, `StepCtx::inserted`, the `05.1` sentences, the consumers of `WorldTables`). One session may hold both, on a different model from the Developer's.
-> - **Size and class:** **about 3.25–3.5 agent-days** by the task inventory (T-01 0.5, T-02 1.0, T-03 1.0, T-04 0.25–0.5, T-05 0.5), as one sprint. The alternative is a C1/C2 split (D60 item 1).
->   - **C2 with `[perf-baseline]`.** It changes `rh-core`'s system contract (the no-work rule, `StepCtx::inserted`) and `05.1`'s statement of where the invariants run, and no `state_hash` moves.
->   - **Not C3:** the hash layout, the column versions the Merkle cache reads, the phase order, the RNG, compaction's semantics and the journal are untouched. The specs table's class row explains.
->   - **`[perf-baseline]`:** the new bench's baseline is recorded, and the faster instruction counts and the lower allocation budgets are re-recorded, each by `bin/perf_gate.py` with a reason line (SPR-009 ruling 3).
-> - **Status:** PLANNING, revision 0. It needs the director's plan approval (D60; GOV-005 §2: C2 work).
+> - **Developer:** AGT-002-CORE (`rh-core`, `rh-sys-demography`'s `invariants()`, `rh-snapshot`'s cache use), with AGT-002-TOOLS for `rh-bench`, `rh-golden`'s run loop and flag, `bin/perf_gate.py`, `bin/golden_nightly.sh` and the gates. One session may hold both.
+> - **Testers, per stage:** AGT-003-DET (byte identity, the gates' exactness, the cache, the cadence, the release compile-out) and AGT-003-IF (the C2 surfaces: the `05.1` sentences, `WorldTables`' consumers, the run parameter and its records, the instant log). One session may hold both, on a different model from the Developer's.
+> - **Size and class:** about 6.25–7 agent-days in all: stage A about 3 (T-01 0.75, T-02 1.0, T-03 1.0, T-04 0.25–0.5), stage B about 3–3.5 (T-05 1.0, T-06 1.0, T-07 0.75–1.0, T-08 0.5). **Both stages are C2 with `[perf-baseline]`.** Each changes `rh-core`'s contract with systems or hosts and `05.1`'s text, no `state_hash` moves, and each records or re-records the perf baselines with the tool.
+> - **Status:** PLANNING, **revision 1.** The Architect's rulings S1–S16 on the independent review of revision 0 (`fb5d68b`) are applied. It needs the director's plan approval (D60; GOV-005 §2: C2 work).
+>
+> **Review record:** REV-SPR-038, which the Architect writes at close, holds the independent review of revision 0 (0 BLK, 7 MAJ, 7 MIN, 2 NIT; the diagnosis reproduced, the drafter's finding 3 verified as a G1a blocker) and the rulings S1–S16 applied here. Every `S` id in this plan is that review's.
 
-# SPR-038 — Per-instant engine cost (BCK-002 A-60)
+# SPR-038 — Per-instant engine cost, stages A and B (BCK-002 A-60)
 
-- **Roadmap item:** no `docs/11` WP of its own. It is engine machinery that SPR-030's G1a performance run needs: P1.14's criterion, 1,000 years of a 10k-person dynastic world in ≤ 60 s on 8 cores (`docs/11:189`; PRJ-002 §5). BCK-002 A-60 places it as "its own small sprint after wave 5", before SPR-030's performance run (`CODEX/05_PROJECT/BCK-002_ArchitectBacklog.md:80`) · **Phase / rung:** P1a; `smoke`, rungs 0–2, and a fixed-size 10k synthetic
+- **Roadmap item:** no `docs/11` WP of its own. It is engine machinery that SPR-030's G1a performance run needs: P1.14's criterion, 1,000 years of a 10k-person dynastic world in ≤ 60 s on 8 cores (`docs/11:189`; PRJ-002 §5). BCK-002 A-60 (`CODEX/05_PROJECT/BCK-002_ArchitectBacklog.md:80`) places it before SPR-030's performance run · **Phase / rung:** P1a; `smoke`, rungs 0–2, and a fixed-size 10k synthetic
 - **Code cites** are to `sprint/SPR-014-lifecycle-queues` at `921d372` (PR #83), the code this sprint changes, unless they are marked `main` (`3e2e6ef`).
 - **Depends on (the precondition head):**
-  - **SPR-014 merged** (PR #83): the daily drain, `AccessSpec::drain_only` (`access.rs:195–199`), the row insert (`engine.rs:1447–1513`), and A-60's first part (`1bd05a6`: `&'static str` guard names, row counts only for a job without work).
-  - **SPR-020 merged** (PR #84): its branch changes 111 lines of `engine.rs`, 185 of `system.rs` and 89 of `register.rs` (`git diff --stat` against `main`). Merging after it saves a second rebase of the same functions, and puts its emit checks in the before-figures.
-  - **SPR-015 merged** (wave 5): births make busy instants. Every insert passes through the row-insert path, which T-03 instruments and T-04 hands to readers. SPR-015's derived-index hook (its T-02, W4) runs after every level's merge, so its per-instant cost must be in the before-figures (the specs table's coordination row).
-  - **Independent of** SPR-016 (M2's mortality arithmetic, no engine change), SPR-017, SPR-026 and SPR-027.
-  - **Recommended before SPR-018 and SPR-021** (wave 6), so that their own measurements (SPR-018 T-05's A-60 record; X1, X7) are taken on the cheaper engine. If SPR-018 is on `main` first, T-04 converts S3's selector (+0.25 day).
+  - **Stage A:**
+    - **SPR-014 merged** (PR #83): the daily drain, `AccessSpec::drain_only` (`access.rs:195–199`), the row insert (`engine.rs:1447–1513`), and A-60's first part (`1bd05a6`).
+    - **SPR-020 in either order** (PR #84: 111 changed lines in `engine.rs`, 185 in `system.rs` and 89 in `register.rs` on its branch). Whichever lands second rebases. SPR-020's cause writes at the merge mark stage A's write set (the coordination row).
+    - **Before SPR-015:** SPR-015 may be developed in parallel; it merges `main` after stage A and hooks its derived index (W4) onto stage A's write set (S6).
+  - **Stage B:** stage A merged; SPR-015 not required; before SPR-018 if possible (its T-05 then measures on the cheaper engine), and before SPR-030 in any case.
+  - **Independent of** SPR-016, SPR-017, SPR-026 and SPR-027.
 - **Binding contracts:**
-  - `05.1` §2 rule 2: the draining part (`main`'s `05.1_simulation_core.md:73`) and "Ledger rows enter by insert" (`:77`); §4.1; §4.2 row 11 `Bookkeeping` (`:171`); §6 items 5 and 6 (`:263–265`: hashes "monthly in CI and debug builds and yearly (configurable) in release builds"); §9 (`:333–343`).
-  - **SPR-011 ruling 5** (`SPR-011_WalkingSkeleton.md:34`): compaction at the start of `Bookkeeping`, append-only life-course log, exit fields written once. This sprint keeps its semantics exactly.
-  - **The SPR-007 T-04 precedent** (`SPR-007_HashesKeyframesJournal.md:45, :81`): the unsynced guard runs in debug builds and is compiled out of release, proved by `crates/rh-snapshot/tests/guard.rs:49` (`the_guard_is_on_exactly_in_debug_builds`) and `:96` (`release_builds_compile_the_guard_out`), gated in `check_all.sh` (`main`:1253).
-  - **SPR-009** rulings 2, 3 and 5, R-7, R-8: iai-callgrind on the arena, baselines regenerated by the tool only, the allocation budget. Also `bin/perf_gate.py` (`main`): `LIMIT_PERCENT` `:65`, `BENCH_TARGETS` `:70`, and `alloc_compare` `:651–683`, where a decrease passes and is kept (`:680`). And `crates/rh-bench/README.md:32–34`: a perf-baseline PR merges by merge commit or rebase, never squash.
+  - `05.1` §2 rule 2: draining (`main`'s `05.1_simulation_core.md:73`) and "Ledger rows enter by insert" (`:77`); §4.1; §4.2 row 11 `Bookkeeping` (`:171`); §6 items 5 and 6 (`:263–265`: hashes "monthly in CI and debug builds and yearly (configurable) in release builds"); §9 (`:333–343`).
+  - **SPR-011 ruling 5** (`SPR-011_WalkingSkeleton.md:34`): compaction at the start of `Bookkeeping`, an append-only life-course log, exit fields written once. Both stages keep its semantics exactly.
+  - **SPR-007 T-04** (`SPR-007_HashesKeyframesJournal.md:45, :81`): the unsynced guard runs in debug only, proved by `crates/rh-snapshot/tests/guard.rs:49` and `:96` and gated in `check_all.sh` (`main`:1253).
+  - **SPR-007 T-01 and the Merkle cache** (`main`'s `crates/rh-snapshot/src/hash.rs`):
+    - `chunk_hash` (`:162`), `table_root` (`:181`), `TableDigest::of` (`:208`), `MerkleCache::update_world` (`:515`), `PlaneDigest::from_tables` (`:311`);
+    - VER-SPR-007 DEF-1: identity and versions;
+    - `state_digest` (`crates/rh-snapshot/src/state.rs:103–115`).
+  - **SPR-009** rulings 2, 3 and 5, R-7 and R-8. `bin/perf_gate.py` (`main`): `LIMIT_PERCENT` `:65`, `BENCH_TARGETS` `:70`, `alloc_compare` `:651–683` (a decrease passes and is kept, `:680`). `crates/rh-bench/README.md:32–34`: a perf-baseline PR merges by rebase, never squash.
   - `docs/08` §9 (`:229–249`).
-  - `docs/09`: V-PERF-04 (`:210`), V-PERF-11 (`:217`, "default 0 for P0 machinery"), V-INV-01 (`:125`), V-INV-02 (`:126`, "with invariants enabled in debug builds, nightly"), V-INV-04 (`:128`), V-SCALE-01 (`:659`), V-DET-01, V-DET-02, V-DET-05.
-  - `docs/03`: SIM-8 (`:51`: "Violations shall fail the run in debug and CI builds"), DET-11 (`:75`, the same phrase for the unsynced guard), PERF-4 (`:245`).
-  - `specs/systems/S3.migration.odd.toml` (`main`): the `Day`/`Vital` binding with "work only when a row entered the ledger this instant" (`:130–136`), `scale_behaviour` (`:154`: the O(N) scan, and "rh-core's row-insert plumbing … may hand S3 the rows inserted this instant instead, a hash-neutral optimisation left to the sprint"), and R4 (`:165`).
-- **System spec:** none is changed. M2's frozen texts stay as they are: INV-M2-01, 02 and 04 state properties "after every Bookkeeping", which do not depend on where they are checked. S3 is read, not edited, and its `scale_behaviour` already allows T-04.
+  - `docs/09`: V-PERF-04 (`:210`), V-PERF-11 (`:217`), V-INV-01 (`:125`: "After every pulse"), V-INV-02 (`:126`), V-INV-04 (`:128`), V-SCALE-01 (`:659`), V-DET-01, V-DET-02, V-DET-05.
+  - `docs/03`: SIM-8 (`:51`: "Violations shall fail the run in debug and CI builds"), DET-11 (`:75`), PERF-4 (`:245`).
+  - `specs/systems/S3.migration.odd.toml` (`main`): `:130–136`, `:154` (the hand-off "left to the sprint") and `:165` (R4).
+  - `bin/golden_nightly.sh` (`main`): the V-INV-02 debug soak, `:108–116`, over `household` and `hamlet` only (`:111`).
+- **System spec:** none is changed. INV-M2-01, 02 and 04 state properties "after every Bookkeeping", independent of where they are checked. S3 is read, not edited.
 - **Rulings (binding):**
-  - BCK-002 A-60, the Architect's ruling (A) of 2026-10-17;
-  - REV-WAVE6 X1 (`REV-WAVE6-plans.md:44`: nothing in M1 or S3 is O(cells) or O(rows) per instant) and X7 (`:50`: the lagged-column clones per instant);
-  - REV-WAVE5 W4 (`REV-WAVE5-plans.md:59`: the derived index, whose debug invariant is checked "in debug builds and tests") and W31 (`:78`: no interior mutability in plane A) and W42 (`:84`: CI per part with nightly candidates);
-  - REV-WAVE6 Z1 (`:60`: CI against measured state, budgeted for slow runners);
-  - SPR-014's A-60 slice and the ruling that made its narrowing "known" (`ledger.rs:249–253`).
-- **Director items:** D60, with five items, each with a recommendation and a confidence.
+  - **REV-SPR-038, S1–S16 and the Architect's restated D60** (2026-10-18);
+  - BCK-002 A-60;
+  - REV-WAVE6 X1, X7 and Z1 (`REV-WAVE6-plans.md:44, :50, :60`);
+  - REV-WAVE5 W4, W31 and W42 (`REV-WAVE5-plans.md:59, :78, :84`);
+  - **the P1a shared rulings of 2026-10-18** (REV-WAVE7, REV-MINDS): X1 (the instant log: one builder, this sprint's stage B, for parts (a) and (b)), X9 (the merge-order graph) and X10 (CI by role across three parts, assuming PR #89).
+- **Director items:** D60, the Architect's restatement, with a confidence per item.
 - **Requirements covered:**
-  - PERF-4: the new bench, gated at 10%;
-  - SIM-8: violations fail the run in debug and CI builds, which now covers a PR-tier debug rung run;
-  - SIM-4 and EVO-1: the no-work rule of a drain-only binding, V-INV-04;
-  - SIM-15: the cost is independent of the row count for jobs without work.
+  - PERF-4: the gated benches, including real `solo` and `hamlet` years;
+  - SIM-8: violations fail the run in debug and CI builds, at `every-change` by default in every build, with a debug soak of every ledger-writing world;
+  - SIM-4 and EVO-1: every write of a ledger column is checked by its pre-image, and the narrowing is gone;
+  - DET-11's pattern: the value checks compiled out of release, with a test.
 
-## The cost today (SPR-014's measurement; A-60)
+## The cost today (SPR-014's measurement, reproduced by the review)
 
 | What | Figure | Where in the code |
 |---|---|---|
-| Instants per sim-year | about 360, against 12–14 before SPR-014 | M2 0.2.3's `Day`/`Vital` drain-only binding (`demography.rs:422–426`) |
-| Instructions per instant (callgrind, `solo`, 100 years) | about 102k before `1bd05a6`, about 93k after | `run_instant` (`engine.rs:849–947`) |
-| Moving owned columns out and back | 36%: `job_inputs` 23.7%, `WorldTables::insert` 11.9%; `memcmp` 19.9% self | `job_inputs` takes each of M2's 19 columns into a `BTreeMap<&'static str, Column>` (`:278`, `:1186–1201`). `WorldTables` is a `BTreeMap<String, (u64, Column)>` (`world.rs:47–52`), whose `take` drops the `String` key (`:144–146`) and whose `insert` allocates a new one (`:105–109`), at the put-back (`engine.rs:1287`) |
-| Ledger write guards per M2 job | 24%: `Ledger::guard` 13.8%, `LifeCourseGuard::check` 6.2%, drops 3.7% | `ledger_guards` (`engine.rs:1317–1341`). For a job with work, `Ledger::guard` clones `person.id` and all ten `life_course.*` columns (`ledger.rs:274–276, :283–285`), and the check compares them row by row (`:369–456`). Per call: about 15k fixed (measured before `1bd05a6` removed its 19 `String` copies), and `check` 6.5k → 13.2k from `solo` to `hamlet` |
-| `Ledger::check` and `Ledger::compact` at every `Bookkeeping` | 12%: 6.3% and 5.4%. Per call, check 6.6k → 10.6k and compact about 5.7k | `engine.rs:881`, `:1079`. `check` builds a `BTreeMap` of open entries over the whole log (`ledger.rs:209–215`). `compact` scans `person.alive` (`:150`). Both look columns up by `String` (`aligned`, `:500–520`) |
-| M2's `invariants()` | 2.2% on `solo`: O(L) + O(N log N) + O(D log N) per call, with L log rows, N living and D dead | `demography.rs:535–592`: a binary search per closed row (`:564–568`) |
-| `format!` per instant | 2.2% | the diagnostic record (`engine.rs:936–944`), kept as `String`s in a ring of 1,000 (`crash.rs:35`) |
-| The month-end state digest | 2.3% | `rh-golden/src/run.rs:683`: `state_digest(&engine.snapshot())`, a full clone (`engine.rs:383`) and a full hash at every stop. **Out of scope** (see below) |
-| `Vec<Job>` growth, the pulse list, the per-phase plan | the rest | `fired` (`:857`), `due` (`:883`), the plan cloned per phase (`:896`), `passes` (`:897`), `binding_pass`'s groups (`:1520`) |
-| Allocations per instant (V-PERF-11) | about 60 per instant on the rungs | `allocations_v1.txt:12–14`: `solo` 21,420 in 360 ticks, `household` 21,492, `hamlet` 24,886 |
-| Wall time, 200 years headless | `solo` 0.074 → 0.875 s, `household` 0.079 → 0.873, `hamlet` 0.106 → 1.029; `smoke` +3.7% | — |
-| M2's system gates | 59 s → 294 s, then 227 s after `1bd05a6`. The debug `m2_system` gate went from about 4 s to about 99 s and moved to part golden (`376a47a`; `check_all.sh:1408–1409`) | — |
-| CI, `check_all` step | SPR-014's head `921d372` (run 39078266492): core 14:48, golden 11:11. `main` at `39b8d76` before SPR-014 (run 39073315181): core 11:38, golden 6:28 | — |
-
-**What grows with the world:** four terms.
-- The guard's clones are O(L) per job with work (L is the life-course log's row count).
-- `Ledger::check` is O(L + N log N).
-- M2's `invariants()` is O(L + D log N).
-- `compact` is O(N) per instant.
-
-The log is append-only and never compacted (ADR-0007), so L grows without bound. On `kingdom_10k` (10,000 persons, e0 30), L reaches about 3 × 10⁵ by year 1,000, and deaths land on most day starts, so almost every instant is busy. The drafter's estimate: at L ≈ 10⁵, the guard, `Ledger::check` and M2's `invariants()` cost about 10⁷ instructions per busy instant. Over 1,000 years that is about 3 × 10¹² instructions: more than ten times G1a's 60-second budget, and serial. T-01 measures this, and the targets below make it vanish in release.
+| Instants per sim-year | about 360, against 12–14 before SPR-014 | M2 0.2.3's drain-only `Day`/`Vital` (`demography.rs:422–426`) |
+| Instructions per instant, `solo` (callgrind, glibc malloc) | 93k (SPR-014's Developer); **92k reproduced** by the review on `921d372` | `run_instant` (`engine.rs:849–947`) |
+| Moving owned columns out and back | 36% (40% in the review); `memcmp` about 20% self | `job_inputs` builds a `BTreeMap<&'static str, Column>` per job (`:278`, `:1186–1201`). `WorldTables` is a `BTreeMap<String, (u64, Column)>` (`world.rs:47–52`): `take` drops the key (`:144–146`), `insert` allocates one (`:105–109`), at the put-back (`engine.rs:1287`) |
+| Ledger write guards per M2 job | 24% (about 16% in the review) | For a job with work, `Ledger::guard` clones `person.id` and the ten `life_course.*` columns (`ledger.rs:274–276, :283–285`), and the check compares them (`:369–456`). Per call: about 15k fixed (before `1bd05a6` removed its 19 `String` copies) |
+| `Ledger::check` and `compact` at every `Bookkeeping` | 12% (13% in the review) | `engine.rs:881`, `:1079`. A `BTreeMap` of open entries over the whole log (`ledger.rs:209–215`); `compact` collects every column anew (`:155–165`) |
+| M2's `invariants()` | O(L) + O(N log N) + O(D log N), with L log rows, N living and D dead | `demography.rs:535–592`, a binary search per closed row (`:564–568`) |
+| **Growth with L at N = 10⁴** (the review's 10⁴-founder probe) | a quiet day takes 1.12 ms at L = 10⁴ and 3.99 ms at L = 1.1 × 10⁵; a death day 1.31 and 10.07 ms. At L = 1.1 × 10⁵: 44M instructions per instant, of which M2's invariants are 19.3M, `run_passes` 15.6M, `Ledger::check` 8.8M and compaction 0.7M | — |
+| **Compaction and insert per event, at N = 10⁴** (the review's microbenchmark, at 9 / 15 / 25 `person.*` columns) | current collect 71 / 109 / 309 µs; in-place retain 63 / 93 / 161; **scan then positional `Vec::remove` 11 / 17 / 26**; insert 7 / 12 / 22. Over 333k deaths per 1,000 years: 24 / 36 / 103 s now and 3.5 / 5.6 / 8.5 s positional | `ledger.rs:144–167` |
+| **`person.*` columns per world** | 9 today (M2 0.2.3). 14 after SPR-015 (M2 0.3.0 adds `household`, `parity`, `last_birth_tick`, `conceived_tick`, `unborn_father`: `specs/systems/next/M2.demography.odd.toml`), 15 with S3's `residence` (SPR-018), 16 with M7's `vocation` (SPR-021) and 17 with T1's `named` (SPR-023). Ten `life_course.*` columns throughout | — |
+| `format!` per instant | 2.2% | `engine.rs:936–944`, a ring of 1,000 `String`s (`crash.rs:35`) |
+| **The month-end digest** (the drafter's finding 3, **verified as a G1a blocker**) | `snapshot()` 4.2 ms plus `state_digest` 4.3 ms = 8.5 ms per stop at 1.19M cells. Stops fall at every month end, and with `--run-dir` at every month start too: 12,000–24,000 per 1,000 years, so **102–200 s, about 270 s at L = 3 × 10⁵**, against G1a's 60 s | `rh-golden/src/run.rs:683`: `state_digest(&engine.snapshot())`; `engine.rs:383` clones every table |
+| Allocations per instant (V-PERF-11, glibc) | about 60 on the rungs | `allocations_v1.txt:12–14`: `solo` 21,420 in 360 ticks |
+| The stub floor | `draws/step_draws/empty`: 16,611 committed, **17,833 on SPR-014's head** (the baseline is stale). It covers two instants (`advance_until(1440)` is inclusive, `engine.rs:693`) plus a 1,000-step loop, so about **5k per instant** on the arena | `instructions_v1.txt:13` |
+| Wall time, 200 years headless | `solo` 0.074 → 0.875 s, `household` 0.079 → 0.873, `hamlet` 0.106 → 1.029 | — |
+| M2's system gates | 59 s → 294 s, then 227 s. **The debug `m2_system` gate takes 82 s on CI** (run 39078266492; 99 s in `376a47a`'s message), against about 4 s before SPR-014, and sits in part golden (`check_all.sh:1408–1409`) | — |
+| CI, `check_all` step | SPR-014's head `921d372` (run 39078266492): core 14:48, golden 11:11. PR #83's earlier run 39077091382 had golden at 8:13, a 36% swing. `main` `39b8d76` (run 39073315181): core 11:38, golden 6:28 | — |
 
 ## Specs this sprint needs
 
-| Spec | Exists? | Gap | Architect ruling | Needed by |
+| Spec | Exists? | Gap | Architect ruling | Stage, task |
 |---|---|---|---|---|
-| **Column storage and moves by index** | `WorldTables` is a `BTreeMap<String, (u64, Column)>` with a public name-based API (`insert`, `get`, `version`, `names`, `columns`, `identity`; `world.rs:96–147`). `rh-snapshot`, `rh-worldgen`, `rh-golden` and `rh-bench` use it. Columns are created only in `Engine::new` (SPR-005 G-c; `engine.rs:326–331`) | Every take and put-back of an owned column costs a string-keyed `BTreeMap` operation and a `String` allocation | **Proposed (80%):**<ul><li>`WorldTables` keeps its columns as slots sorted by name, each `{name, version, Option<Column>}`.</li><li>A `ColumnId` (u32) is resolved once in `Engine::new` for each `Entry`'s writes and reads and for the ledger's columns.</li><li>`take_at` and `put_at` are crate-private, O(1), and allocate nothing; a moved-out column reads as absent, exactly as `take` does today.</li><li>The public name-based API is unchanged, iteration stays in name order, and **every put-back still gives the column a new version**, so `rh-snapshot`'s Merkle cache (`hash.rs:457–527`), the plane hash and the keyframes see no difference.</li><li>A view's owned columns are a `Vec` in the order of the entry's writes, reused across instants, never a `BTreeMap`.</li><li>`Ledger` keeps `ColumnId`s, not `Vec<String>` (`ledger.rs:74–78`).</li><li>`insert_rows` works by id (`engine.rs:1499–1510`), with each entry's own `person.*` set computed once (`:1464–1470`).</li></ul>**Not here:** bumping a version only on a real write, which would let the Merkle cache skip unchanged columns. That changes the hashing machinery's dirty tracking (SPR-007 T-01; VER-SPR-007 DEF-1), so it is C3 by `docs/13` §4.2 and goes with the month-end digest item | T-02 |
-| **Where the checks run: the release-build rule** (A-60: "decide whether the ledger guards and `Ledger::check` belong in release builds at all") | The guards and `Ledger::check` run in every build at every instant (`engine.rs:1078–1080`, `:1300–1305`). The precedents:<ul><li>the unsynced guard runs in debug only (SPR-007);</li><li>`05.1` §6 item 6 hashes monthly in CI and debug builds and yearly in release;</li><li>V-INV-02 runs "invariants enabled in debug builds";</li><li>SIM-8 and DET-11 say "debug and CI builds";</li><li>SPR-015's derived-index invariant is "debug builds and tests" (W4)</li></ul> | At `kingdom_10k` scale the O(L) checks are the dominant per-instant term. `05.1` does not say which build runs which check | **Proposed (75%; D60 item 2), three classes:**<ol><li>**Write guards' value checks** (SPR-011 ruling 5's per-step rules: A-2 ids unchanged, G-1 no death after compaction, entry fields never change, exit fields written once by the closing step, DEF-3 open values, DEF-6 closed appends). They run in **debug and test builds only** (`cfg(debug_assertions)`), compiled out of release, with `LEDGER_VALUE_CHECKS == cfg!(debug_assertions)` and a release test in SPR-007's form. They check system code against the core's write rules: every system runs under them in the PR tier's debug suites and in the nightly 1,000-year debug soak, whose ladder must equal the release ladder (`bin/golden_nightly.sh:108–116`). **G-1 stays in every build**: it is O(N), and only for a job that writes `person.alive` in `Bookkeeping`, which no P1a system does.</li><li>**O(1) structural checks in every build:** each owned ledger column's row count is unchanged; the log never shrinks; the no-work rule (next row).</li><li>**State invariants** (`Ledger::check`, the core's agenda, event and queue-age checks, and each system's `invariants()`):<ul><li>debug and test builds check them at every `Bookkeeping` after a change (exact: next row);</li><li>release builds check them **at the first `Bookkeeping` at or after each year boundary, and after construction or restore**, by default;</li><li>`Engine::set_check_cadence(EveryChange)` brings release to the debug cadence for a run that wants it, such as a test that expects a failure at a precise instant;</li><li>`EveryInstant`, the pre-SPR-038 behaviour with no gating, is the reference mode for T-03's differential test.</li></ul>The queue-age check depends on `t`, so it runs at every `Bookkeeping` in every build; it costs O(queued commands).</li></ol>**The cadence changes no history:** checks are read-only. A violating run fails at the same instant in every debug build, and in release at the next yearly check (a different crash artifact: `build` differs anyway). The cadence is engine configuration, outside the history tuple, every hash and the ladder. **`05.1` text (the Architect's, in the PR):** §4.2 row 11 and a §9 preamble, worded as in T-03 | T-03 |
-| **The write set and the gates** (A-60: "run `Ledger::check`/`compact` only after a level that moved a ledger column") | The engine has no record of which columns a step wrote. `SystemView::write` hands out `&mut Column` (`world.rs:260–267`), the only mutable path a step has | — | **Proposed (85%):**<ul><li>`SystemView::write` sets the column's written flag, a plain field behind `&mut self` (no `Cell`: W31). The flags return with the columns.</li><li>Every core write path marks its columns: the put-back (by the flags), the row insert, compaction, SPR-020's cause writes at the merge, construction and restore. **By construction there is no other way to reach a slot mutably**: every mutable slot accessor takes the write set.</li><li>The gates, each "since it last ran", never "this instant":<ul><li>compaction runs when `person.alive` was written or rows were inserted since the last compaction;</li><li>`Ledger::check` runs when any ledger column was written, inserted or compacted since the last check;</li><li>each system's `invariants()` runs when any column was written, inserted or compacted since the last check, since it takes the whole `&WorldTables` (`system.rs:1057`);</li><li>a lagged column's snapshot is re-copied when that column was written since its copy (X7's clones).</li></ul></li></ul>**Why it is exact:**<ul><li>Compaction of a table with no dead row changes nothing; it already returns early and keeps every version (`ledger.rs:150–152`).</li><li>`Ledger::check` and `invariants()` are pure functions of the tables (`&self`, no time, no interior state: W31), so equal tables give the same verdict.</li><li>A lagged snapshot of an unwritten column equals the column.</li><li>"Since it last ran", never "this instant", so no write can fall unseen between two runs of a gate.</li></ul> | T-03 |
-| **The known narrowing** (A-60; `ledger.rs:249–253`; `tests/lifecycle_queues/guard.rs:12`, mode 2: an empty drain writes an exit field and passes) | `1bd05a6` keeps only the row counts for a job without work. Its reason was that "an empty drain writes nothing", which nothing checks | Remove it, or prove it safe | **Proposed (80%; D60 item 3): removed, in two parts:**<ul><li>**(a) The no-work rule, every build, O(1).** A drain-only binding whose inbox is empty after the dead-key drop has no work. Its step must take no write access, emit nothing, submit nothing, set or cancel no timer, insert no row and draw nothing. `rh-core` checks the view's flags, the outbox and the taken set, and refuses a breach by name, naming the system, the binding and the first breach. Mode 2 becomes a refusal in every build.</li><li>**(b) Debug builds check every write.** The guard's pre-image of a guarded column (`person.id`, every `life_course.*`) is copied at the **first `write()` of that column in that job**, not before the step for "jobs with work". A job that never writes a guarded column pays nothing, and every write of one is value-checked, whatever the job's work.</li></ul>Together, the narrowed case either does nothing, which is then exact, or fails by name. **`05.1` §2 rule 2 sentence (the Architect's):** "A binding whose only step is a drain (`AccessSpec::drain_only`) has no work at an instant where its inbox is empty; its step then writes, emits, submits, schedules, inserts and draws nothing, and `rh-core` refuses a breach by name." **Alternative (named, not built):** do not dispatch a job without work at all. That is cheaper still, but it changes the observer's notices, the dispatch counts and `05.1` §4.1's "the firing bindings run". It is the fallback lever if T-05 misses the quiet-instant target | T-03 |
-| **`Ledger::check` and M2's `invariants()` in O(N + L)** | `Ledger::check` builds a `BTreeMap` of open entries (`ledger.rs:209–243`). INV-M2-02 binary-searches the ledger once per closed row (`demography.rs:564–568`), O(D log N) with D unbounded | At 10k persons and 10⁵ log rows the yearly release check would cost tens of millions of instructions: the drafter's estimate, measured in T-01 | **Proposed (75%):** sorted `Vec`s and one merge over sorted ids in both, with **the same results, names and detail text** on every table, the first violation included. A differential property test keeps the current functions as test oracles: random tables, three sizes, eight seeds, every planted violation of each invariant. M2's other invariants (SPR-015's INV-M2-06/07/10/12/13, SPR-016's 20/21) are measured per call in T-01. One above O((N + L) log N) is reported, not changed here | T-03 |
-| **The diagnostic record and a quiet instant's allocations** | Each instant `format!`s one line into a `VecDeque<String>` of up to 1,000 (`engine.rs:800–805, :936–944`). The plan is cloned per phase (`:896`). `fired`, `due`, `passes`, the binding pass's groups, and the level's `guards`, `inputs`, `outcomes` and `outboxes` are fresh `Vec`s | V-PERF-11's default for machinery is 0 (`docs/09:217`). SPR-014 T-08 expected "the empty daily drain should allocate nothing in steady state", and it allocates about 60 | **Proposed (70%; D60 item 1 names the split with A-32):**<ul><li>The ring holds fixed-size records (tick, the fired pulses in `pulses_at` order, the four counts and the agenda length) and a text variant for the cold `FATAL` line (`:714`). `diagnostics()` renders them **byte-identically** to today's strings, which crash artifacts and `Engine::replay` compare.</li><li>The phase's plan is borrowed, not cloned.</li><li>Every per-phase and per-level buffer is kept across instants, as `inboxes` already is (`:236–238`).</li><li>**A quiet instant at 1 thread allocates nothing.**</li></ul>BCK-002 A-32 (`BCK-002:52`, SPR-030) keeps the persistent worker pool and the buffers of multi-thread levels (scoped-thread spawns) | T-02 |
-| **S3's newborn selector** (A-60; X1) | S3's R4 scans every ledger row for `person.residence = 0` at each day start: 3.6 × 10⁶ compares a year at 10k (`S3.migration.odd.toml:154`). The spec allows the hand-off (same line) and says the zero rows are "exactly the rows inserted in this instant" (`:165`) | No core API hands a step the instant's inserts | **Proposed (65%; D60 item 4):**<ul><li>`StepCtx::inserted() -> &[PersonId]`: the ids inserted by the merges of earlier levels and phases of this instant that are still ledger rows, ascending, kept in an engine buffer cleared at each instant. It is never stored, hashed or keyframed. A keyframe is cut after `Bookkeeping`, so nothing pends across a restore.</li><li>S3's step reads it, and in debug builds `debug_assert`s that it equals R4's scan.</li><li>**`05.1` §2 rule 2 sentence (the Architect's):** "A step reads, through `StepCtx::inserted`, the `PersonId`s of the ledger rows that the merges of earlier levels and phases of this instant inserted, ascending; the list is derived from the merges and is never stored or hashed."</li><li>**Equivalence with R4** holds while every insert precedes S3's step in its instant: births are M2's, in `Vital`, at day starts, with M2 → S3 by the `same_instant` edge (`:165`). The debug assertion fails closed if a later system breaks that.</li><li>If SPR-018 has not merged, T-04 ships the API and a consumer test, and the Architect adds one line to SPR-018 T-03 at this plan's approval (S3 reads `inserted()`). If SPR-018 has merged, T-04 converts `rh-sys-migration`'s step.</li></ul>**Alternative:** keep the scan, about 2–4 instructions per row, roughly as large as the whole quiet-instant target at 10⁴ persons, and file the hand-off later | T-04 |
-| **The benches** (A-60: "measure per-instant cost against row count on a fixed-size synthetic (`kingdom_10k`'s genesis held for a year)") | `rh-bench`'s `draws` measures one instant of a one-column stub world (`draws/step_draws/empty` = 16,611; `instructions_v1.txt:13`). No bench has a ledger. `kingdom_10k`'s genesis needs SPR-019 (wave 7) | A bench that varies N and L independently: L is unbounded, N is not | **Proposed (75%):**<ul><li>**`crates/rh-bench/benches/instant.rs`** (iai-callgrind, the arena allocator, the `draws` pattern), with its fixture in `crates/rh-bench/src/instant.rs`.</li><li>**The fixture:** a stub system `B1.ledger` that owns M2's 19 column names, so the core's ledger rules apply in full. It has a `Month`/`Vital` step that rewrites one `person.spouse` cell with its own value (a change for the gates, none for the state, so a held year ends with exactly one full check), a drain-only `Day`/`Vital` binding with an empty inbox, and a `Day`/`Vital` death timer for the busy cases. The tables are built directly: N living rows and L log rows, of which L − N are closed.</li><li>**Seven gated cases:**<ul><li>`quiet/n1_l1` and `quiet/n10k_l100k`: one quiet day start;</li><li>`death/n10k_l10k` and `death/n10k_l100k`: one day start with one death, so a compaction;</li><li>`insert/n10k_l100k`: one birth through the row insert;</li><li>`year/n10k_l10k` and `year/n10k_l100k`: one whole sim-year of a size held fixed, so 360 quiet day starts, 12 month steps and one yearly check. This is "the genesis held for a year" at `kingdom_10k`'s genesis size (L ≈ N) and at a late size.</li></ul></li><li>`BENCH_TARGETS` gains `instant`, gated at 10% by V-PERF-04. The bench is unnumbered, like `draws` (SPR-011 T-02), with one line in `docs/08` §9.</li><li>**Reported, not gated:**<ul><li>a sweep of N ∈ {1, 10², 10³, 10⁴} × L/N ∈ {1, 10} (`RH_INSTANT_SWEEP=1`);</li><li>one sim-year of real M2 on the 10,000-founder world of `rh-worldgen`'s q(15) test (`m2_system`), with wall time and callgrind;</li><li>`kingdom_10k`'s own genesis held for a year, if SPR-019 is on `main` by T-05.</li></ul></li></ul> | T-01 |
-| **Coordination with SPR-015's derived index and SPR-020's cause guard** | SPR-015 T-02 calls each owner's `apply(&mut Index, &MergedWrites)` after every level's merge (W4). SPR-020 T-05 keeps "the rows of every column with a `cause_column`" before each level that writes one | Each is another per-level O(rows) term if built by diffing columns | **Proposed (70%):**<ul><li>`MergedWrites` and the cause guard read the write set: no diff of an unwritten column, and no hook call for a system that wrote nothing.</li><li>If SPR-015's code diffs columns, T-03 gates it by the write set (same results; its debug rebuild invariant is the check).</li><li>No P1a column declares a `cause_column` (only S6, P1b: `S6.artifacts.odd.toml:92–110`), so SPR-020's guard costs nothing on P1a worlds. When S6 arrives it follows rule (b) above: copy at the first write.</li></ul> | T-01, T-03 |
-| **The class** | `docs/13` §4.2 (`:88–97`) | C1 is "inside one crate, no change to contracts … or plane-A behaviour". C3 includes "any change to the determinism machinery itself (… hashing, phase order …)" | **Proposed (75%): C2 with `[perf-baseline]`.** Not C1: it changes `rh-core`'s contract with every system (the no-work rule, `StepCtx::inserted`) and `05.1`'s §2, §4.2 and §9 text. Not C3: no `state_hash` moves, and none of the hash's layout, its versions and dirty marks, the phase order, the RNG, compaction's semantics or the journal changes. CI detects C1 (no hash change, no path under `specs/` or `rh-contracts`), and the declared C2 wins | — |
-| **CI** | Measured above. A-63 (`BCK-002:83`), the third PR-tier job, is approved but not built | This sprint should lower both parts | **Proposed (75%):**<ul><li>gate-time sums from the check reports (per-gate seconds), on the PR head and on the merge base, each run twice on CI;</li><li>no gate moves to the nightly tier;</li><li>the debug `m2_system` gate moves back to part core;</li><li>part core gains a 200-year debug `hamlet` run equal to its release baseline: the PR-tier subset of V-INV-02, under SIM-8's "debug and CI builds";</li><li>the mutant rebuilds go in part golden, as SPR-014's did</li></ul> | T-05 |
+| **Column storage and moves by index** | `WorldTables`: a public name-based API (`world.rs:96–147`) used by `rh-snapshot`, `rh-worldgen`, `rh-golden` and `rh-bench`. Columns are created only in `Engine::new` (`engine.rs:326–331`) | A string-keyed `BTreeMap` operation and a `String` allocation per take and put-back | **Proposed (80%):**<ul><li>name-sorted slots `{name, version, Option<Column>}` and `ColumnId`s resolved in `Engine::new`;</li><li>crate-private, O(1), allocation-free `take_at` and `put_at`; a moved-out column reads as absent, as today;</li><li>the public API and name-order iteration unchanged;</li><li>**in stage A every put-back still takes a new version**;</li><li>a view's owned columns are a reused `Vec` in write order;</li><li>`Ledger` keeps `ColumnId`s;</li><li>`insert_rows` works by id.</li></ul> | A, T-02 |
+| **Positional compaction** (S4) | `compact` rebuilds every `person.*` column with `collect` (`ledger.rs:155–165`) | O(N · C) per death; "in place" saves almost nothing (the review's microbenchmark) | **Ruled (S4):**<ul><li>one scan of `person.alive` for the dead rows' positions;</li><li>then a positional removal per column;</li><li>the same rows kept in the same order, and a new version for every column it changes;</li><li>`death/n10k_*` is gated on it.</li></ul> | A, T-02 |
+| **The cache equals the full hash** (S11) | `MerkleCache::update_world` is used only by tests and benches. `rh-golden` hashes in full at every stop (`run.rs:683`), so a missing version bump is invisible | No test can fail on the version discipline | **Ruled (S11):**<ul><li>in the per-instant test, a plane-A `MerkleCache` kept across instants equals `PlaneDigest::of_world` after every instant;</li><li>the mutant `mutant-compact-keeps-version` fails it.</li></ul>Stage A owns it, because positional compaction lands there. It guards stage B's cache too | A, T-02 |
+| **The write set and the gates, `every-change` semantics in every build** | No record of which columns a step wrote. `SystemView::write` (`world.rs:260–267`) is the only mutable path a step has | — | **Proposed (85%):**<ul><li>`write()` sets the column's written flag, a field behind `&mut self` (W31);</li><li>every core write path marks its columns: put-back by the flags, insert, compaction, SPR-020's cause writes, construction, restore. Every mutable slot accessor takes the set.</li><li>**The gates, each keyed "since it last ran":**<ul><li>compaction when `person.alive` was written or rows were inserted;</li><li>`Ledger::check` when any ledger column was written, inserted or compacted;</li><li>each system's `invariants()` when any column was;</li><li>a lagged column's snapshot re-copied when that column was written.</li></ul></li><li>**Exact for every run:** compaction of a table with no dead row changes nothing (`ledger.rs:150–152`); the checks are pure functions of `&WorldTables` (W31); an unwritten lagged column equals its copy.</li><li>**S12:**<ul><li>a test-only `Gating::Off` runs every check, compaction and snapshot copy at every instant. It is the reference for the differential test.</li><li>It is separate from the read-only cadence of stage B.</li></ul></li></ul> | A, T-03 |
+| **The narrowing removed** (A-60; `ledger.rs:249–253`; `tests/lifecycle_queues/guard.rs:12`, mode 2) | `1bd05a6` keeps only row counts for a job without work | Remove it, or prove it safe | **Ruled (85%; S12):**<ul><li>the guard's pre-image of a guarded column (`person.id`, every `life_course.*`) is copied at the column's **first `write()` in the job**;</li><li>a job that writes no guarded column pays nothing;</li><li>every write is value-checked, whatever the job's work. In stage A this holds in every build; stage B compiles the value checks out of release.</li><li>Mode 2 becomes a refusal by name.</li><li>**No separate no-work refusal:** it is redundant with the pre-image. "Do not dispatch a job without work" is held only as the stage-B fallback (T-07).</li></ul> | A, T-03; B, T-07 (fallback) |
+| **`Ledger::check` and M2's `invariants()` in O(N + L)** | `ledger.rs:209–243`; `demography.rs:564–568` | 19.3M + 8.8M instructions per call at L = 1.1 × 10⁵ (the review) | **Proposed (75%):** sorted `Vec`s and one merge over sorted ids, with **the same results, names and detail text** on every table. The current functions stay as test oracles | A, T-03 |
+| **The diagnostic record and a quiet instant's allocations** | A `format!` per instant (`engine.rs:936–944`). The plan is cloned per phase (`:896`), and the per-phase and per-level `Vec`s are fresh | V-PERF-11's default is 0 | **Proposed (70%):**<ul><li>fixed-size records rendered byte-identically by `diagnostics()`;</li><li>the plan borrowed;</li><li>buffers kept across instants.</li></ul>A-32 (`BCK-002:52`) keeps the worker pool and the multi-thread buffers. **S16:** zero allocations is asserted in `instant/quiet/*` through the arena's bump offset (`alloc_count::Arena`, `crates/rh-bench/src/alloc_count.rs:142`), which must not move across the measured instant | A, T-02 |
+| **The check cadence as a run parameter** (S1) | Release builds use no cadence today. `05.1` §6 item 6 makes release hashing "configurable" | A default of `yearly` for every release binary would hit CI's release golden runs; SIM-8 says "debug and CI builds" | **Ruled (S1):**<ul><li>`CheckCadence { EveryChange, Yearly }` governs the read-only state invariants (`Ledger::check`, the systems' `invariants()`). The queue-age, stale-timer and future-event checks run at every `Bookkeeping`, as today.</li><li>`rh-cli run --check-cadence {every-change,yearly}` and `RunArgs::check_cadence`.</li><li>**The default is `every-change` in every build and host.** `yearly` is opt-in, for production and the G1a run, and means the first `Bookkeeping` at or after each year boundary.</li><li>It is recorded in `run.toml` (an absent field reads as `every-change`) and in the crash artifact.</li><li>In the ladder header it appears **only when it is not the default**, as `leak thread` does (`ladder.rs:36`), so every default ladder and baseline stays byte-identical.</li><li>T-01 prices release `every-change` on the CI gates. `rh-golden` is edited.</li></ul> | B, T-05; T-01 prices |
+| **`check_now`, persistent violations, and cross-cadence replay** (S2) | `yearly` would leave the last partial year unchecked: `year_end_in` is `year·mpy − 1` (`rh-golden/src/run.rs:368`), and a keyframe cut at a year end comes before the check. `provenance.build` carries no profile (`rh-golden/src/world.rs:256`, `rh-golden/src/run.rs:299`). `Engine::replay` (`engine.rs:733–780`) returns `NoFailure` or `Mismatch` across profiles | — | **Ruled (S2):**<ul><li>`Engine::check_now()` runs every state invariant once, O(N + L). Hosts call it at run end and before each keyframe, whatever the cadence.</li><li>A replay or resume whose cadence differs from the run's recorded one is refused by name.</li><li>The crash artifact also records whether the value checks were compiled in, and a replay in a build that cannot reproduce the failure is refused by name, on S2 (iii)'s evidence.</li><li>"Fails at the same instant" is claimed only for **violations that persist**. A transient violation that heals before a yearly check is not caught under `yearly`; that is the opt-in's stated cost.</li></ul> | B, T-05 |
+| **The value checks compiled out of release; the debug soak obligation** (S3) | The nightly debug soak covers only `household` and `hamlet` (`bin/golden_nightly.sh:111`). `solo` (M2) has none, and `twin_vales`, `kingdom_10k` and `manor` (M7, S3, T1) have no debug run anywhere | The compile-out rests on every ledger-writing system running under the full guards somewhere | **Ruled (S3):**<ul><li>the write guards' O(rows) value checks (A-2, the life-course rules, DEF-3, DEF-6) run under `cfg(debug_assertions)`, with `LEDGER_VALUE_CHECKS == cfg!(debug_assertions)` and a release test in SPR-007's form;</li><li>G-1, the row counts and the log's length run in every build;</li><li>**every world that registers a ledger-writing system has a debug run in `golden_nightly.sh`.** A check in `python/tests/test_check_all_inventory.py` reads each `worlds/*/world.toml`'s systems, which are the manifest's or the template's `default_systems`. It also reads each spec's `[[owns]]` of `person.*` or `life_course.*`. It refuses a world that registers such a system and is absent from the debug soak;</li><li>its first finding, `solo`, joins the soak here;</li><li>**`twin_vales` (300 years) joins in the sprint that first makes its genesis runnable** (SPR-019b, or SPR-030 at the latest), and the gate enforces it then.</li></ul> | B, T-05 |
+| **The incremental, hash-identical month-end digest** (S5) | `state_digest` hashes each world column with `TableDigest::of` (`chunk_hash` + `table_root`; `hash.rs:162, :181, :208`), and `MerkleCache::update_world` (`:515`) uses the same two functions over versioned dirty chunks | 8.5 ms per stop, of which half is the clone | **Ruled (S5; 75%), stage B, C2 (not a C3 sprint):**<ul><li>the run loop keeps one plane-A `MerkleCache` across stops;</li><li>the world columns go through the cache, borrowed from `engine.tables()`, with no clone;</li><li>the engine tables are encoded at each stop as now (`main`'s `state.rs:109–113`);</li><li>the two are combined into the same `PlaneDigest` (`from_tables`);</li><li>`engine.snapshot()` is cloned only for a keyframe or a dump.</li><li>Every ladder and baseline stays byte-identical, guarded by S11's test, which here compares cached and full at every stop in debug and at every rung and keyframe in release.</li><li>**For the cache to skip a column, the put-back gives a new version only when the column's written flag is set.** The core's own writes always do. This is exact by the write set: an unwritten column is unchanged. Its guard is S11's test and `mutant-compact-keeps-version`.</li><li>**What stays O(L) per stop:** a written `life_course.*` column is re-hashed in full, because a version marks every chunk (`hash.rs:480–483`). T-01 and T-08 state that residual.</li><li>If the Architect reads version-on-write as hashing machinery (C3 by `docs/13` §4.2), or any part of the digest cannot be made identical, **that part becomes BCK-002 A-68** (a C3 digest-cadence item before SPR-030), and stage B keeps the rest: the clone removed, the cache over columns versioned as in stage A.</li></ul> | B, T-06 |
+| **The instant log** (S13; P1a shared ruling X1, 65%) | S3's R4 scans every row at each day start (`S3.migration.odd.toml:154`), and the spec allows the hand-off. SPR-023 needs this instant's exits, and SPR-021 needs this instant's merged events (A-59) | No engine-owned per-instant record; three plans proposed three mechanisms | **Ruled (S13 85%; X1 65%): one engine-owned record in `rh-core`, built here:**<ul><li>**Shape:** `InstantLog { inserted, exited }`, a field of the engine, read by steps through `StepCtx::inserted()` and `StepCtx::exited()` (`&[PersonId]`), never written by a step.</li><li>**Filled only at the serial merges**, in the merge's canonical order (`05.1` §2 rule 4), so its content is thread-invariant.</li><li>**Cleared at the instant's end.** It is in no `EngineState`, plane hash, keyframe or journal: a keyframe is cut after `Bookkeeping`, so nothing in it outlives its instant.</li><li>**(a) `inserted()`:** the person rows inserted at the merges so far this instant, in ascending row order, kept by a **sorted insert** at each merge's row insert and filtered at compaction.</li><li>**(b) `exited()`:** the persons whose `person.alive` went from 1 to 0 at a merge so far this instant, in merge order and ascending `PersonId` within a merge. They are found by scanning `person.alive` **only at a merge where `person.alive` was written** (stage A's write set), and a person already listed is not listed twice.</li><li>**(c) is SPR-021's** (T-02, under EVO-002): the events merged so far this instant, by (kind, target), with their `EventId`s. The log is built to EVO-002's text if EVO-002 has merged by T-07, and otherwise to this plan's text, which EVO-002 then extends. Adding (c) adds a field, its fill at the event merge and its accessor, and changes neither (a) nor (b): T-07 pins their outputs so the extension is checked.</li><li>**Consumers:** SPR-018 T-03 (S3's selector reads `inserted()`) and SPR-023 (T1 reads `exited()`). SPR-038's completion does not depend on either conversion; the Architect adds one line to each plan.</li><li>S3's equivalence with R4 holds while every insert precedes the reader in its instant, asserted on the reader's side in debug.</li></ul> | B, T-07 |
+| **The benches** (A-60; S9, S10, S16) | `rh-bench` has no ledger bench. `draws/empty` is a stale two-instant stub | A bench that varies N and L independently, plus real worlds | **Proposed (75%):**<ul><li>**stage A's `crates/rh-bench/benches/instant.rs`**: a stub `B1.ledger` with M2's 19 column names. Its `Month`/`Vital` step rewrites one `person.spouse` cell with its own value, so a held year ends with one full check. It has a drain-only `Day`/`Vital` with an empty inbox and a `Day`/`Vital` death timer.</li><li>**Seven cases:** `quiet/n1_l1`, `quiet/n10k_l100k`, `death/n10k_l10k`, `death/n10k_l100k`, `insert/n10k_l100k`, `year/n10k_l10k`, `year/n10k_l100k` ("the genesis held for a year", at `kingdom_10k`'s genesis size and at a late size).</li><li>**Stage B adds (S10)** one-sim-year `rungs/solo_year` and `rungs/hamlet_year` with real M2 (`rh_bench::rungs`), and `instant/greedy_writer/n10k_l100k`: a stub that calls `write()` on all its columns at a quiet instant without changing them.</li><li>`05.1` says `write()` is for writing (T-07).</li><li>`BENCH_TARGETS` gains `instant` at stage A's close and `rungs` at stage B's. Both are unnumbered, like `draws`, with lines in `docs/08` §9.</li><li>**S9:** every figure is stated on one allocator. The 93k and 60-allocation figures are glibc's; the gates run on the arena (`main`'s `perf_gate.py:230–231`). T-01 states both for `solo`.</li></ul> | A, T-01; B, T-07 |
+| **Coordination with SPR-015 and SPR-020** | SPR-015 T-02's `apply(&mut Index, &MergedWrites)` runs after every level's merge. SPR-020 T-05 keeps "the rows of every column with a `cause_column`" | Per-level O(rows) if built by diffing | **Proposed (70%):**<ul><li>`MergedWrites` and the cause guard read stage A's write set, since SPR-015 merges after stage A (S6);</li><li>SPR-020's cause writes at the merge mark it;</li><li>only S6 (P1b) declares a `cause_column` (`S6.artifacts.odd.toml:92–110`)</li></ul> | A, T-03 |
+| **The class** | `docs/13` §4.2 (`:88–97`) | — | **Proposed (75%): both stages are C2 with `[perf-baseline]`:**<ul><li>stage A changes `rh-core`'s write-set contract and `05.1` §9's gating text;</li><li>stage B adds the run parameter, `check_now`, `inserted()` and `05.1` §4.2 and §9's cadence text;</li><li>no `state_hash`, hash layout, phase order, RNG, compaction semantics or journal changes;</li><li>stage B's version-on-write is hash-identical by S11's test (with the A-68 fallback above).</li></ul>CI detects C1, and the declared C2 wins | — |
+| **CI** (S6, S15; X10) | Core 14:48 against the 15:00 hard limit; golden 11:11 (8:13 on another run). PR #89 (A-63 as built, `arch/ci-third-job`) splits the tier into `core`, `golden` and `stream` and moves about 295 s out of core: on its branch the release q(15) and V-DATA-04 gates and the perf gates sit in golden, the debug `m2_system` gate in core, and the rungs' stream, tail, sift and replay runs in stream | Relief must reach core soon | **Proposed (75%), assuming PR #89 has merged (X10):**<ul><li>each stage lists its gates by role in each of the three parts (the CI-gates table below), and budgets them by **gate-time sums on one runner, ×1.5** for slow runners;</li><li>stage A lands before SPR-015;</li><li>**the improvement is measured as S15 rules:** the ratio of the median per-part `check_all` step times over 3 CI runs each of the PR head and the merge base;</li><li>K24's base is replaced by PR #89's first CI run;</li><li>no gate moves to the nightly tier;</li><li>the debug `m2_system` gate returns to core at stage A's close if SPR-014's move has put it in golden and core's budgeted sum stays under 12:00</li></ul> | A, T-04; B, T-08 |
 
-## Targets (proposed, 70%; measured on one machine for base and head, median of 3; CI figures reported)
+## Targets (70%; on one machine for base and head, median of 3; CI figures as S15's ratio)
 
-| Measure | Today (SPR-014's head) | Target | How |
+| Measure | Today | Target | Stage, how |
 |---|---|---|---|
-| A quiet instant: only a drain-only binding fires, its inbox is empty, no timer is due and no input is queued | about 93k instructions per instant averaged over `solo` (all instants). The bench is new: T-01 records the base | **≤ 20,000 instructions** (`instant/quiet/n1_l1`, release) | iai-callgrind |
-| The same at 10⁴ ledger rows and 10⁵ log rows | O(N + L) today (check, compact, invariants at every `Bookkeeping`) | **≤ 1.05 × the N = 1 case** (O(1) in rows) | `quiet/n10k_l100k` ÷ `quiet/n1_l1` |
-| A busy instant with one death, in release | O(L) clones and checks | **no term in L:** `death/n10k_l100k` ≤ 1.05 × `death/n10k_l10k`. The figure is reported; its O(N) term is compaction's | iai-callgrind |
-| The yearly release check at 10⁴ / 10⁵ | — | reported, with its cost amortized per instant and a projection to `kingdom_10k`'s 1,000 years | `year/n10k_l100k` |
-| Allocations on a quiet instant, 1 thread, steady state | about 60 (`allocations_v1.txt:12–14`) | **0** | `alloc_budget`'s per-site report |
-| Instructions per instant averaged over 200 years of `solo` | about 93k | **≤ 25,000** | callgrind on `rh-cli run solo --years 200 --out` |
-| Wall time per rung, 200 years, headless, release | 0.875 / 0.873 / 1.029 s (0.074 / 0.079 / 0.106 before SPR-014) | **each ≤ ¼ of the merge base's** (expected about 0.15–0.25 s) | median of 5, same machine |
-| M2's system gates, summed | 227 s (59 s before SPR-014) | **≤ 90 s** | the check report's per-gate seconds |
-| The debug `m2_system` gate | about 99 s, in part golden | **≤ 15 s, back in part core** | as above |
-| CI, each part's gate-time sum | core 14:48, golden 11:11 (`check_all` steps, run 39078266492) | **lower than the merge base's, both parts.** Expected about −1 to −2 min in core and −0.5 to −1.5 min in golden, net of the new gates | two CI runs each |
+| A quiet instant (only a drain-only binding fires, its inbox is empty, no timer is due, no input is queued), on the arena | about 92k per instant averaged over `solo` (glibc); the bench is new | **≤ 20,000 instructions**, about 4× the stub floor of about 5k | A: `instant/quiet/n1_l1` |
+| The same at N = 10⁴, L = 10⁵ | 3.99 ms per quiet day at L = 1.1 × 10⁵ (the review) | **≤ 1.05 × the N = 1 case** | A: `quiet/n10k_l100k` ÷ `quiet/n1_l1` |
+| Allocations on a quiet instant, 1 thread | about 60 (glibc) | **0** (the arena's bump offset unchanged; the gates run on the arena, `main`'s `perf_gate.py:230–231`) | A: `instant/quiet/*` |
+| A death at N = 10⁴ | 71 µs compaction, plus O(L) clones and checks | **positional compaction**. Its figure is gated: in stage A at `death/n10k_*`; in stage B, in release, **no term in L** (`death/n10k_l100k` ≤ 1.05 × `death/n10k_l10k`) | A and B: iai-callgrind |
+| `solo`, instructions per instant over 200 years | 92k (glibc) | **≤ 23k** (≥ 4×), stated on glibc and on the arena (S9) | A: callgrind; B: the `rungs/solo_year` gate |
+| Wall time per rung, 200 years, headless, release | 0.875 / 0.873 / 1.029 s | **each ≤ ¼ of the merge base's** | A, re-measured in B |
+| The debug `m2_system` gate | 82 s on CI | **set from T-01's measurement** (expected ≤ 30 s), recorded in the PR before T-02 starts | A |
+| M2's system gates, summed | 227 s | **≤ 90 s** | A |
+| CI per part (`core`, `golden`, `stream`, after PR #89) | core 14:48, golden 11:11 on SPR-014's head (two parts); PR #89's first CI run is the base | **median ratio head ÷ base < 1 in every part** (3 runs each), with the added gates within their ×1.5 budgets | A and B |
+| The month-end digest per stop at N = 10⁴, L = 1.1 × 10⁵ | 8.5 ms | **no clone; unchanged columns skipped.** The O(L) residual of written log columns is reported | B: T-06 |
+| **G1a arithmetic** | 102–270 s of digest, plus compaction and checks | stated by T-01 for "after stage A" and "after both stages", re-measured by T-08. **SPR-030 measures sufficiency** | A: T-01; B: T-08 |
 
-**A missed target is reported with its figure, and the Architect rules on it. No target is lowered silently.** The fallback lever for the quiet instant is the specs table's "do not dispatch a job without work".
+**A missed target is reported with its figure, and the Architect rules. No target is lowered silently.** The quiet-instant fallback is stage B's "do not dispatch a job without work" (T-07).
+
+## CI gates by part (X10; PR #89's three parts assumed)
+
+Each gate is in exactly one part. The time is a gate-time estimate on one runner, and the budget is ×1.5.
+
+| Stage | Part | Gate, by role | Estimate (budget ×1.5) | Effect on the part |
+|---|---|---|---|---|
+| A | core | **Exactness:** `rh-core` `per_instant`: the differential test against `Gating::Off`, the planted violations, S11's cache test and the O(N + L) oracles | about 20 s (30 s) | added |
+| A | core | **Debug system:** the debug `m2_system` gate, back from golden only if SPR-014 moved it there, at its T-01 target | ≤ 30 s (45 s) | moved; from 82 s |
+| A | golden | **Positive controls:** four mutant rebuilds of `rh-core` (`compact-keeps-version`, `unmarked-put-back`, `late-pre-image`, `stale-lagged-snapshot`) | about 6–10 s each, 24–40 s (60 s) | added |
+| A | golden | **Performance:** `instant` inside V-PERF-04 and its repeatability run | about 15–30 s per run, twice (90 s) | added |
+| A | golden | **Release system:** q(15) and V-DATA-04 (PR #89 placed them here), now with gated checks | from T-01's pricing | falls: these are most of M2's 227 s |
+| A | stream | **Rung runs:** the rungs' stream, tail, sift and replay runs, every rung at least 4× faster | — | falls |
+| B | core | **Contract:** `ledger_release` (the release compile-out) and the soak inventory check | about 15 s (25 s) | added |
+| B | golden | **Cadence:** the `yearly` and refusal tests on the rungs, and `check_now` | about 15 s (25 s) | added |
+| B | golden | **Positive control:** `mutant-put-back-keeps-version` | about 8 s (12 s) | added |
+| B | golden | **Performance:** `rungs` (`solo_year`, `hamlet_year`) and `greedy_writer` inside V-PERF-04, twice | about 30–60 s (90 s) | added |
+| B | golden | **Digest:** the cached digest equal to the full one at every stop, asserted inside the golden runs | inside the runs | falls: the clone and the unchanged columns go |
+| B | stream | **Instant log:** its consumer, thread-invariance and outside-every-hash tests | about 10 s (15 s) | added |
+| B | nightly | **Soak:** `solo`'s debug run joins `golden_nightly.sh` | about 5–10 s | nightly only |
+
+**Nightly candidates, if a part's median does not fall:** three of stage A's four mutant rebuilds (`unmarked-put-back` stays), the `instant` and `rungs` repeatability runs, and stage B's mutant.
 
 ## Compliance (every task)
 
 | Rule | This sprint |
 |---|---|
-| Change class (`docs/13` §4.2) | **C2 with `[perf-baseline]`** (the specs table's class row). PR title: `SPR-038: per-instant engine cost [perf-baseline] [C2]` |
-| Planes touched (ADR-0024) | **A:**<ul><li>`rh-core`: `world.rs`, `engine.rs`, `ledger.rs`, `system.rs` (`StepCtx::inserted`, the no-work check), `crash.rs` (the record);</li><li>`rh-sys-demography`: `invariants()` only, same results;</li><li>`rh-sys-migration`: T-04, only if SPR-018 has merged.</li></ul>**Tool:**<ul><li>`rh-bench`: `instant`, its fixture and the `alloc_budget` sites;</li><li>`bin/perf_gate.py` (`BENCH_TARGETS`), `bin/check_all.sh`, `python/tests/test_check_all_inventory.py`.</li></ul>**B and C:** none. **`rh-snapshot`, `rh-golden`, `rh-stream` and `rh-worldgen` are not edited.** Their tests are the consumer contract of `WorldTables`' unchanged public API |
+| Change class (`docs/13` §4.2) | **C2 with `[perf-baseline]` per stage.** PR titles: `SPR-038a: per-instant engine cost, stage A [perf-baseline] [C2]` and `SPR-038b: per-instant engine cost, stage B [perf-baseline] [C2]` |
+| Planes touched (ADR-0024) | **A:**<ul><li>`rh-core`: `world.rs`, `engine.rs`, `ledger.rs`, `system.rs` (the instant log's accessors, B), `crash.rs` (the record, A; the cadence and value-check fields, B);</li><li>`rh-sys-demography`: `invariants()` only, same results (A);</li><li>`rh-snapshot`: no layout change; the cache is used by the run loop (B).</li></ul>**Tool:**<ul><li>`rh-golden`: `RunArgs::check_cadence`, `run.toml`, the ladder header's optional line, `check_now` calls, the cached digest (B);</li><li>`rh-cli`: the flag (B);</li><li>`rh-bench`: `instant` (A), `rungs` and `greedy_writer` (B);</li><li>`bin/perf_gate.py`, `bin/check_all.sh`, `bin/golden_nightly.sh` (B), and the inventory test (A, B).</li></ul>**B and C:** none |
 | Owned columns written | None by a system. `rh-core`'s compaction and row insert are unchanged in effect (SPR-011 ruling 5; `05.1` §2 rule 2) |
-| Reads (via `rh-contracts`) | No new read. S3 reads `StepCtx::inserted()`, an engine list, not a column (T-04) |
+| Reads (via `rh-contracts`) | None new. The instant log is an engine record, not a column (B) |
 | RNG purposes added | None |
-| Golden-hash effect | **None.** Every baseline under `worlds/*/baselines/` is unchanged. A difference is a defect to fix, never a regeneration |
+| Golden-hash effect | **None in either stage.** No file under `worlds/*/baselines/` changes. The ladder header gains a cadence line only for a non-default run |
 | Fixed-point quantities | None |
-| Determinism lints (GOV-003 §2, §6) | Must pass:<ul><li>no `HashMap`;</li><li>no interior mutability: the written flags are fields behind `&mut self` (W31's `hidden-state` rule);</li><li>no float;</li><li>every mutant is a `mutant-*` feature, refused by `rh-cli run` and `regen_baseline.sh` (A-52)</li></ul> |
-| Tests that gate this sprint | V-DET-01 and V-DET-02 (all four worlds, 1 and N threads); V-DET-05 (keyframes byte-identical; resume = continuous); V-INV-01 (the differential and planted-violation tests); V-INV-02 (its new PR subset: the debug `hamlet` run); V-INV-04 (the no-work rule); V-GOLD-01 (no baseline moves); V-PERF-04 (`instant` gated; benches 7, 8 and `draws` re-recorded by the tool); V-PERF-11 (rung and smoke budgets re-recorded lower by the tool); and `bin/check_all.sh` |
-| Docs updated in the same sprint | <ul><li>`05.1` §2 rule 2 (the no-work rule; `StepCtx::inserted`), §4.2 row 11 and §9 (the cadence): the Architect's wording, approved in the PR;</li><li>`docs/08` §9 (the `instant` line);</li><li>`docs/09`: V-PERF-04's method (`instant`), V-INV-02's PR subset, V-SCALE-01's note that a release run checks invariants yearly unless set;</li><li>`crates/rh-bench/README.md` (the row);</li><li>`ledger.rs`'s module docs (the narrowing text removed);</li><li>`CLAUDE.md`'s checks; `check_all.sh` and the inventory test (same commit);</li><li>BCK-002 A-60 closed, with A-32's split noted;</li><li>PRJ-002's row;</li><li>SPR-018's one line, by the Architect at approval, if SPR-018 has not merged</li></ul> |
+| Determinism lints (GOV-003 §2, §6) | Must pass:<ul><li>no `HashMap`;</li><li>no interior mutability: the flags are `&mut self` fields (W31);</li><li>no float;</li><li>every mutant is a `mutant-*` feature, refused by `rh-cli run` and `regen_baseline.sh` (A-52)</li></ul> |
+| Tests that gate this sprint | **A:** V-DET-01, 02, 05; V-INV-01 (the differential test against `Gating::Off`; planted violations); V-GOLD-01; V-PERF-04 (`instant`); V-PERF-11; and S11's cache test. **B:** those, plus V-INV-02 (the soak, `solo` added) and the inventory check; the release compile-out test; the cross-cadence refusals; the cache equal to the full hash at every stop and keyframe; V-PERF-04 (`rungs`, `greedy_writer`). Both with `bin/check_all.sh` |
+| Docs updated | **A:**<ul><li>`05.1` §9 preamble (the gating: checks are pure functions of the tables, run after a change);</li><li>`docs/08` §9 (`instant`);</li><li>`crates/rh-bench/README.md`;</li><li>`ledger.rs`'s docs (the narrowing gone);</li><li>`CLAUDE.md` and `check_all.sh` with the inventory test;</li><li>BCK-002 A-60 updated (part 2 done).</li></ul>**B:**<ul><li>`05.1` §4.2 row 11 and §9 (the cadence parameter, `check_now`, the compile-out);</li><li>`05.1` §2 rule 2 (`inserted`; "`write()` is for writing");</li><li>`docs/03` SIM-8 and `docs/09` V-INV-01's wording (S14): "after every change (`05.1` §9) in debug and CI runs, at the run's cadence otherwise";</li><li>`docs/09` V-INV-02 (the soak obligation) and V-SCALE-01 (the cadence of a 10k run);</li><li>`docs/08` §9 (`rungs`);</li><li>BCK-002 A-60 closed, with A-68 filed if S5's fallback is used, and A-32's split noted;</li><li>SPR-018's one line, by the Architect.</li></ul>The `docs/03` text is put to the director in D60 |
 
 **Rules carried from P0–SPR-020 (every task):**
-- **Measure first.** T-01 lands, and is pushed, before any change to `rh-core`. Its before-figures are taken on the merge base and re-taken after every merge of `origin/main`.
-- **Byte identity is checked at every task boundary,** not only at the end (T-02's and T-03's acceptance), against the merge base's binaries.
-- **Property tests vary world size and seed:** three sizes (1, 60, 600 rows; plus 10⁴ in release) and eight seeds, fixed-seed SplitMix64, no new crate.
-- **A positive control fails for the right reason:** each `check_all` line matches its message (`fail:<text>`).
-- **A test input exercises the path it claims, and a probe asserts it.** The engine reports `Engine::check_stats()`: compactions, ledger checks, invariant runs and snapshot refreshes. Like `DispatchStats` (`engine.rs:244–263`), it is an observation that never enters state. Every bench case and test asserts its path through it:
-  - a quiet case really ran no check;
-  - a death case really compacted one row;
-  - a year case really ran the full check once.
+- **Measure first.** T-01 is pushed before any change to `rh-core`, and its figures are re-taken after every merge of `origin/main`.
+- **Byte identity at every task boundary,** against the merge base's binaries (T-04's and T-08's lists).
+- **Property tests vary world size and seed:** three sizes (1, 60, 600 rows; plus 10⁴ in release) and eight seeds, fixed-seed SplitMix64.
+- **A positive control fails for the right reason** (`fail:<text>`).
+- **A probe asserts the path.** `Engine::check_stats()` counts compactions, ledger checks, invariant runs and snapshot copies. Like `DispatchStats` (`engine.rs:244–263`), it is an observation that never enters state. Each case asserts its path through it: a quiet case ran no check; a death case compacted one row; a year case ran one full check.
 - **Python tests read no CI environment variable.** **No statistical gate.**
-- **Every new gate is in exactly one `check_all.sh` part,** with the inventory test updated in the same commit.
-- **Perf baselines are regenerated only by `bin/perf_gate.py record` and `alloc-record`,** in a commit whose subject ends `[perf-baseline]` with a `Reason:` line, and the PR body carries `perf-baseline-reason:`. Never typed (SPR-009 ruling 3). The PR merges by rebase, never squash (`crates/rh-bench/README.md:34`).
-- **No new third-party crate.** **One commit per task** (GOV-005 §4). **Merge `origin/main` when main moves,** and re-run both parts.
+- **Every new gate is in exactly one `check_all.sh` part,** with the inventory test in the same commit.
+- **Perf baselines come only from `perf_gate.py record` and `alloc-record`,** in a `[perf-baseline]` commit with a `Reason:` line and `perf-baseline-reason:` in the PR body, never typed. Each stage's PR merges by rebase, never squash.
+- **No new third-party crate.** **One commit per task.** **Merge `origin/main` when main moves,** and re-run every part.
 
 ## Tasks
 
-T-01 comes first and is pushed alone. T-02 and T-03 each end with the full byte-identity check. T-05 comes last.
+**Stage A (PR `SPR-038a`)** is T-01 to T-04. **Stage B (PR `SPR-038b`)** is T-05 to T-08 and starts from `main` after stage A has merged.
 
-#### T-01: The per-instant bench and the before-figures (AGT-002-TOOLS; the specs table's bench row)
+### Stage A: exact gating, O(N + L) checks, positional compaction (C2, about 3 agent-days)
+
+#### T-01: The `instant` bench, the before-figures, the CI pricing and the G1a arithmetic (AGT-002-TOOLS; S1, S5, S8, S9)
 - **Deliverable:**
   - **`crates/rh-bench/src/instant.rs` and `benches/instant.rs`:** the fixture and the seven cases of the specs table.
-    - The fixture is built only from `rh-core`'s public API, so it compiles on the merge base.
-    - Each case's setup advances to the instant before the measured one, so the measured instant is steady state.
-    - It asserts the case's path: no timer due, no input and an empty inbox for `quiet`; one dead row for `death`; one inserted row for `insert`; the year's instant count for `year`. On the base, which has no `check_stats`, it asserts these through the tables and `dispatch_stats()`.
-  - `crates/rh-bench/Cargo.toml`: the target, with `required-features = ["arena-alloc"]`. It is run directly (`cargo bench -p rh-bench --features arena-alloc --bench instant`), **not yet added to `BENCH_TARGETS`**: `perf_gate.py check` fails on a bench missing from the baseline, and the baseline is recorded once, in T-05.
-  - **The before-figures,** in the PR body and later in `VER-SPR-038`. All are on the merge base, with the commands that produced them:
-    - the seven cases and the reported sweep;
+    - The fixture uses only `rh-core`'s public API, so it compiles on the merge base.
+    - Each case's setup advances to the instant before the measured one.
+    - Each case asserts its path (on the base, through the tables and `dispatch_stats()`).
+    - It is run directly, **not yet in `BENCH_TARGETS`**: `perf_gate.py check` fails on a bench missing from the baseline, and T-04 records it.
+  - **The before-figures,** in the PR body and in `VER-SPR-038a`, on the merge base, with their commands:
+    - the seven cases and the sweep N ∈ {1, 10², 10³, 10⁴} × L/N ∈ {1, 10};
     - `draws`, benches 7 and 8;
-    - `alloc_budget`'s rung and smoke lines with its per-site report;
-    - the per-rung wall times (median of 5);
-    - instructions per instant over 200 years of `solo` (callgrind);
-    - the 10,000-founder M2 year (wall time and callgrind);
-    - the per-call cost of each registered system's `invariants()` at N = 10⁴ and L = 10⁵;
-    - SPR-015's hook per level and S3's scan per day start (from a stub with S3's shape if SPR-018 is not on `main`);
-    - the month-end digest per stop at the `year` sizes (for the out-of-scope item);
-    - the M2 gate times;
-    - the base's CI gate-time sums, from two CI runs.
+    - `alloc_budget`'s lines and sites;
+    - the per-rung wall times;
+    - `solo`'s instructions per instant **on glibc and on the arena** (S9);
+    - one year of real M2 on the 10,000-founder world of `rh-worldgen`'s q(15) test;
+    - each system's `invariants()` per call at N = 10⁴, L = 10⁵;
+    - SPR-015's hook per level, if SPR-015 is on `main`;
+    - the month-end digest per stop at the `year` sizes;
+    - each M2 gate's time, the debug `m2_system` gate included, from which **its stage-A target is set and recorded before T-02 starts** (S8).
+  - **The pricing of release `every-change` on the CI gates** (S1): for each release gate that runs M2 (q(15), V-DATA-04, the rungs), its busy-instant count × the per-check cost after stage A's O(N + L) rewrite, as a projected gate time. The review's estimate for q(15) is about 45 s of CPU, about 12 s on 4 cores.
+  - **The G1a arithmetic** (S5): for `kingdom_10k`'s 1,000 years (about 360k instants, 333k deaths, 12,000–24,000 stops), the engine's per-instant overhead, compaction, the checks and the digest, as three columns: today, after stage A, and after both stages (with `every-change` and with `yearly`). This states what remains for SPR-030 to measure.
 - **Acceptance:**
-  - The bench builds and runs on the merge base and on this commit with identical counts (no engine change yet).
-  - Two runs of the bench give identical counts.
-  - Every case's path probe holds.
-  - The figures are recorded with their commands.
-  - Its baseline is **not** recorded here. T-05 adds `instant` to `BENCH_TARGETS` and records it on the final engine; a base figure would only be re-recorded. The existing gates stay green at every push: V-PERF-04 passes a speed-up and V-PERF-11 a decrease (`perf_gate.py:680`).
+  - The bench gives identical counts on two runs and on the base and this commit.
+  - Every path probe holds.
+  - Every figure is recorded with its command.
+  - The debug `m2_system` target is in the PR.
 - **Status:** [ ] not started
 
-#### T-02: Columns by index, the diagnostic record, and a quiet instant that allocates nothing (AGT-002-CORE; the specs table's storage and allocation rows)
+#### T-02: Columns by index, the record, zero allocations, positional compaction, and the cache test (AGT-002-CORE; S4, S11, S16)
 - **Deliverable:**
-  - **`world.rs`:**
-    - name-sorted slots `{name, version, Option<Column>}`, `ColumnId`, crate-private `take_at` and `put_at` (O(1), no allocation);
-    - the public name API unchanged, and **every put-back still taking a new version**;
-    - `SystemView`'s owned columns as a `Vec` in write order, reused per entry;
-    - `read` and `write` by name keep their checks and errors (`UndeclaredRead`, `UnownedWrite`, `MissingColumn`), as a linear scan over the entry's writes (M2 has 19).
-  - **`engine.rs`:**
-    - each `Entry`'s write ids resolved in `Engine::new`;
-    - `job_inputs` and the put-back by id;
-    - `check_owned_columns` by id;
-    - `insert_rows` by id with the entry's `person.*` set precomputed.
-  - **`ledger.rs`:** `Ledger` keeps `ColumnId`s; `is_person` and `is_life_course` are an id lookup, not a string scan.
-  - **The record:** fixed-size records in a ring of `DIAGNOSTIC_RECORDS`, preallocated, rendered by `diagnostics()` byte-identically; the `FATAL` line as text.
-  - **The buffers:**
-    - the phase plan borrowed;
-    - `fired`, `due`, `passes`, the binding pass's groups, `guards`, `inputs`, `outcomes` and `outboxes` kept across instants and cleared;
-    - the multi-thread path unchanged beyond that (A-32's).
+  - **`world.rs`:** slots, `ColumnId`, `take_at` and `put_at`, every put-back still taking a new version; the view's owned `Vec`; name-based `read` and `write` keep their checks and errors as a linear scan over the entry's writes.
+  - **`engine.rs`:** write ids resolved in `Engine::new`; `job_inputs`, the put-back, `check_owned_columns` and `insert_rows` by id; the entry's `person.*` set computed once.
+  - **`ledger.rs`:**
+    - `ColumnId`s;
+    - **positional compaction**: one scan of `person.alive` for the dead positions, then a positional removal per `person.*` column, with the same rows in order and a new version for each changed column.
+  - **The record:** fixed-size records rendered byte-identically by `diagnostics()`, with the `FATAL` line as text.
+  - **The buffers:** the plan borrowed; `fired`, `due`, `passes`, the binding pass's groups, `guards`, `inputs`, `outcomes` and `outboxes` kept across instants (the multi-thread path is A-32's).
+  - **S11:** `crates/rh-core/tests/per_instant.rs` keeps a plane-A `MerkleCache` across the instants of random worlds and asserts that it equals `PlaneDigest::of_world` after every instant. `mutant-compact-keeps-version` (positional compaction keeps the old version) fails it.
 - **Acceptance:**
-  - **Byte identity** against the merge base (the list in T-05) at this task's head.
-  - **The record:** a property test renders random records, every count and pulse set, through both the old `format!` and the new renderer, and they are equal. A crash artifact from an injected failure on `solo` (the SPR-006 crash-replay harness) is byte-identical to the base's, `diagnostics` included.
-  - **Allocations:** `alloc_budget`'s per-site report shows **0 allocations on a quiet instant at 1 thread** at the sites "instant setup and inputs", "phase start (timers due)", "level dispatch" and "merge". A planted `Vec::new()` push in the quiet path (the existing positive-control mechanism) fails by name.
-  - **Instructions:** `instant/quiet/n1_l1` falls, and the record of which costs fell, by callgrind function, is in the PR.
-  - **Consumers unchanged:** `rh-snapshot`'s `hash`, `golden`, `keyframe` and `guard` tests, `rh-worldgen`'s `genesis` and `keyframe`, `rh-golden`'s tests and `rh-bench`'s other benches pass unedited, and `bin/gen_hash_golden.py --check` is unchanged.
+  - **Byte identity** against the merge base (T-04's list).
+  - **The record:** random records render equal through the old `format!` and the new renderer, and an injected `solo` crash artifact is byte-identical to the base's, `diagnostics` included.
+  - **Zero allocations:** in `instant/quiet/*`, the arena's bump offset does not move across the measured instant (S16). A planted allocation in the quiet path fails by name.
+  - **Compaction:** `death/n10k_*` falls by at least the review's ratio at 9 columns (about 6×). Random worlds compact the same rows as the base's `collect`, compared column by column.
+  - **S11:** cached equals full after every instant on three sizes and eight seeds, and the mutant fails it.
+  - **Consumers unedited:**
+    - `rh-snapshot`'s `hash`, `golden`, `keyframe` and `guard` tests pass;
+    - `rh-worldgen`'s `genesis` and `keyframe` pass;
+    - `rh-golden`'s tests and `rh-bench`'s other benches pass;
+    - `gen_hash_golden.py --check` is unchanged.
 - **Status:** [ ] not started
 
-#### T-03: The write set, the gates, the release-build rule and the narrowing removed (AGT-002-CORE; the specs table's rule, gate, narrowing and invariant rows)
+#### T-03: The write set, the gates with `every-change` semantics, the pre-image at first write, and the O(N + L) checks (AGT-002-CORE; S12)
 - **Deliverable:**
-  - **The write set:**
-    - written flags set by `SystemView::write`;
-    - one engine bitset per "since" consumer: compaction, `Ledger::check`, the invariants, each lagged column's snapshot;
-    - every core write path marks its columns (put-back, insert, compaction, SPR-020's cause writes, construction, restore), and every mutable slot accessor takes the set.
-  - **The gates:**
-    - compaction, `Ledger::check`, each system's `invariants()` and the lagged snapshot refresh, each "since it last ran";
-    - the queue-age, stale-timer and future-event checks every `Bookkeeping`, as today;
-    - compaction in place (one pass per `person.*` column, no new `Vec`), with the same rows kept, in order.
-  - **The cadence:**
-    - `CheckCadence { EveryInstant, EveryChange, Yearly }` and `Engine::set_check_cadence`;
-    - the default is `EveryChange` in debug and test builds and `Yearly` in release;
-    - `Yearly` means the first `Bookkeeping` at or after each year boundary of the calendar (whether or not any system binds `Year`), and the first after construction or restore;
-    - any build may set any cadence: a debug test may exercise `Yearly`, and the defaults apply unless a run sets one;
-    - `Engine::check_stats()`.
-  - **The write guards:**
-    - pre-images copied at the first `write()` of a guarded column in a job;
-    - the value checks (A-2, the life-course rules, DEF-3, DEF-6) under `cfg(debug_assertions)`, with `pub const LEDGER_VALUE_CHECKS: bool = cfg!(debug_assertions)`;
-    - G-1 and the row-count and log-length checks in every build.
-  - **The no-work rule** for drain-only bindings with an empty inbox, in every build, with its refusal message naming the system, the binding and the first breach.
-  - **`Ledger::check` and M2's `invariants()`** in O(N + L) with identical results.
-  - **SPR-015's hook** gated by the write set, if it diffs.
-  - **The `05.1` sentences,** proposed in the PR for the Architect:
-    - §2 rule 2: the no-work rule;
-    - §4.2 row 11: "Invariants (after every change in debug and test builds; yearly in release, or after every change when the run sets it: §9)";
-    - §9 preamble: "The core's ledger invariants and each system's `invariants()` are pure functions of the tables. They are checked at a `Bookkeeping` only when a column was written, inserted or compacted since the last check: at every such `Bookkeeping` in debug and test builds, and in release builds at the first `Bookkeeping` at or after each year boundary and after construction or restore, unless the run asks for every change. The write guards' value checks (§2 rule 2; SPR-011 ruling 5) run in debug and test builds; their row counts, the log's length and the no-work rule run in every build."
-  - **Four mutants** (`mutant-*` features of `rh-core`):
+  - **The write set:** flags set by `write()`; one engine bitset per "since" consumer; every core write path marks its columns, including SPR-020's cause writes; every mutable slot accessor takes the set.
+  - **The gates:** compaction, `Ledger::check`, each `invariants()` and the lagged snapshot, each "since it last ran"; the queue-age, stale-timer and future-event checks at every `Bookkeeping`; the same semantics in every build.
+  - **`Gating::Off`**, test-only (S12), and `Engine::check_stats()`.
+  - **The guards:** the pre-image copied at the first `write()` of a guarded column in a job. **The narrowing is removed**, and the value checks run in every build in this stage.
+  - **`Ledger::check` and M2's `invariants()` in O(N + L)**, with the current functions kept as test oracles.
+  - **SPR-015's hook:** if SPR-015 has already merged in a rebase, its `MergedWrites` reads the write set.
+  - **The `05.1` §9 preamble sentence** (the Architect's): "The core's ledger invariants and each system's `invariants()` are pure functions of the tables; `rh-core` runs them, and compacts the ledger and copies a lagged column, only after a column they cover was written, inserted or compacted since they last ran."
+  - **Three mutants:**
     - `mutant-unmarked-put-back`: the put-back ignores `person.alive`'s flag;
     - `mutant-late-pre-image`: the pre-image is taken at the put-back;
-    - `mutant-stale-lagged-snapshot`: the snapshot is never refreshed after the first instant;
-    - `mutant-no-work-unchecked`.
+    - `mutant-stale-lagged-snapshot`.
 - **Acceptance:**
-  - **Byte identity** against the merge base (T-05's list) at this task's head, in release and in debug.
-  - **The differential test** (`crates/rh-core/tests/per_instant.rs`):
-    - **The world:** random worlds of three sizes and eight seeds. Stub systems write random ledger and non-ledger columns at random instants, many instants quiet, with lagged readers, inserts, deaths and drain-only bindings with and without commands.
-    - **Equivalence:** run under `EveryInstant`, `EveryChange` and `Yearly`, the state hash after every instant and the events, commands and agenda are equal.
-    - **Path probes:** `check_stats` shows that `EveryChange` skipped at least one check on a quiet instant, and ran one on every changed instant.
-  - **Planted violations,** one per invariant and per guard rule:
-    - unsorted ids, a dead row left, two open entries, an open entry without a row, an entry field changed, an exit field written twice, an open append with a non-open value, a closed append for a living person, an id changed, and a system invariant broken;
-    - each fails by name at **the same instant and with the same error under `EveryChange` as under `EveryInstant`** in debug;
-    - under `Yearly` in release, the state violations fail at the first year check at or after them, and a guard value violation passes, which is the documented compile-out.
-  - **Release compile-out** (`crates/rh-core/tests/ledger_release.rs`, run with `--release`):
-    - `LEDGER_VALUE_CHECKS == cfg!(debug_assertions)`;
-    - a planted entry-field write passes in release and is refused in debug;
-    - a planted row-count change is refused in both builds;
-    - in SPR-007's form, with the `check_all` line `release builds compile the ledger value checks out`.
-  - **The narrowing removed.** `tests/lifecycle_queues/guard.rs` mode 2 (`:12`, `:157`) becomes a refusal by name in both builds. The test is renamed `a_drain_without_work_that_writes_is_refused_by_name`. Five new modes are added, each refused by name: an empty drain that emits, that submits, that schedules a timer, that inserts, and that draws.
-  - **M2's and the core's invariants:** the differential property test against the kept oracles. Same results, names and detail text on every random table and every planted violation.
+  - **Byte identity** against the merge base, in release and in debug.
+  - **The differential test** (`per_instant.rs`): random worlds, three sizes and eight seeds, with stub systems writing random ledger and non-ledger columns at random instants, many instants quiet, lagged readers, inserts, deaths and drain-only bindings. Gated and `Gating::Off` give equal state hashes, events, commands and agenda after every instant. `check_stats` shows checks skipped on quiet instants and run on every changed one.
+  - **Planted violations,** one per invariant and guard rule (unsorted ids, a dead row left, two open entries, an open entry without a row, an entry field changed, an exit field written twice, an open append with a non-open value, a closed append for a living person, an id changed, a system invariant broken). Each fails by name at **the same instant with the same error** gated as under `Gating::Off`.
+  - **The narrowing:** `guard.rs` mode 2 (`:12`, `:157`) becomes a refusal by name, renamed `a_drain_without_work_that_writes_is_refused_by_name`.
+  - **The O(N + L) checks:** the same results, names and text as the oracles on every random table and planted violation.
   - **Mutants:** each fails a named gate for its reason:
-    - `unmarked-put-back` fails the differential test (a dead row survives compaction; the state hash differs at that instant) and the `solo` ladder;
-    - `late-pre-image` fails the debug entry-field refusal;
-    - `stale-lagged-snapshot` fails the differential test's lagged reader;
-    - `no-work-unchecked` fails mode 2.
-  - **Lints:** `lint_forbidden` and `lint_arch` green, including W31's hidden-state rule on `rh-core`.
+    - `unmarked-put-back`: a dead row survives, the hash differs at that instant, and the `solo` ladder fails;
+    - `late-pre-image`: the entry-field refusal;
+    - `stale-lagged-snapshot`: the differential test's lagged reader.
+  - **Lints:** `lint_forbidden` and `lint_arch` green (W31's hidden-state rule).
 - **Status:** [ ] not started
 
-#### T-04: The rows inserted this instant, for S3's selector (AGT-002-CORE; the specs table's S3 row)
+#### T-04: Stage A's evidence, baselines, CI and docs (AGT-002-TOOLS with AGT-002-CORE; S6, S15)
 - **Deliverable:**
-  - `StepCtx::inserted() -> &[PersonId]`: the engine's per-instant buffer, filled at each merge's row insert and filtered at compaction.
-  - A consumer test with a stub selector of S3's shape: a `Day`/`Vital` binding after an inserter by a `same_instant` edge, writing a zero-marked column for each new row.
-  - The `05.1` sentence, proposed in the PR.
-  - **If SPR-018 has merged:** `rh-sys-migration`'s `residence_at_birth` iterates `inserted()`, with `debug_assert_eq!` against R4's scan. Otherwise, SPR-018 T-03 reads it (the Architect's line at approval).
-- **Acceptance:**
-  - On random worlds (three sizes, eight seeds), with inserts at earlier levels and earlier phases of the same instant and same-instant deaths of newborns, `inserted()` equals the zero-marked scan at every step that reads it. A planted insert after the reader, which breaks the equivalence's condition, fails the reader's debug assertion by name (fail-closed).
-  - A newborn compacted in the instant is absent from a later phase's list.
-  - The buffer allocates nothing in steady state.
-  - **If S3 has been converted:** `hamlet`'s ladder and channel A are byte-identical to the merge base's, and S3's per-day cost at 10⁴ rows is O(births) (callgrind on a quiet day start and on one with a birth).
-- **Status:** [ ] not started
-
-#### T-05: The evidence, the baselines by the tools, CI and the docs (AGT-002-TOOLS with AGT-002-CORE; the specs table's CI row; Z1)
-- **Deliverable:**
-  - **The byte-identity record** against the merge base, with the base's and the head's binaries on one machine:
-    - the four PR-tier ladders at 1 and N threads, compared with `bin/check_baseline.py`, with no file under `worlds/*/baselines/` changed;
-    - the nightly monthly ladders at 1, 2, 4 and N threads × 3 on the head (`bin/golden_nightly.sh`, including the debug soak, whose ladder must equal the release ladder);
-    - every sealed segment and keyframe of the `solo`, `household` and `hamlet` run directories (200 years), SHA-256 equal;
-    - `rh-cli tail --canonical` output equal;
-    - `rh-cli replay` REPLAY EQUAL;
-    - the tail display snapshots unchanged;
-    - `draws_golden` passing with its golden file unchanged and its two mutants failing as before;
-    - `m2_system`'s `--no-capture` figures (the q(15) values per seed, V-DATA-04's counts) equal, timing lines excluded;
-    - `bin/gen_hash_golden.py --check` unchanged.
-  - **The baselines, by the tools,** in one commit whose subject ends `[perf-baseline]`:
-    - `BENCH_TARGETS` gains `"instant"`, and `perf_gate.py record` adds its seven cases and re-records `draws` and benches 7 and 8, which may fall;
-    - `perf_gate.py alloc-record` re-records the smoke and rung budgets, which fall;
-    - each with a `Reason:` line, and `perf-baseline-reason:` in the PR body.
-  - **The after-figures,** against T-01's: every row of the targets table, and a **G1a projection**, which is engine overhead × 360k instants + yearly checks + compactions, on `kingdom_10k`'s 1,000 years.
+  - **The byte-identity record** against the merge base, with both binaries on one machine:
+    - the four PR-tier ladders at 1 and N threads (`check_baseline.py`), with no baseline file changed;
+    - the nightly ladders on the head (`golden_nightly.sh`, the debug soak equal to release);
+    - every segment and keyframe of the three rungs' run directories (SHA-256);
+    - `tail --canonical`, `replay` REPLAY EQUAL, and the tail snapshots;
+    - `draws_golden` and its mutants;
+    - `m2_system`'s figures;
+    - `gen_hash_golden.py --check`.
+  - **The baselines, by the tools:** `BENCH_TARGETS` gains `instant`; `perf_gate.py record` and `alloc-record` (`draws` and the budgets fall); a `[perf-baseline]` commit with a reason.
+  - **The after-figures** against T-01's, and the G1a arithmetic's "after stage A" column re-measured.
   - **The gates:**
-    - **Part core:**
-      - `rh-core` `per_instant` and `ledger_release` (about 20 s);
-      - the debug `hamlet` 200-year run against its baseline (`--expect-serial`; about 10–20 s; the V-INV-02 PR subset);
-      - the debug `m2_system` gate moved back from part golden (about 15 s or less).
-    - **Part golden:**
-      - the four mutant controls (about 6–10 s each, as SPR-014's);
-      - `instant` inside the existing V-PERF-04 gate and its repeatability run (about 30–60 s, twice).
-    - The inventory test is updated in the same commit.
-  - **The docs** of the compliance table.
+    - as the CI-gates table's stage-A rows place them across `core`, `golden` and `stream` (X10), with the inventory test in the same commit.
+  - **The docs** of the compliance table's A list.
 - **Acceptance:**
-  - **Byte identity:** every item of the record above is equal. Any difference is a defect.
-  - **Targets:** every target is met, or reported with its figure for the Architect's ruling.
-  - **Perf integrity:** `perf_gate.py integrity` passes for both baselines (exact for allocations) with the tag and reason. V-PERF-04 and V-PERF-11 pass on the head.
-  - **CI (Z1):** both parts' gate-time sums are lower than the merge base's, from two CI runs each, budgeted ×1.5 for slow runners. **Nightly candidates if a part does not fall:** three of the four mutant rebuilds (`mutant-unmarked-put-back` stays) and the `instant` repeatability run. No gate moves otherwise.
-  - The M2 gates meet their targets.
+  - Every byte-identity item is equal.
+  - The stage-A targets are met, or reported for a ruling.
+  - `perf_gate.py integrity` passes for both baselines.
+  - **CI (S15, X10):** the median of 3 `check_all` step times per part, head ÷ base, is below 1 in every part, and each added gate is within its ×1.5 budget.
+- **Status:** [ ] not started
+
+### Stage B: the cadence, the compile-out, the incremental digest, the instant log (C2, about 3–3.5 agent-days)
+
+#### T-05: The check cadence as a run parameter, `check_now`, the refusals, the compile-out and the soak obligation (AGT-002-CORE with AGT-002-TOOLS; S1, S2, S3, S14)
+- **Deliverable:**
+  - **The cadence and the run parameter:**
+    - `CheckCadence { EveryChange, Yearly }` and `Engine::set_check_cadence`, default `EveryChange` in every build;
+    - `RunArgs::check_cadence` and `rh-cli run --check-cadence {every-change,yearly}`;
+    - `run.toml`'s `check_cadence` (absent reads as `every-change`);
+    - the crash artifact's cadence and value-checks fields;
+    - the ladder header's `check-cadence yearly` line, written only when it is not the default.
+  - **`Engine::check_now()`:** every state invariant once. `rh-golden`'s run loop calls it at run end and before each keyframe it writes.
+  - **The refusals:** `Engine::replay` and `rh-cli replay` or `--resume` refuse, by name, a cadence different from the run's recorded one and an artifact whose value checks this build cannot reproduce.
+  - **The compile-out:** the value checks under `cfg(debug_assertions)` (`LEDGER_VALUE_CHECKS`); G-1, the row counts and the log's length in every build.
+  - **The soak obligation:**
+    - `solo` joins `golden_nightly.sh`'s debug soak (`:111`);
+    - the inventory check in `python/tests/test_check_all_inventory.py`, with a planted world fixture that registers M2 without a soak, which must FAIL.
+  - **The text, the Architect's:**
+    - `05.1` §4.2 row 11: "Invariants (after every change by default; yearly when the run sets it, with a full check at run end and before each keyframe: §9)";
+    - `05.1` §9: the cadence, `check_now`, and the compile-out sentence;
+    - S14's `docs/03` SIM-8 and `docs/09` V-INV-01 wording, proposed for D60.
+- **Acceptance:**
+  - **Default runs unchanged:** every ladder, segment and keyframe is byte-identical to stage A's. A default run's `run.toml` gains only its `check_cadence` line.
+  - **Under `yearly`:**
+    - a planted persistent violation fails at the first yearly check at or after it, or at `check_now` (run end, keyframe);
+    - a planted transient violation that heals passes, as documented;
+    - the 200-year run's last partial year is checked by `check_now`.
+  - **The refusals:** a cross-cadence replay, a cross-cadence resume, and a debug value-check artifact replayed in release are each refused by name.
+  - **The release compile-out** (`crates/rh-core/tests/ledger_release.rs`, `--release`): `LEDGER_VALUE_CHECKS == cfg!(debug_assertions)`; a planted entry-field write passes in release and is refused in debug; a row-count change is refused in both. The `check_all` line is "release builds compile the ledger value checks out".
+  - **The inventory check** passes on `main`'s four worlds once `solo` is in the soak, and fails on the planted fixture.
+- **Status:** [ ] not started
+
+#### T-06: The incremental, hash-identical month-end digest (AGT-002-TOOLS with AGT-002-CORE; S5, S11)
+- **Deliverable:**
+  - **The cache in the run loop:**
+    - `rh-golden`'s run loop keeps one plane-A `MerkleCache`;
+    - at each stop it updates the cache from `engine.tables()` (borrowed, through a crate-level helper in `rh-snapshot` that also encodes the engine tables, as `state_digest` does) and builds the `PlaneDigest`;
+    - `engine.snapshot()` is called only for a keyframe or a dump.
+  - **Version on write:** the put-back gives a new version only to a column whose written flag is set; every core write still versions.
+  - **S11, extended:** cached equals full at every stop in debug, and at every rung and keyframe in release, as an assertion in the run loop that fails the run by name.
+  - **The fallback:** if the Architect rules version-on-write C3, or any part of the digest cannot be made identical, that part is filed as **BCK-002 A-68** (C3, before SPR-030), and this task keeps the rest.
+- **Acceptance:**
+  - Every ladder, rung and baseline is byte-identical.
+  - The `smoke` ladder over 1,000 years is equal at 1 and N threads.
+  - `mutant-compact-keeps-version` and a planted missing put-back version (`mutant-put-back-keeps-version`) each fail S11's check by name.
+  - **The digest per stop** at the `year` sizes: no clone; unchanged columns skipped (the cache's `rehashed_chunks` counter, `main`'s `hash.rs:549`); the residual of written log columns reported.
+  - The G1a arithmetic's digest term is re-measured.
+- **Status:** [ ] not started
+
+#### T-07: The instant log, the real-world benches, the greedy writer, and the no-dispatch fallback (AGT-002-CORE with AGT-002-TOOLS; S8, S9, S10, S12, S13; X1)
+- **Deliverable:**
+  - **The instant log** (the specs table's row): `InstantLog` in `rh-core`, with `StepCtx::inserted()` and `StepCtx::exited()`.
+    - It is filled at the serial merges: (a) by a sorted insert at each row insert, filtered at compaction; (b) by a scan of `person.alive` at each merge where the write set shows it written.
+    - It is cleared at the instant's end, and is in no `EngineState`.
+    - It has the `05.1` §2 rule 2 sentences (the Architect's, to EVO-002's text if EVO-002 has merged): what the log holds, that it is filled at the merges, read-only to steps, cleared at the instant's end and outside every hash, keyframe and journal, and that EVO-002 adds (c).
+  - **Two consumer tests:**
+    - for `inserted()`, a stub selector of S3's shape (a `Day`/`Vital` binding after the inserter by a `same_instant` edge, with a `debug_assert_eq!` against the zero-marked scan);
+    - for `exited()`, a stub of T1's shape that reads the instant's exits in a later phase (`Agenda`) and records them in a column of its own.
+  - **A thread-invariance test** and **an outside-every-hash test** (acceptance).
+  - **The benches:** `rungs/solo_year` and `rungs/hamlet_year` (real M2, one sim-year, the arena) and `instant/greedy_writer/n10k_l100k`; `BENCH_TARGETS` gains `rungs`.
+  - **The `05.1` §2 rule 2 sentence on `write()`** (the Architect's): "`SystemView::write` is for writing: taking it marks the column written, so a step that takes it without writing pays for the checks and the hashing its write would need."
+  - **The fallback, only if T-04's quiet-instant figure is above 20,000:**
+    - a drain-only job with an empty inbox is not dispatched;
+    - the `05.1` §4.1 sentence;
+    - the observer's notices and the dispatch counts restated.
+- **Acceptance:**
+  - **`inserted()`:**
+    - on random worlds (three sizes, eight seeds), with inserts at earlier levels and phases and same-instant newborn deaths, it equals the scan at every read and stays in ascending row order;
+    - a planted insert after the reader fails the reader's assertion by name.
+  - **`exited()`:**
+    - on the same worlds, with deaths by timers, by drained `ScheduleDeath` commands and in several levels, it equals the persons whose `person.alive` was 1 at the instant's start and is 0 at the read;
+    - no person appears twice;
+    - a newborn who dies in its birth instant is in both lists;
+    - the scan runs only at merges where `person.alive` was written, shown by `check_stats`.
+  - **Thread invariance:** at 1, 2, 4 and N threads, every read of both lists and their content at each instant's end are identical.
+  - **Outside every hash:**
+    - two runs, one whose stub consumers read the log and one with the reads removed, give equal state hashes after every instant, equal keyframe bytes and an equal journal;
+    - `EngineState` has no field for the log;
+    - the four default ladders are byte-identical.
+  - **Ready for (c):** a test pins (a)'s and (b)'s outputs on a fixed world, so that EVO-002's addition of (c) is checked against it.
+  - **Allocations:** the log allocates nothing in steady state.
+  - **The benches:** `rungs/solo_year` meets `solo`'s ≤ 23k per instant on the arena (S9). The greedy writer's figure is reported against `quiet/n10k_l100k`.
+  - **The fallback,** if built: byte identity, and the quiet-instant target met.
+- **Status:** [ ] not started
+
+#### T-08: Stage B's evidence, baselines, CI and docs (AGT-002-TOOLS with AGT-002-CORE; S5, S15)
+- **Deliverable:**
+  - T-04's byte-identity record against stage A's merged head, plus a `yearly` run of each rung whose ladder (header line apart) equals the default's.
+  - The baselines by the tools (`rungs` added; the `death` and `rungs` counts and the budgets re-recorded).
+  - **The after-figures**, and the G1a arithmetic's "after both stages" column, re-measured on the 10k synthetic. **It is not a G1a verdict:** SPR-030 measures.
+  - **The gates:**
+    - as the CI-gates table's stage-B rows place them (X10), with the inventory test in the same commit.
+  - The docs of the compliance table's B list.
+- **Acceptance:**
+  - Byte identity.
+  - The targets met or reported.
+  - Perf integrity.
+  - **CI (S15, X10):** the median ratio is below 1 in every part against stage A's head, each added gate within its ×1.5 budget.
+  - BCK-002 A-60 is closed (A-68 filed if T-06's fallback is used).
 - **Status:** [ ] not started
 
 ## Director items, and what changes under the alternative
 
+D60 as the Architect restated it (REV-SPR-038 rulings), with a confidence per item:
+
 | Item | Planned | Under the alternative |
 |---|---|---|
-| **1. One C2 sprint of about 3.25–3.5 agent-days** (65%) | One PR, one Tester pass and one audit. The measurements, the byte-identity record and the baselines are shared by every task. A-32 keeps the worker pool and the multi-thread buffers; this sprint takes the single-thread quiet-instant allocations (70%) | **A split:** SPR-038a (C1, Architect-merged: T-01, T-02) relieves CI sooner. SPR-038b (C2: T-03, T-04) carries the contract and the release rule. The byte-identity record, the perf re-recording and a Tester's pass are done twice, and part of A-60's figure (the O(L) checks) waits for 038b |
-| **2. The release-build rule** (75%) | The write guards' value checks are compiled out of release (SPR-007's pattern, with a test that proves it). Row counts, the log's length, G-1 and the no-work rule run in every build. The state invariants run after every change in debug, and yearly in release unless a run asks for every change. A PR-tier debug `hamlet` run joins the nightly debug soak as evidence | **(a) Keep everything in release, gated by change:** exact, and cheap on the rungs, but O(N + L) on nearly every instant of `kingdom_10k`, so the G1a run must opt out explicitly. **(b) Compile `Ledger::check` and the invariants out of release too:** cheapest, but a release run then never checks state, and V-SCALE-01's 10k run has no release evidence |
-| **3. The narrowing removed by the no-work rule** (80%) | A drain-only job with an empty inbox must do nothing, refused by name in every build, and debug builds value-check every write by pre-image at the first write | **Do not dispatch such jobs at all:** cheaper, but the observer's notices, the dispatch counts and `05.1` §4.1 change. It is held as the fallback lever if the quiet-instant target is missed |
-| **4. `StepCtx::inserted()` built here, for S3's selector** (65%) | S3's per-day cost becomes O(births), with a debug assertion against R4's scan. SPR-018 T-03 reads it if this sprint merges first; otherwise T-04 converts S3 | **Keep the O(N) scan:** about 3.6 × 10⁶ compares a year at 10k (S3's own estimate), comparable to the whole quiet-instant target, and file the hand-off for SPR-030 |
-| **5. Order: after SPR-014, SPR-020 and SPR-015; before SPR-018 and SPR-021 if ready; outside the one-C3 slot** (75%) | It merges in a gap between C3 merges, as C2. SPR-018 and SPR-021 then measure on the cheaper engine, and every later CI run is faster | After SPR-018: T-04 converts S3, and SPR-018's T-05 records the higher per-instant cost |
+| **1. Two stages** (70%): A (exact gating, O(N + L) checks, positional compaction; C2; about 3 days) and B (the cadence parameter, the compiled-out value checks, the incremental digest, `inserted()`; C2; about 3 days) | Each stage is its own PR, Tester pass and audit. Stage A relieves CI before SPR-015 | One PR of about 6–7 days: CI's core part stays at the hard limit until it lands, and the review round is larger |
+| **2. The release rule** (80%) | <ul><li>The guards' O(rows) value checks are compiled out of release, with a test (SPR-007).</li><li>The row-count and log-length checks stay in every build.</li><li>The invariant cadence is a run parameter, default `every-change`, with `yearly` an explicit opt-in for production and G1a.</li><li>A debug soak is required of every world that registers a ledger-writing system.</li><li>SIM-8's and V-INV-01's text is reworded to match (S14).</li></ul> | **Default `yearly` in release:** CI's release runs would check yearly, against SIM-8's "CI builds". **Everything in every build:** the O(L) value checks stay on every write in G1a's run |
+| **3. The narrowing removed** (85%) | A pre-image at the first `write()` checks every write. There is no separate refusal; "do not dispatch" is the fallback | Keep the narrowing, a known hole |
+| **4. The instant log as an API only** (85%; its shape X1, 65%) | (a) `inserted()` and (b) `exited()`, built here with consumer, thread-invariance and outside-every-hash tests. S3's conversion is SPR-018 T-03's, T1's use is SPR-023's, and (c) is SPR-021's under EVO-002 | Keep S3's O(N) scan (about 3 s per 1,000 years at 10k), and let SPR-023 and SPR-021 each build their own record (three mechanisms, against X1's one-builder rule) |
+| **5. Merge order** (70%; X9) | SPR-014, then SPR-020 and stage A in either order, then SPR-015. Stage B in any gap after A, before SPR-018 if possible, before SPR-023 (its `exited()` consumer), before SPR-030 in any case | After SPR-015: core has no headroom while SPR-015 adds its own gates |
+| **6. G1a** (75%) | SPR-038 is **necessary**. With positional compaction and the incremental digest it is expected to remove the terms the core controls; **SPR-030 measures whether it is sufficient**. T-01 and T-08 state the arithmetic | — |
 
 ## Out of scope (explicit)
-- **The month-end state digest and the yearly keyframes at `kingdom_10k` scale.** `rh-golden`'s run loop clones and hashes the whole state at every month-end stop (`rh-golden/src/run.rs:683`; `engine.rs:383`).
-  - Bench 7 hashes four columns of 10,000 rows (`crates/rh-bench/src/fixture.rs:27–35`) in 2,311,755 instructions (`instructions_v1.txt`, `state_full/rows_10k`): about 58 instructions per row, before the clone.
-  - `kingdom_10k`'s state holds ten log columns of 10⁵ to 3 × 10⁵ rows, so 1–3 × 10⁶ rows: about 6 × 10⁷ to 2 × 10⁸ instructions per stop. Over 12,000 month-end stops in 1,000 years that is about 10¹² instructions, **more than G1a's whole budget.** That is the drafter's estimate; T-01 measures it at the `year` sizes.
-  - A fix needs versions bumped only on write and the Merkle cache in the run loop, or a release cadence for the ladder's monthly digests (`05.1` §6 item 6). Both change the hashing machinery or the ladder format, so they are C3.
-  - **Proposed:** the Architect files it as a BCK-002 item for SPR-030's preparation (A-32's lane), with T-01's figure.
-- **`WorldTables::version` bumped only on write** (the same item).
-- **A-32's persistent worker pool and multi-thread level buffers** (SPR-030).
-- **Skipping the dispatch of jobs without work** (director item 3's alternative).
-- **Lazy compaction**, a change to SPR-011 ruling 5's semantics: dead rows would stay visible after their instant.
-- **A-28's exact lags**, and any change to what a lagged read sees.
-- **SPR-020's cause guard on S6** (P1b): the rule is stated in the specs table, and the code comes with S6.
-- **Any model change, any baseline move, any spec text change** beyond the Architect's `05.1` sentences.
+- **A-68, only if T-06's fallback is used:** version-on-write ruled C3, or a part of the digest that cannot be made identical, or a release cadence for the ladder's monthly digests (`05.1` §6 item 6), each C3, before SPR-030.
+- **Chunk-level dirty marks for written log columns:** a written column re-hashes in full. They would need row-level write tracking through `SystemView`, which is a new API. T-06 reports the residual.
+- **A-32's worker pool and multi-thread level buffers** (SPR-030).
+- **Lazy compaction** (it would change SPR-011 ruling 5's semantics).
+- **A-28's exact lags.**
+- **SPR-020's cause guard on S6** (P1b): it follows the pre-image rule when S6 arrives.
+- **S3's conversion to `inserted()`** (SPR-018 T-03), **T1's use of `exited()`** (SPR-023), and **the log's part (c)** (SPR-021 T-02 under EVO-002).
+- **`twin_vales`' debug soak itself:** SPR-019b or SPR-030, under T-05's gate.
+- **Any model change, any baseline move, any spec text change** beyond the Architect's `05.1` sentences and S14's wording.
 
 ## Verification assignment (Testers)
 
 | Tester | What to verify, from which contract | Report |
 |---|---|---|
-| AGT-003-DET | T-02, T-03, T-04, T-05, written from `05.1` §2 rule 2, §9 (as amended), SPR-011 ruling 5 and ADR-0006 before reading the code:<ul><li>**byte identity**, re-run with their own base and head builds on all four worlds: ladders at 1 and N threads, segments, keyframes, replay, tail; and the nightly ladders on the head;</li><li>**the gates' exactness**, with their own differential harness: a stub world with writes at random instants, and their own planted unmarked write that the harness must catch;</li><li>**the cadence:** their own planted violations detected at the same instant under `EveryChange` as under `EveryInstant`, and at the next year check under `Yearly`;</li><li>**the release compile-out:** their own guard violation refused in debug and passing in release, and a row-count breach refused in both;</li><li>**the no-work rule:** their own variants of an empty drain that writes, emits, submits, schedules, inserts or draws;</li><li>**the figures,** re-measured with their own sizes (N = 3,000, L = 50,000) for the O(1) and no-L claims, and the quiet instant's allocation count;</li><li>the four mutants killed for their reasons, plus two of their own (compaction gated on `person.id` instead of `person.alive`; the lagged snapshot refreshed only for ledger columns, against a non-ledger lagged read)</li></ul> | `VER-SPR-038-TEST` |
-| AGT-003-IF | T-02, T-03, T-04, written from the `05.1` sentences and `docs/13` §4.1:<ul><li>the `05.1` text against the code (§2 rule 2's no-work rule and `inserted`; §4.2 and §9's cadence);</li><li>`WorldTables`' public API unchanged for `rh-snapshot`, `rh-worldgen`, `rh-golden`, `rh-bench` and `rh-contracts`, with their tests passing unedited;</li><li>`CheckCadence` outside the history tuple, every hash and the ladder header;</li><li>`StepCtx::inserted`'s order and filtering, with a consumer test of their own;</li><li>S3's conversion, if it was done, against R4</li></ul> | As above |
+| AGT-003-DET | **Stage A** (T-02, T-03, T-04), written from `05.1` §9 as amended, SPR-011 ruling 5 and ADR-0006 before reading the code:<ul><li>byte identity on all four worlds with their own builds;</li><li>their own differential harness against `Gating::Off`, with a planted unmarked write it must catch;</li><li>positional compaction against `collect` on random worlds;</li><li>S11's cache test with their own missing version bump;</li><li>the O(N + L) checks against the oracles;</li><li>zero allocations through the arena;</li><li>the figures at their own sizes (N = 3,000, L = 50,000);</li><li>the mutants, plus two of their own (compaction gated on `person.id`; the snapshot refreshed only for ledger columns, against a non-ledger lagged read).</li></ul>**Stage B** (T-05 to T-08):<ul><li>a persistent and a transient violation under `yearly`, and `check_now` at run end and at a keyframe;</li><li>the cross-cadence and cross-profile refusals;</li><li>the release compile-out;</li><li>the cached digest equal to the full one at every stop on all four worlds, with their own planted missing version;</li><li>the instant log on their own worlds: `inserted()` against the scan, `exited()` against the alive column's start and end, at 1, 2, 4 and N threads, and the hashes and keyframes equal with and without readers</li></ul> | `VER-SPR-038a-TEST`, `VER-SPR-038b-TEST` |
+| AGT-003-IF | **Stage A:** `WorldTables`' public API unchanged for every consumer, whose tests pass unedited; the `05.1` §9 preamble against the code. **Stage B:**<ul><li>the run parameter in `RunArgs`, `rh-cli`, `run.toml`, the crash artifact and the ladder header, only when not the default;</li><li>a pre-SPR-038 run directory replays unchanged;</li><li>the inventory check with a fixture of their own;</li><li>the instant log's order, clearing and read-only access, with consumers of their own for (a) and (b), and the `05.1` text against EVO-002's if it has merged;</li><li>the `05.1`, `docs/03` and `docs/09` texts against the code</li></ul> | As above |
 
 ## Merge route
 
-- **Class and conditions.** C2 with `[perf-baseline]`:
-  - green CI, an independent Tester pass and the Architect's audit (`VER-SPR-038`; GOV-005 §6, `GOV-005_DevelopmentLifecycle.md:98`), and the Architect merges;
-  - the PR title is `SPR-038: per-instant engine cost [perf-baseline] [C2]`;
-  - it merges by rebase, never squash, because a perf baseline changes (`crates/rh-bench/README.md:34`);
-  - no golden world changes, so nothing is announced beyond the merge summary.
-- **Outside the one-C3 slot** (GOV-005 §4.1). The order (75%):
+- **Class and conditions, per stage.**
+  - Each stage is C2 with `[perf-baseline]`: green CI, an independent Tester pass and the Architect's audit (`VER-SPR-038a`, `VER-SPR-038b`; GOV-005 §6, `GOV-005_DevelopmentLifecycle.md:98`), then the Architect merges.
+  - Each merges by rebase, never squash (`crates/rh-bench/README.md:34`).
+  - Neither moves a golden world, so nothing is announced beyond the merge summary.
+- **Neither is in the one-C3 slot** (GOV-005 §4.1). The order (70%):
 
 ```mermaid
 flowchart LR
-  S014[SPR-014 C3<br/>daily drain, A-60 part] --> S038[SPR-038 C2<br/>per-instant cost]
-  S020[SPR-020 C3<br/>envelope, engine.rs] --> S038
-  S015[SPR-015 C3<br/>births, derived index] --> S038
-  S038 -.recommended before.-> S018[SPR-018 C3<br/>M1 F0, S3 F0]
-  S038 -.recommended before.-> S021[SPR-021 C3<br/>M7 F1]
-  S038 --> S030[SPR-030<br/>G1a performance run]
+  S014[SPR-014 C3<br/>daily drain] --> S038a[SPR-038a C2<br/>stage A: gating, O N+L, compaction]
+  S014 --> S020[SPR-020 C3<br/>envelope]
+  S038a -.either order.- S020
+  S038a -.merge order.-> S015[SPR-015 C3<br/>births, derived index on the write set]
+  S020 --> S015
+  S038a --> S038b[SPR-038b C2<br/>stage B: cadence, digest, inserted]
+  S038b -.recommended before.-> S018[SPR-018 C3<br/>M1 F0, S3 F0]
+  S038b --> S023[SPR-023<br/>minds: reads exited]
+  S038b --> S030[SPR-030<br/>G1a performance run]
 ```
 
 - **Shared files:**
-  - **With SPR-015:** `engine.rs` (the derived-index hook), `ledger.rs` and the row insert.
-  - **With SPR-018:** S3's step (T-04), and `rh-core` only if its binding-free line is needed.
-  - **With SPR-021:** M7 owns `person.house` and `person.vocation`, both ledger columns under the guard and the gates, and reuses the derived index.
-  - **With SPR-017:** `rh-registry` reads tables only through the public API, which is unchanged.
-  - **With every C3 that re-records `allocations_v1.txt` or `instructions_v1.txt`:** the file conflicts, and the resolution is always the tool's re-record after merging `origin/main`, never a hand merge.
+  - **With SPR-020:** `engine.rs`, `system.rs` and `register.rs`; the cause writes mark the write set.
+  - **With SPR-015:** the derived-index hook reads the write set, and SPR-015 rebases after stage A.
+  - **With SPR-018:** S3's step (its T-03 adopts `inserted()`).
+  - **With SPR-023:** T1 reads `exited()`.
+  - **With SPR-021:** EVO-002 adds the log's part (c), and the `05.1` text is EVO-002's if it has merged first.
+  - **With SPR-021:** M7's `person.vocation` is under the gates and the pre-image.
+  - **With SPR-019b and SPR-030:** `twin_vales` and the soak gate.
+  - **With every C3 that re-records `allocations_v1.txt` or `instructions_v1.txt`:** re-record by the tool after merging `main`, never a hand merge.
   - **With all of them:** `check_all.sh` and the inventory test.
-- **What this sprint re-verifies after merging `origin/main`:**
-  - both parts;
-  - the byte-identity record against the new merge base;
-  - the before- and after-figures;
-  - the perf baselines, re-recorded by the tools;
-  - T-04's equivalence if S3 has arrived.
+- **What each stage re-verifies after merging `origin/main`:** every part's median; the byte-identity record against the new base; the figures; the baselines re-recorded by the tools.
 - **What the next sprints take from it:**
-  - **SPR-018 and SPR-021:** the cheaper instant, the gates and the no-work rule, and S3's `inserted()`.
-  - **SPR-030:** the `instant` bench, `CheckCadence::Yearly` for the G1a run, the G1a projection, and the out-of-scope digest item.
+  - **SPR-015:** the write set for its hook.
+  - **SPR-018:** `inserted()`, the gates and the cache.
+  - **SPR-023:** `exited()`.
+  - **SPR-021:** the instant log to extend with (c).
+  - **SPR-019b and SPR-030:** the soak obligation for `twin_vales`.
+  - **SPR-030:** the benches, `--check-cadence yearly` for the G1a run, `check_now`, the incremental digest, the G1a arithmetic, and A-68 if it was filed.
 
 ## Risks
 
 | # | Risk | Likelihood / effect | Mitigation |
 |---|---|---|---|
-| 1 | A gate skips a check or a refresh it should have run: a write path that does not mark the write set | Low / high: a silent difference in history (stale lagged read, uncompacted dead row) or a missed violation | <ul><li>Every mutable slot accessor takes the write set, so the rule holds by construction.</li><li>The differential test runs against `EveryInstant`.</li><li>The `unmarked-put-back` and `stale-lagged-snapshot` mutants, and the Tester's own planted unmarked write.</li><li>The byte-identity record on all four worlds and the nightly ladders</li></ul> |
-| 2 | Release lets a system bug through that the per-instant guard would have caught | Medium (by design) / medium | <ul><li>Every system runs under the full guards in the PR tier's debug suites, the new debug `hamlet` run and the nightly 1,000-year debug soak, whose ladder must equal release.</li><li>Release keeps the O(1) checks and the yearly state check.</li><li>Under the alternative (a), release keeps every check, gated</li></ul> |
-| 3 | The targets are missed (quiet instant above 20k) | Medium / low | The figure is reported and the Architect rules. The fallback lever is not dispatching jobs without work (director item 3's alternative), which needs a `05.1` §4.1 sentence |
-| 4 | SPR-015's derived-index hook or SPR-020's code adds per-instant work this plan did not see | Medium / medium | Both are merged first, so T-01's before-figures include them. The specs table's coordination row gates SPR-015's hook by the write set |
-| 5 | Release tests that expect a failure at a precise instant: V-DET-11's case of "a perturbation that breaks an invariant later" (`rh-golden/tests/golden.rs:9`) | Medium / low | Such a test sets `CheckCadence::EveryChange`. T-03 lists every release test that observes a failure tick, found by a grep for `failed` and `Invariant` in release-run tests |
-| 6 | Perf baselines churn: every C3 of waves 5–6 re-records `allocations_v1.txt` | High / low | They are re-recorded by the tool after each merge of `main`, never hand-merged. The integrity gate checks them |
-| 7 | CI runner variance hides the gain | High / low | Gate-time sums from the per-gate seconds of the check reports, two runs each, rather than job wall times. One-machine figures for the targets |
-| 8 | The month-end digest dominates G1a anyway | Medium / high for SPR-030 | Measured here, and filed for SPR-030 as C3 work (out of scope) |
-| 9 | `WorldTables` slots change iteration or version behaviour that `rh-snapshot` relies on | Low / high | Name order and the version on every put-back are unchanged. `rh-snapshot`'s tests, the hash golden and the keyframe goldens pass unedited (T-02) |
+| 1 | A write path does not mark the write set, so a gate skips a check, compaction or snapshot copy | Low / high: a silent change in history or a missed violation | <ul><li>Every mutable slot accessor takes the set.</li><li>The differential test runs against `Gating::Off`.</li><li>The `unmarked-put-back` and `stale-lagged-snapshot` mutants, and the Tester's own.</li><li>Byte identity on four worlds and the nightly ladders</li></ul> |
+| 2 | A missing version bump makes the cached digest stale (stage B), or makes positional compaction stale (stage A) | Low / high: a wrong ladder | S11's test after every instant, at every stop and at every keyframe; `mutant-compact-keeps-version` and `mutant-put-back-keeps-version` |
+| 3 | Release lets a system's write-rule bug through after the compile-out | Medium (by design) / medium | The debug soak of every ledger-writing world, enforced by the inventory check. The PR tier's debug suites. The row-count and log-length checks in every build. The default `every-change` invariants in every build |
+| 4 | **The profile and cadence exposures (S2, replacing the drafter's finding 5):** <ul><li>a ladder's `failed {tick}` line (`run.rs:670`) differs between a debug and a release run for a write-guard violation;</li><li>a crash artifact replays as `NoFailure` or `Mismatch` across profiles;</li><li>bisecting a release CI ladder against a debug one names a different failure</li></ul> | Medium / low | The artifact records the cadence and the value checks, and a cross-cadence or cross-profile replay is refused by name. Under the default cadence the invariants' failures agree across profiles; only write-guard violations differ, by design |
+| 5 | The targets are missed (quiet instant above 20k; the debug `m2_system` target) | Medium / low | Reported with figures for a ruling. The quiet instant has the "do not dispatch" fallback (T-07) |
+| 6 | **G1a stays over budget after both stages:** the residual O(L) digest of written log columns, compaction's O(N · C) per death, M7 and T1's own work | Medium / high for SPR-030 | T-01 and T-08's arithmetic. A-68 is the named next step. D60 says SPR-038 is necessary, not sufficient |
+| 7 | SPR-020 and stage A conflict in `engine.rs` | High / low | Whichever lands second rebases. Byte identity is re-proved after every merge |
+| 8 | Perf baselines churn with every C3 | High / low | Re-recorded by the tool after each merge, never hand-merged |
+| 9 | CI variance (a 36% swing in one hour) hides the gain | High / low | S15's ratio of medians over 3 runs each, and one-machine figures for the targets |
 
 ## Blockers
 
 | # | Blocker | Status |
 |---|---|---|
-| 1 | SPR-014 not merged (PR #83) | Open |
-| 2 | SPR-020 not merged (PR #84) | Open |
-| 3 | SPR-015 not merged (wave 5) | Open |
-| 4 | The Architect's rulings on the specs table's "proposed" rows and the `05.1` sentences | Open: ruled with the plan's approval |
-| 5 | The director's plan approval (D60; GOV-005 §2) | Open |
+| 1 | SPR-014 not merged (PR #83): blocks stage A | Open |
+| 2 | Stage A not merged: blocks stage B | Open |
+| 3 | The Architect's rulings on the "proposed" rows and the `05.1` sentences | Open: ruled with the plan's approval |
+| 4 | The director's plan approval, and S14's `docs/03` wording (D60; GOV-005 §2) | Open |
 
 ## Completion
 
-- [ ] All tasks meet their acceptance criteria. T-01's before-figures were taken on the merge base before any engine change.
-- [ ] `bin/check_all.sh` passes. The report is attached, with each part's gate-time sum against the merge base's.
-- [ ] The Tester verdicts are PASS (DET, IF).
-- [ ] The Architect's audit `VER-SPR-038` is PASS, with the byte-identity record, the before- and after-figures, the G1a projection and the targets met or ruled.
-- [ ] No open DEF- against this sprint.
-- [ ] The merge route matches the declared class (C2), the PR title carried `[perf-baseline] [C2]`, it was merged by rebase, and no file under `worlds/*/baselines/` changed.
-- [ ] `05.1` carries the Architect's sentences. BCK-002 A-60 is closed, with the out-of-scope digest item filed and A-32's split noted. SPR-014's narrowing is gone from `ledger.rs` and `guard.rs`.
+**Stage A (`SPR-038a`):**
+- [ ] T-01 to T-04 meet their acceptance. The before-figures were taken on the merge base before any engine change, and the debug `m2_system` target was set before T-02.
+- [ ] `bin/check_all.sh` passes, with S15's medians in the PR.
+- [ ] The Tester verdicts are PASS, and the Architect's audit `VER-SPR-038a` is PASS.
+- [ ] Merged as C2 by rebase, with no baseline file changed. The narrowing is gone from `ledger.rs` and `guard.rs`.
+
+**Stage B (`SPR-038b`):**
+- [ ] T-05 to T-08 meet their acceptance. The default ladders are byte-identical, the incremental digest equals the full one at every stop, and the instant log's (a) and (b) pass their consumer, thread-invariance and outside-every-hash tests.
+- [ ] `bin/check_all.sh` passes, with S15's medians in the PR.
+- [ ] The Tester verdicts are PASS, and the Architect's audit `VER-SPR-038b` is PASS.
+- [ ] Merged as C2 by rebase. `05.1` carries the Architect's sentences, D60's `docs/03` and `docs/09` wording is applied, BCK-002 A-60 is closed, and A-68 is filed if T-06's fallback was used.
