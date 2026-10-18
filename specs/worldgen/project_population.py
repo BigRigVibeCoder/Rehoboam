@@ -6,8 +6,9 @@ members and membership spreads through the population:
 
   * M7 `on_birth`: a newborn's house_member row, by the membership rule (BCK-002 A-56; the three
     rules below);
-  * M2 F3/F4: `elite_fertility_mult` (1.2 here) multiplies the fertility level of every woman
-    with a house_member row;
+  * M2 F3/F4/F6: `elite_fertility_mult` (1.2 here) multiplies the fertility level of every woman
+    with a house_member row and, under D56 (e) (the read on the couple, the M2 0.3.0 draft), of
+    every woman whose husband has one;
   * M7 `vocation`: a member reaching majority with no seat, office, claim or first place in a
     line draws holy orders with probability `vocation_holy_orders` (0.2 here), which removes the
     member from marriage and conception (M2 N3/N4/F5).
@@ -34,8 +35,8 @@ named member women of childbearing age per house, whose children by a commoner j
 bounded rule (a member mother within `dormancy_degrees` of a holder of her house, or first or
 second in a line, or holding a seat, office or claim; the member fathers' children are in h's
 term already). W_n is measured at genesis by the fixture reference (`selftest_fixture_worlds.py`,
-the full reading's named women aged 15-49, per house: twin_vales 5, 5 and 4 over five houses at
-seeds 1-3, kingdom_10k 8 over twelve houses at seed 1; ``--derive-caps`` recomputes them) and
+the full reading's named women aged 15-49, per house: twin_vales 4, 2 and 3 over five houses at
+seeds 1-3, kingdom_10k 11 over twelve houses at seed 1; ``--derive-caps`` recomputes them) and
 pinned below with a doubled sensitivity, since a mid-reign holder is younger than the genesis
 holders and has more daughters of that age. The population is proportional to W_e + W_c (a
 constant sex ratio; the W's count persons). The capped case (`kingdom_10k` with
@@ -57,6 +58,12 @@ case's NRR scaling is the proportional-hazards approximation at one age; W_n is 
 cross-section held constant. The model says what the mechanics imply to within tens of per cent,
 not a golden; the engine's run reports the truth.
 
+The baseline reading is the configuration the director adopted in D56 (2026-10-17): the T1
+regime, agnatic membership, vocations for later children (d) and the elite read on the couple
+(e). The golden renders it first, as ``baseline`` blocks and lines; every other configuration (the
+frozen readings under each rule and regime, each lever alone or combined, hypergamy) is rendered
+as an ``alternative``, and the reviewer's variants as ``sensitivity`` lines.
+
 Run: python -I specs/worldgen/project_population.py            (print the tables)
      python -I specs/worldgen/project_population.py --check    (compare with the golden file)
      python -I specs/worldgen/project_population.py --write    (regenerate the golden file)
@@ -74,7 +81,7 @@ import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import ModuleType
-from typing import Protocol
+from typing import Protocol, TypedDict
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -132,11 +139,12 @@ class World:
     mult: str  # elite_fertility_mult
     holy: float  # vocation_holy_orders
     capacity: int | None  # density_capacity, None for the default (never binds)
-    rule: str = "cognatic"  # the membership rule of M7's on_birth (RULES)
-    regime: str = "isolation"  # REGIMES
-    vocation: str = "all"  # VOCATION_READINGS
+    # the defaults are the baseline reading, D56's (BASELINE below)
+    rule: str = "agnatic"  # the membership rule of M7's on_birth (RULES)
+    regime: str = "t1"  # REGIMES
+    vocation: str = "later"  # VOCATION_READINGS
     elite_read: str = (
-        "woman"  # M2 F3/F4's elite read: the woman's row, or "couple" (either spouse's; lever e)
+        "couple"  # M2 F3/F4/F6's elite read: "couple" (either spouse's row; lever e, D56), "woman"
     )
     hypergamy: float = (
         0.0  # share of the named core marrying unnamed persons of the polity (lever f)
@@ -149,11 +157,39 @@ class World:
             f"elite_read {self.elite_read} hypergamy {self.hypergamy}"
         )
 
+    def reading(self) -> str:
+        """``baseline`` for D56's adopted configuration, else ``alternative``."""
+        same = all(getattr(self, key) == value for key, value in BASELINE.items())
+        return "baseline" if same else "alternative"
 
+
+class Reading(TypedDict, total=False):
+    """A configuration's fields of World, as keyword changes for ``replace``."""
+
+    regime: str
+    rule: str
+    vocation: str
+    elite_read: str
+    hypergamy: float
+
+
+# the baseline reading: the configuration D56 adopted (the director, 2026-10-17), T1 registered,
+# agnatic membership, (d) vocations for later children, (e) the elite read on the couple
+BASELINE: Reading = {
+    "regime": "t1",
+    "rule": "agnatic",
+    "vocation": "later",
+    "elite_read": "couple",
+    "hypergamy": 0.0,
+}
+# the frozen texts' readings (every member draws holy orders, the elite read on the woman's row,
+# no hypergamy): the alternatives' blocks and the levers start from them
+FROZEN_READINGS: Reading = {"vocation": "all", "elite_read": "woman", "hypergamy": 0.0}
 # W_n: the fixture reference's named member women aged 15-49 at genesis (the full reading), per
-# house: twin_vales 5 / 5 houses at seed 1 (5 and 4 at seeds 2 and 3), kingdom_10k 8 / 12 at seed 1.
-TWIN_VALES = World("twin_vales", 1500, 56, 5, 1.0, 300, "1.2", 0.2, None)
-KINGDOM_10K = World("kingdom_10k", 10000, 117, 12, 8 / 12, 1000, "1.2", 0.2, None)
+# house: twin_vales 4 / 5 houses at seed 1 (2 and 3 at seeds 2 and 3), kingdom_10k 11 / 12 at
+# seed 1; members: the living house members at genesis, seed 1 (golden/fixture_worlds_v0.txt)
+TWIN_VALES = World("twin_vales", 1500, 53, 5, 4 / 5, 300, "1.2", 0.2, None)
+KINGDOM_10K = World("kingdom_10k", 10000, 185, 12, 11 / 12, 1000, "1.2", 0.2, None)
 WORLDS = (TWIN_VALES, KINGDOM_10K, replace(KINGDOM_10K, capacity=10000))
 # the reviewer's variants, uncapped, under the cognatic rule in isolation
 SENSITIVITY = (("1.0", 0.2), ("1.2", 0.0), ("1.0", 0.0))
@@ -163,7 +199,7 @@ HYPERGAMY = 0.5  # lever f: half of the named core's marriages reach outside it
 # the levers compared under the T1 regime for the agnatic and the bounded rule (R1): (d)
 # later-children vocations, (e) the elite read on the couple, (f) hypergamy, (g) their
 # combinations
-LEVERS = (
+LEVERS: tuple[tuple[str, Reading], ...] = (
     ("d", {"vocation": "later"}),
     ("e", {"elite_read": "couple"}),
     ("f", {"hypergamy": HYPERGAMY}),
@@ -481,8 +517,8 @@ def render_world(w: World, r: Rates) -> list[str]:
     points = project(w, r)
     cap = "default" if w.capacity is None else str(w.capacity)
     lines = [
-        f"world {w.id} capacity {cap} horizon {w.horizon} mult {w.mult} holy {w.holy} "
-        f"houses {w.houses} named_women_per_house {w.named_women:.2f} {w.label()}"
+        f"{w.reading()} world {w.id} capacity {cap} horizon {w.horizon} mult {w.mult} "
+        f"holy {w.holy} houses {w.houses} named_women_per_house {w.named_women:.2f} {w.label()}"
     ]
     for year in CHECKPOINTS:
         if year <= w.horizon:
@@ -509,27 +545,39 @@ def render_world(w: World, r: Rates) -> list[str]:
 
 
 def lever_lines(base: Rates) -> list[str]:
-    """The levers (R1): one line each for the agnatic and the bounded rule, under both regimes."""
+    """The levers (R1): one line each for the agnatic and the bounded rule, under both regimes.
+
+    Each lever is counted from the frozen readings; the line whose configuration is D56's is
+    labelled ``baseline`` (the T1 regime, the agnatic rule, d+e), every other ``alternative``.
+    """
     out = []
     for regime in REGIMES:
         for rule in ("agnatic", "bounded"):
             for name, levers in LEVERS:
                 if regime == "isolation" and "hypergamy" in levers:
                     continue  # nobody is named in isolation: the lever has no subject
+                reading: Reading = {**FROZEN_READINGS, **levers, "rule": rule, "regime": regime}
                 for w in WORLDS:
-                    world = replace(w, rule=rule, regime=regime, **levers)
-                    out.append(f"lever {name} " + summary(world, base))
+                    world = replace(w, **reading)
+                    out.append(f"{world.reading()} lever {name} " + summary(world, base))
     # the cognatic rule under lever d (R4: the knife edge does not survive the later-children
     # reading)
     for regime in REGIMES:
+        cognatic: Reading = {
+            **FROZEN_READINGS,
+            "vocation": "later",
+            "rule": "cognatic",
+            "regime": regime,
+        }
         for w in WORLDS:
-            world = replace(w, rule="cognatic", regime=regime, vocation="later")
-            out.append("lever d " + summary(world, base))
+            world = replace(w, **cognatic)
+            out.append(f"{world.reading()} lever d " + summary(world, base))
     # the literal reading (the eldest by birth tick, dead included) as a sensitivity (N2): the
     # agnatic rule under T1 with (d) and with (d)+(e)
     for read in ("woman", "couple"):
+        literal: Reading = {**BASELINE, "vocation": "literal", "elite_read": read}
         for w in WORLDS:
-            world = replace(w, rule="agnatic", regime="t1", vocation="literal", elite_read=read)
+            world = replace(w, **literal)
             out.append("sensitivity literal-reading " + summary(world, base))
     return out
 
@@ -537,9 +585,10 @@ def lever_lines(base: Rates) -> list[str]:
 def sensitivity_lines(base: Rates) -> list[str]:
     """The reviewer's cognatic variants in isolation, and the bounded rule with W_n doubled."""
     out = []
+    cognatic: Reading = {**FROZEN_READINGS, "rule": "cognatic", "regime": "isolation"}
     for mult, holy in SENSITIVITY:
         r = rates(mult)
-        w = replace(KINGDOM_10K, mult=mult, holy=holy)
+        w = replace(KINGDOM_10K, mult=mult, holy=holy, **cognatic)
         p = project(w, r)
         final = at(p, w.horizon)
         peak = max([*(q for q in p if q.year <= w.horizon), final], key=lambda q: q.n)
@@ -549,9 +598,10 @@ def sensitivity_lines(base: Rates) -> list[str]:
             f"peak {peak.n:.0f} at year {peak.year:.0f}"
         )
     for regime in REGIMES:
+        bounded: Reading = {**FROZEN_READINGS, "rule": "bounded", "regime": regime}
         for base_world in (TWIN_VALES, KINGDOM_10K):
             w_n = base_world.named_women * CAP_SENSITIVITY
-            w = replace(base_world, rule="bounded", regime=regime, named_women=w_n)
+            w = replace(base_world, named_women=w_n, **bounded)
             final = at(project(w, base), w.horizon)
             out.append(
                 f"sensitivity regime {regime} rule bounded named_women_per_house "
@@ -567,9 +617,11 @@ def render() -> str:
     lines = [
         "# population projection of the SPR-030 fixture worlds (REV-SPR-030 R1) under the three",
         "# membership rules of BCK-002 A-56, in M7's isolation regime and the T1-registered",
-        "# regime, with the levers of PR #79's review R1 (specs/systems/next/M7_membership.md):",
+        "# regime, with the levers of PR #79's review R1 (specs/systems/next/M7_membership.md).",
+        "# baseline: D56's adopted reading (T1, agnatic, (d) later children, (e) the elite read",
+        "# on the couple); alternative: every other configuration; sensitivity: the variants.",
         "# GENERATED by python -I specs/worldgen/project_population.py --write; do not edit.",
-        "constants population-projection-v2",
+        "constants population-projection-v3",
         f"rates mult 1.2 nrr_c {base.nrr_c:.4f} nrr_e {base.nrr_e:.4f} "
         f"r_c {100 * math.log(base.nrr_c) / base.t_years:+.3f}%/yr "
         f"generation_years {base.t_years:.2f} l_T {base.l_t:.4f}",
@@ -579,11 +631,15 @@ def render() -> str:
         f"member {base.v_later_e:.4f} holy_literal commoner {base.v_literal_c:.4f} "
         f"member {base.v_literal_e:.4f}",
     ]
-    # the blocks: every regime and rule on every world, at the frozen readings (all, woman, 0)
+    # the baseline blocks: D56's reading on every world
+    for w in WORLDS:
+        lines += render_world(replace(w, **BASELINE), base)
+    # the alternatives' blocks: every regime and rule on every world, at the frozen readings
     for regime in REGIMES:
         for rule in RULES:
+            frozen: Reading = {**FROZEN_READINGS, "rule": rule, "regime": regime}
             for w in WORLDS:
-                lines += render_world(replace(w, rule=rule, regime=regime), base)
+                lines += render_world(replace(w, **frozen), base)
     lines += lever_lines(base)
     lines += sensitivity_lines(base)
     return "\n".join(lines) + "\n"
@@ -636,7 +692,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"STALE: {GOLDEN} differs from the projection")
             print("POPULATION PROJECTION: FAIL")
             return 1
-        cases = len(WORLDS) * len(RULES) * len(REGIMES)
+        cases = len(WORLDS) * (1 + len(RULES) * len(REGIMES))
         print(f"POPULATION PROJECTION: PASS ({cases} cases, {text.count(chr(10))} lines)")
         return 0
     print(text, end="")
