@@ -50,6 +50,9 @@ rh-snapshot = { version = "0.0.0", path = "../rh-snapshot" }
 # SPR-009 T-05: the smoke world (its systems, and its spec table through rh-golden's host code).
 rh-golden = { version = "0.0.0", path = "../rh-golden" }
 rh-sys-smoke = { version = "0.0.0", path = "../rh-sys-smoke" }
+# SPR-038 T-01: the instant bench's stub owns M2's columns and runs M2's invariants.
+rh-events = { version = "0.0.0", path = "../rh-events" }
+rh-sys-demography = { version = "0.0.0", path = "../rh-sys-demography" }
 
 # SPR-009 ruling 2: exactly pinned, a dev-dependency of the bench targets only. Its runner binary,
 # iai-callgrind-runner, must be the same version (RUN-001 §3; .github/workflows/ci.yml).
@@ -89,6 +92,20 @@ required-features = ["arena-alloc"]
 # benches 7 and 8 (bin/perf_gate.py, BENCH_TARGETS).
 [[bench]]
 name = "draws"
+harness = false
+required-features = ["arena-alloc"]
+
+# The per-instant engine cost (SPR-038 T-01, BCK-002 A-60): a quiet instant, a death, an insert and
+# a held year on a stub that owns M2's columns, at N living persons and L life-course rows.
+[[bench]]
+name = "instant"
+harness = false
+required-features = ["arena-alloc"]
+
+# The per-instant cost's measured, ungated figures (SPR-038 T-01, T-04): the N x L sweep, M2's
+# invariants per call, the month-end digest per stop and solo over 20 years. Not in BENCH_TARGETS.
+[[bench]]
+name = "instant_sweep"
 harness = false
 required-features = ["arena-alloc"]
 
