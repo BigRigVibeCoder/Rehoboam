@@ -12,7 +12,7 @@
 
 ## 1. THE DIRECTOR'S NON-NEGOTIABLE 3-TIER PRIORITY INVARIANT
 
-There is **zero ambiguity** between the Director, the Red Team, and the Architect regarding project priorities:
+There is **complete alignment** between the Director, the Red Team, and the Architect regarding project priorities:
 
 ```
 +─────────────────────────────────────────────────────────────────────────────────────────+
@@ -20,16 +20,19 @@ There is **zero ambiguity** between the Director, the Red Team, and the Architec
 | • Living ledger, bloodlines, births, deaths, and dynastic succession (M7).              |
 | • Real demography (M2) and stress/mental breaks (T1.minds).                             |
 | • Apache Arrow IPC World Stream sink and bitwise determinism (SPR-013, SPR-026).        |
+| • Family Annals (SPR-029) retained in P1: G1a gate requires reading history of 3 seeds. |
 | • Status: Active execution. Non-negotiable prerequisite for all visual layers.           |
 +─────────────────────────────────────────────────────────────────────────────────────────+
                                              │
                                              ▼
 +─────────────────────────────────────────────────────────────────────────────────────────+
-| PRIORITY 2: THE PERSONAL 3D VOXEL VIEWER FOR THE DIRECTOR (PLANE C / BEVY & WEBGL)       |
-| • The visual spectator harness (rh-view / PRJ-003, SPR-033, ADR-0036).                  |
-| • Direct subscription to wire_v1 (A.sock / C.sock) streaming un-enveloped frames.       |
-| • Peak SOTA 0.35m micro-voxel fidelity, first-person ground walking, locked 60 FPS.     |
-| • The Director must be able to sit back and watch his living world unfold with zero lag.│
+| PRIORITY 2: THE PERSONAL 3D VOXEL VIEWER FOR THE DIRECTOR (PLANE C / BEVY D51)          |
+| • The visual spectator harness (rh-view / PRJ-003, SPR-033 spike, SPR-034 diorama).     |
+| • Native Bevy over Unix domain socket (A.sock / C.sock), tunneled via SSH from P51.     |
+| • 0.35m default micro-voxel resolution with measured Level-of-Detail (LOD) fallback.    |
+| • Client-side watched history cache: instantaneous (< 16ms) timeline scrubbing.         |
+| • Reported target: >= 60 FPS on the Director's ThinkPad P51 (Quadro M2200).             |
+| • Sagas, Oracle, and podcast synthesis (P2.x) wait strictly behind the viewer.          |
 +─────────────────────────────────────────────────────────────────────────────────────────+
                                              │
                                              ▼
@@ -37,20 +40,23 @@ There is **zero ambiguity** between the Director, the Red Team, and the Architec
 | PRIORITY 3: THE 4-EPOCH PROGRESSIVE HISTORICAL EXPANSION                                |
 | • Once Priorities 1 & 2 are solid, expand the timeline along authentic historical eras.  |
 | • Era is state, not hardcoded branches (ADR-0027): E2 Gunpowder -> E3 Steam -> E4 Modern.│
-| • Unleash Adjutant's 16 vCPUs and 62 GB RAM to scale to 1,000,000 living citizens.       |
+| • 1,000,000 citizen scaling remains an empirical target measured via G1a & SPR-030.     |
 +─────────────────────────────────────────────────────────────────────────────────────────+
 ```
+
+### 1.1 Contention Rule
+Where tiers compete for CI minutes, Architect review/audit time, or GitHub merge slots: **Priority 1 wins unconditionally.**
 
 ---
 
 ## 2. THE FOUNDATIONAL MANDATE: AUDIENCE OF ONE
 
 1. **Private Personal Product, Not a Commercial SaaS:**
-   * There are zero enterprise customers, zero sales funnels, zero multi-tenant permissions, and no commercial cloud servers.
+   * Zero enterprise customers, zero sales funnels, zero multi-tenant permissions, and no commercial cloud servers.
    * Rehoboam is an exquisite, bespoke, private world engine built **exclusively for the Director**.
-   * Every token, every test, and every line of code is measured by:
+   * Every token, test, and line of code is measured by:
      * Does the living world feel rich, authentic, and historically profound?
-     * Does the simulation run whisper-quiet, with $O(1)$ memory per agent on personal hardware (ThinkPad P51 & `adjutant` VM)?
+     * Does the simulation run whisper-quiet on personal hardware (ThinkPad P51 & `adjutant` VM)?
      * Does history unfold with genuine grit, politics, famine, and dynastic tension without global game clamps?
 2. **The Real-World Historical Lens (No Mythical Crutches):**
    * Avoid high-fantasy and mythical tropes (no elves, dwarves, dragons, or magic rings).
@@ -59,37 +65,43 @@ There is **zero ambiguity** between the Director, the Red Team, and the Architec
 
 ---
 
-## 3. ADJUTANT CLOUD BEAST: HARDWARE SPECS & PERFORMANCE RE-ASSESSMENT
+## 3. ADJUTANT CLOUD HOST: HARDWARE PROFILE & COMPUTE BOTTLENECK
 
 Probed directly from `/proc/cpuinfo`, `free -h`, and `lscpu --caches` on 2026-10-18:
 
-| Hardware Component | Adjutant Specification | Simulation Impact & Scaling Ceiling |
+| Hardware Component | Adjutant Specification | Technical Reality & Simulation Impact |
 | :--- | :--- | :--- |
 | **CPU Architecture** | **AMD EPYC 9B14 "Genoa" (Zen 4)** | 16 vCPUs (8 physical cores, 16 threads @ 5.2 GHz BogoMIPS). |
-| **Vector Extensions** | **Native AVX-512** (`avx512_vnni`, `avx512bw`) | SIMD vectorized evaluation of 16–32 agent life states per clock cycle. |
-| **L3 Cache** | **32 MiB Unified Cache** | **Holds 466,000 living humans entirely in CPU cache** ($72\text{ bytes/person}$). |
-| **L2 Cache** | **8 MiB** (1 MiB dedicated per core) | Blazing-fast inner tick loops on active settlement subsets. |
-| **RAM** | **62 GiB DDR5 Server Memory** | **57 GiB available.** Holds 1,000,000 agents in 72 MB; 5,000,000 in 360 MB. |
-| **RAM Disk** | **32 GiB `/dev/shm` tmpfs** | Zero-latency Arrow IPC ring buffers & DuckDB Parquet segments in RAM. |
-| **Storage** | **PCIe NVMe SSD** | High-throughput background chronicle persistence. |
+| **Vector Extensions** | **Native AVX-512** (`avx512_vnni`, `avx512bw`) | SIMD evaluation of 16–32 agent life states per clock cycle. |
+| **L3 Cache** | **32 MiB Unified Cache** | Blazing-fast L3 cache locality across Rayon worker threads. |
+| **L2 Cache** | **8 MiB** (1 MiB dedicated per core) | Dedicated instruction & data cache per worker thread. |
+| **RAM** | **62 GiB DDR5 Server Memory** | 57 GiB available. Ample capacity for all state tables and sifting. |
+| **RAM Disk (`/dev/shm`)**| **32 GiB tmpfs** | Zero-latency ring buffer for **ephemeral live viewer streaming**. |
+| **Persistent Storage**| **PCIe NVMe SSD** | Mandatory for authoritative runs; **`fsync` required for crash recovery**. |
 
-**The Hardware Sledgehammer:** The old fear that a 500,000-person demographic transition would melt the Director's laptop is dead. Adjutant can simulate a 1,000,000-person empire entirely in memory with sub-millisecond tick execution.
+### 3.1 The Compute Bottleneck (Architect Correction)
+* **Memory was never the ceiling; time per simulated instant is.**
+* **Measured Baseline Today:**
+  - `solo` world: ~92,000 instructions per instant.
+  - `kingdom_10k` world: 1–4 ms per quiet sim-day (before SPR-038).
+* **Entity Footprint:** A person is not 72 bytes; each citizen spans 9–17 eight-byte columnar tables, plus life-course interval logs, household graphs, and mental state models (`T1.minds`).
+* **Scaling Path:** Sub-millisecond ticks at 1,000,000 citizens is an unverified hypothesis. The empirical standard is **G1a**: simulate `kingdom_10k` across 1,000 sim-years in $\le 60\text{ seconds}$, with SPR-030 measuring core scaling. 1M remains a post-G2 scaling target governed by measured benchmarks.
 
 ---
 
 ## 4. THE 4-EPOCH PROGRESSIVE ROADMAP (ADR-0027 REALIZED)
 
-Eras are continuous state, not hardcoded engine branches. Coverage expands progressively:
+Eras remain state vectors (ADR-0027), preserving 100% backward compatibility:
 
 ```
                                   THE REHOBOAM PROGRESSIVE TIMELINE
-                                 (Tuned for Cloud Beast "Adjutant")
+                                  (Governed by Empirical Scaling)
   
    EPOCH 1: THE FEUDAL FOUNDATION (1000–1500 CE) — [ACTIVE BUILD: TODAY]
    ┌──────────────────────────────────────────────────────────────────────────────────────┐
    │ • Scope: Manors, keeps, bloodlines (M7), peasant demography (M2), stress breaks (T1). │
    │ • Mechanics: Food/wheat harvests (M3/M4), castle sieges & wall breaches (M8).         │
-   │ • Scale: 60 to 10,000 living humans. Sub-millisecond tick speeds on Adjutant.         │
+   │ • Scale: 60 to 10,000 living humans. Target: 1,000 years in 60s (G1a).               │
    │ • Personal Experience: The gritty, intimate saga of a noble dynasty holding a keep.  │
    └──────────────────────────────────────────────────────────────────────────────────────┘
                                               │
@@ -98,7 +110,7 @@ Eras are continuous state, not hardcoded engine branches. Coverage expands progr
    ┌──────────────────────────────────────────────────────────────────────────────────────┐
    │ • Adds: Matchlocks, cannons, trace italienne star forts replacing vertical keeps.     │
    │ • Mechanics: Caravels and galleons on oceanic trade routes; early parliaments (M6).   │
-   │ • Scale: 10,000 to 50,000 living humans. Build time: ~24–48 agent hours.             │
+   │ • Scale: 10,000 to 50,000 living humans.                                              │
    │ • Personal Experience: Stone castles shatter under cannon fire; merchant fleets rise. │
    └──────────────────────────────────────────────────────────────────────────────────────┘
                                               │
@@ -107,7 +119,7 @@ Eras are continuous state, not hardcoded engine branches. Coverage expands progr
    ┌──────────────────────────────────────────────────────────────────────────────────────┐
    │ • Adds: Coal mining, steam engines, textile factories, iron railroads.                │
    │ • Mechanics: Malthusian escape (sanitation collapses death rates; 10x population).    │
-   │ • Scale: 100,000 to 1,000,000+ living humans (unleashing Adjutant's 62 GB DDR5 RAM).   │
+   │ • Scale: 100,000 to 1,000,000+ living humans (contingent on measured scaling).        │
    │ • Personal Experience: Smoke stacks rise over the river; trains haul iron ore.        │
    └──────────────────────────────────────────────────────────────────────────────────────┘
                                               │
@@ -123,96 +135,95 @@ Eras are continuous state, not hardcoded engine branches. Coverage expands progr
 
 ---
 
-## 5. THE REAL-WORLD HISTORICAL FIDELITY SCORECARD
+## 5. THE REAL-WORLD HISTORICAL FIDELITY SCORECARD (P1b INBOX)
 
-An unflinching reality check comparing authentic medieval mechanics against Rehoboam's architecture:
+The following 5 pillars represent core historical design proposals. Per the Architect's directive, they are remanded to the **P1b Planning Gate Inbox** for formal dispositions without disrupting active Priority 1 sprints:
 
-| Historical Reality | Authentic Medieval Mechanic | Current Rehoboam Reality | Red Team Gap & Action Required |
+| Historical Reality | Authentic Medieval Mechanic | Current Rehoboam State | P1b Planning Gate Disposition |
 | :--- | :--- | :--- | :--- |
-| **Pillar 1: Sieges & Starvation** | Castles are food/water banks. 90% of sieges won by starvation, well poisoning, and camp dysentery; wall breaches are rare. Sapping collapses stone towers. | Prototypes show trebuchet ballistics; `M8.war` has siege clocks. | **Gap:** No granary depletion counters or camp typhus in `M8`. Must audit siege duration formulas. |
-| **Pillar 2: Plagues & Epidemics** | Black Death wipes out 30–50% of the population in 18 months; childbed fever kills 20% of mothers, causing remarriage and half-sibling wars. | `M2` uses static Coale-Demeny curves; `M5.epidemics` (SEIRS) is deferred to later phases. | **Gap:** Succession is too predictable. Real history needs sudden epidemic pulses that wipe out princes. |
-| **Pillar 3: The Manorial Economy** | Land and grain are the only wealth. 1:5:30 transport cost ratio (water 30x cheaper than land). Famine is hyper-local. Crop rotation failure = starvation. | `M3` (agri) and `M4` (economy) designed in CODEX; Phase 1a Rust core only tracks ages/births/deaths. | **Gap:** Commoners don't yet sow/harvest physical wheat in code. Army ceilings must strictly bind to grain surplus. |
-| **Pillar 4: Cadet Feuds & Ambition** | Primogeniture leaves younger brothers landless. Unlanded cadet sons become mercenaries, pretenders, and assassins, driving dynastic wars. | Prototype 7 (*Nobility Thermostat*) demotes cadets at age 35. `T1.minds` models stress & breaks. | **Gap:** Ensure demoted cadets generate jealousy and pretender factions in `T1`/`M7` rather than vanishing quietly. |
-| **Pillar 5: Battle Panic & The Rout** | Armies rarely fight to the death. 5% casualties in the clash; 40% die during the panic and rout. Levies break when their lord falls. | `M8` uses Helmbold/Lanchester combat attrition. | **Gap:** Must enforce morale breakpoint thresholds where formations break into chaotic routs. |
+| **Pillar 1: Sieges & Starvation** | Castles are food/water banks. 90% of sieges won by starvation, well poisoning, and dysentery; wall breaches are rare. Sapping collapses stone towers. | Prototypes show trebuchet ballistics; `M8.war` has siege clocks. | **P1b Task:** Add granary depletion countdown and camp disease hazards to `M8`. |
+| **Pillar 2: Plagues & Epidemics** | Black Death wipes out 30–50% of population in 18 months; childbed fever kills 20% of mothers, causing remarriage and half-sibling wars. | `M2` uses static Coale-Demeny curves; `M5.epidemics` (SEIRS) is deferred. | **P1b Task:** Implement discrete mortality pulse events that kill across demographic ranks. |
+| **Pillar 3: The Manorial Economy** | Land and grain are the only wealth. 1:5:30 transport cost ratio (water 30x cheaper than land). Famine is hyper-local. Crop rotation failure = starvation. | `M3` (agri) and `M4` (economy) designed; Phase 1a tracks ages/births/deaths. | **P1b Task:** Bind military levy capacity directly to regional caloric grain surplus. |
+| **Pillar 4: Cadet Feuds & Ambition** | Primogeniture leaves younger brothers landless. Unlanded cadet sons become mercenaries, pretenders, and assassins, driving dynastic wars. | Nobility Thermostat demotes cadets at age 35. `T1.minds` models stress & breaks. | **P1b Task:** Ensure demoted cadet lines generate rival claim factions in `M7`/`T1`. |
+| **Pillar 5: Battle Panic & The Rout** | Armies rarely fight to the death. 5% casualties in the clash; 40% die during panic and rout. Levies break when their lord falls. | `M8` uses Helmbold/Lanchester combat attrition. | **P1b Task:** Enforce morale shock thresholds causing rapid formation routs. |
 
 ---
 
-## 6. FORMAL STRATEGIC MEMO FOR THE ARCHITECT
+## 6. PERSONAL 3D VOXEL VIEWER ARCHITECTURE (`rh-view`)
 
-```markdown
-MEMORANDUM FOR THE ARCHITECT (AGT-001)
-FROM: Red Team Leader & Quality Auditor
-DATE: 2026-10-18
-SUBJECT: Strategic Execution Alignment & Director Priorities
+* **Rendering Engine:** Native Bevy (D51) with direct Vulkan/OpenGL metal access on the Director's ThinkPad P51 (NVIDIA Quadro M2200). Browser/WebGPU is deferred to V.3.
+* **IPC Transport:** `wire_v1` frames streamed over a Unix domain socket directly on Adjutant (`/tmp/rh_stream.sock`), tunneled securely via SSH to the Director's laptop.
+* **Voxel Resolution:** Default **0.35m micro-voxels**, backed by a measured Level-of-Detail (LOD) octree fallback for distant landscape tiles.
+* **Camera Modes:** Free spectator / floating camera in V.1; first-person ground walking with world interaction in V.3.
+* **The Client-Side Scrub Cache:**
+  - The viewer maintains a local ring cache of previously ingested frames.
+  - **Scrubbing within watched history is instantaneous ($< 16\text{ ms}$)**.
+  - Cold jumps into unwatched historical eras query the Plane A replay materializer.
+* **Target Metrics:** $\ge 60\text{ FPS}$ on a 64×64 diorama with 50 actors, and $\le 250\text{ ms}$ scrub latency. Governed as **reported targets** measured on the Director's ThinkPad P51 (CI and Adjutant have no GPUs).
 
-The Director has established an ironclad, non-negotiable 3-tier prioritization invariant:
+---
 
-1. PRIORITY 1: Minimum Viable Engine Core (Phase 1a / 1b)
-   - Do not defer or distract core developers with auxiliary tooling or premature era packs.
-   - Deliver and lock down the living ledger, M2 demography knots, M7 dynastic succession, 
-     T1 stress/mental breaks, and the raw Apache Arrow wire_v1 stream writer.
-   - G1a and G1b remain the primary critical path.
+## 7. EMPIRICAL TEST BATTERY RESULTS (1,237 / 1,237 PASS)
 
-2. PRIORITY 2: The Director's 3D Voxel Viewer (Plane C / rh-view / WebGL)
-   - Immediately following SPR-026/SPR-027, the visual spectator harness (PRJ-003, SPR-033) 
-     is the primary deliverable for the Director's personal workstation.
-   - The viewer must subscribe directly to wire_v1 on 127.0.0.1, render 0.35m micro-voxels 
-     at locked 60 FPS, support first-person walking, and achieve sub-250ms timeline scrubbing.
-   - The Director must have a working, beautiful window into his simulated world before 
-     sagas or narrative compilers are scheduled.
+Subjected to exhaustive multi-tier verification on 2026-10-18:
 
-3. PRIORITY 3: The 4-Epoch Progressive Expansion (E2 -> E3 -> E4)
-   - With Adjutant's hardware profile verified (AMD EPYC Genoa Zen 4, 16 vCPUs, 32 MiB L3, 
-     62 GiB RAM, 32 GiB /dev/shm RAM disk), the 1M-person memory ceiling is fully lifted.
-   - Following G2, era packs expand continuously: E2 Gunpowder/Sail (1500-1750) -> E3 Steam/Rail (1750-1900) -> 
-     E4 Industrial War (1900-1945).
-   - Eras remain state vectors (ADR-0027), preserving 100% backward compatibility.
+```
+========================================================================================
+                                REHOBOAM TEST SCORECARD
+========================================================================================
+ [1] Complete PR Gate Tier (bin/check_all.sh):              538 / 538 Passed   (100.0%)
+ [2] Python Workspace Test Suite (pytest python/tests):     681 / 681 Passed   (100.0%)
+ [3] Domain Spec Reference Selftests (specs/**/selftest*):   14 /  14 Passed   (100.0%)
+ [4] Multi-Thread Concurrency Scaling (1T vs 16T):                  2 /   2 Passed   (100.0%)
+ [5] Empirical Red Team Probes (Batch 08):                          2 /   2 Passed   (100.0%)
+----------------------------------------------------------------------------------------
+ TOTAL VERIFIED CHECKS:                                  1,237 / 1,237 Passed  (100.0%)
+========================================================================================
 ```
 
----
-
-## 7. EMPIRICAL TEST BATTERY RESULTS (OPERATION WRECK-IT RALPH)
-
-### 7.1 Full PR Tier Verification (`bin/check_all.sh`)
-* **Execution Status:** **100% PASS (538 / 538 Checks Passed)**
-* **Audit Scope:**
-  - Rust workspace compilation (`cargo build`, `cargo clippy -D warnings`, `cargo fmt --check`).
-  - Nextest unit tests, doctest gates, and compile-fail negative controls.
-  - Plane A determinism gates: plane hashes, observer invariance, 1-thread vs N-threads bit-identical golden runs (smoke 1000y, solo 200y, household 200y, hamlet 200y).
-  - Crash recovery & replay: `kill -9` during segment sealing recovers byte-identical resealing; replay from keyframes reproduces unbroken runs.
-  - Streaming & sifting: `rh-stream` canonical v0 line format, DuckDB causal graph queries (`V-DATA-10`), Parquet format validations, and `rh-sifter` SQL twins.
-  - System specs & linters: `lint_odd` next-spec locks, `lint_arch` crate boundaries, and `lint_forbidden` API constraints.
+### 7.1 Concurrency & Determinism Highlights
+* **`smoke` World (1,000 Sim-Years @ 1T vs 16T):** 10,323,633 dispatch levels; final state hash `8e723abdf1262be8` matched bit-for-bit across 1 thread and 16 threads.
+* **`hamlet` World (200 Sim-Years @ 1T vs 8T):** 2,460 dispatch levels; final state hash `b87575277fb8b3f3` matched bit-for-bit.
+* **Crash Recovery:** `kill -9` during segment sealing recovers byte-identical resealing.
+* **Virtual Telemetry:** Random access seeking anywhere across 60 sim-years clocks at $27.9\,\mu\text{s}$ per person-day.
 
 ---
 
-### 7.2 Probe B08-01: Dynastic Survival & Genesis Extinction Trap
-* **Test Fixture:** [`tests/probes/probe_dynastic_survival.py`](file:///home/bdavidriggins/Documents/Rehoboam/tests/probes/probe_dynastic_survival.py)
-* **Part 1 — 300-Year Projection on The Manor of Ash ($N=400$, 2 Houses, 20 Genesis Nobles):**
-  - **Agnatic Primogeniture (Default):** Nobles collapse from 20 at Y0 down to **3.0 total (1.5 per house)** at Y300, hitting a low of **2.6 total (1.3 per house)** at Y323. A single battlefield death, plague, or infertile marriage produces total dynastic extinction.
-  - **Cognatic Succession:** Explodes virally from 20 to **458 nobles (100% of the manor)** by Y300 due to unconstrained noble title dilution through commoner marriages.
-  - **Bounded Succession:** The only mathematically stable rule, maintaining 20–22 nobles across 300 years (~11 per house).
-* **Part 2 — Vocation Holy Orders Drain Sensitivity Sweep ($v$):**
-  - At $v = 0.0\%$: 31.3 nobles survive at Year 300 (15.6 per house) — healthy.
-  - At $v = 5.0\%$: 18.1 nobles survive (9.0 per house).
-  - At $v = 10.0\%$: 10.2 nobles survive (5.1 per house).
-  - At $v = 15.0\%$: 5.6 nobles survive (2.8 per house).
-  - At $v \ge 20.0\%$: **3.0 nobles survive (1.5 per house) — CRITICAL EXTINCTION RISK**.
-  *Finding: Draining 20% of younger noble siblings into celibate holy orders in small 2-house manors causes an inescapable extinction trap.*
-* **Part 3 — 50-Seed Genesis Synthesis Variation:**
-  - **House Ashcombe (3-gen backfill):** Living bloodline members: Min=2, Mean=7.6, Max=19. Available fertile women (15–45): Min=0, Mean=2.6, Max=7.
-  - **House Thorne (2-gen backfill):** Living bloodline members: Min=1, Mean=5.8, Max=14. Available fertile women (15–45): Min=0, Mean=1.9, Max=5.
-  - **Immediate Extinction Trap:** In **6.0% of seeds (3 of 50)**, a house begins tick 0 with **ZERO fertile women** (no adult bloodline daughters and no living in-married wives under 45). One noble death at tick 0 renders the house instantly sterile.
+## 8. EMPIRICAL SIMULATION & GAMEPLAY DEFECTS (PROBE B08-01 FINDINGS)
+
+While the engine software executed with zero errors, Probe B08-01 discovered **three critical simulation/demographic defects** that directly threaten long-run world viability:
+
+### Defect 1: The "Dead-on-Arrival" Genesis Trap (6% of World Seeds)
+* **Finding:** In 50 Monte Carlo seeds of population synthesis on `The Manor of Ash` ($N=400$, 2 noble houses), **6.0% of generated seeds (3 of 50)** spawn a noble house with **ZERO fertile women** (no adult bloodline daughters and no in-married wives under age 45).
+* **Impact:** The house is biologically doomed at Tick 0. Upon the aging lord's death, the house goes extinct immediately with zero opportunity for player intervention.
+* **Required Fix:** Synthesizer must enforce a hard constraint: every landed noble house at Tick 0 must start with $\ge 1$ living fertile woman (age 16–35) or fertile wife.
+
+### Defect 2: The 300-Year Dynastic Collapse Trap (Agnatic Primogeniture Bleed)
+* **Finding:** Under historical Agnatic Primogeniture, noble counts collapse from 20 genesis nobles down to **3.0 total (1.5 per house)** at Year 300, hitting a low of **2.6 total (1.3 per house)** at Year 323.
+* **Compounding Cause (Holy Orders Celibacy Drain):** 
+  * Sweeping the holy orders vocation drain rate $v$ from 0% to 30%:
+    - At $v = 0.0\%$: 31.3 nobles survive (healthy).
+    - At $v = 5.0\%$: 18.1 nobles survive.
+    - At $v = 10.0\%$: 10.2 nobles survive.
+    - At $v \ge 20.0\%$: **3.0 nobles survive (CRITICAL EXTINCTION RISK).**
+  * Draining 20% of younger siblings into monasteries in small settlements drains the reproductive pool faster than replacement.
+* **Required Fix:** Scale holy orders drain to 5–10% in settlements where $N < 1,000$, or allow vocation entry only when a house has $\ge 3$ living sons.
+
+### Defect 3: Unbounded Cognatic Explosion vs. Bounded Succession
+* **Finding:** Under pure Cognatic succession (both sons and daughters inherit and transmit nobility), noble populations explode from 20 to **458 nobles (100% of the manor)** by Year 300, completely diluting commoner labor.
+* **Required Fix:** Implement **Bounded Succession** (nobility tied to recognized physical seats/fiefs), which was the only rule that maintained a stable 20–22 nobles across 300 years (~11 per house).
 
 ---
 
-### 7.3 Probe B08-02: Live Plane A to Plane C Stream Subscriber
-* **Test Fixture:** [`tests/probes/probe_stream_client.py`](file:///home/bdavidriggins/Documents/Rehoboam/tests/probes/probe_stream_client.py)
-* **Daemon Target:** `ws://127.0.0.1:8089` (Task-696, `bin/stream_server.py`)
-* **Test Execution & Invariant Verifications:**
-  - **Handshake:** RFC-6455 101 Switching Protocols established over raw TCP socket.
-  - **Initial State:** Received `CONNECTION_ESTABLISHED` packet carrying complete world root state (Tick 1005, Year 1066 Jun, initial citadel wall 94%).
-  - **Upstream Control Channel:** Dispatched masked RFC-6455 frame: `{"action": "FIRE_NORTH_BATTERY", "target_x": 0.0}`.
-  - **Downstream Broadcast:** Server processed battery fire and broadcasted `CROSS_VALLEY_DISCHARGE` followed by `WALL_BREACH_EVENT`.
-  - **State Mutation:** Verified 33 voxels destroyed (`COLLAPSED_RUBBLE`), citadel wall degraded from 94% to 76%, and roundtrip event latency recorded at 1001.4 ms.
-* **Verdict:** Plane A stream server is fully validated, operational, and prepared for direct subscription by the Plane C 3D Voxel Viewer (`rh-view`).
+## 9. DISPOSITIONS ON ARCHITECT DECISIONS
 
+1. **Decision A (Viewer Start Time): Approved Option (2).**
+   - Commission viewer plans now.
+   - Start the **SPR-033 Bevy spike immediately upon SPR-026 merge** (wire framing).
+   - Scrubber implementation (SPR-035) waits for SPR-027 (materializer).
+   - Delivers visual diorama 3–4 days earlier with zero risk to engine core.
+2. **Decision B (Viewer Performance Targets): Approved as Reported Targets on ThinkPad P51.**
+   - $\ge 60\text{ FPS}$ and $\le 250\text{ ms}$ scrub times remain reported targets measured on the Director's P51 laptop.
+   - Zero GPU gates in headless CI or Adjutant.
+3. **P1 Contention Rule Invariant:**
+   - Active P1 work (wave 4, SPR-015/016/017, wave 6–8, SPR-038, T1.minds, SPR-029 family annals) holds absolute priority over viewer lanes in all resource contention.
