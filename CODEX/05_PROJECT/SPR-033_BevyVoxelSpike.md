@@ -9,7 +9,7 @@ tags: [sprint, observability, stream]
 related: [PRJ-003, ADR-0021, ADR-0024, ADR-0030, ADR-0031, ADR-0035, ADR-0036, SPR-018, SPR-026, SPR-027, SPR-034, SPR-035, D51, D53, D62]
 created: 2026-10-17
 updated: 2026-10-18
-version: 1.4.0
+version: 1.5.0
 ---
 
 > **BLUF:** the first sprint of the viewer lane (priority 2, D62), **in two stages in one plan, as SPR-038 has. Each stage is its own PR, Tester pass and audit.**
@@ -20,7 +20,7 @@ version: 1.4.0
 >   - **`hamlet`'s real terrain:** a written definition (`specs/viewer/terrain_v0.md`, the task's first commit), a Python reference run as a differential on a few hundred columns, an export from worldgen-lite's exact reference checked against the committed golden, and a voxelizer;
 >   - the `viewer-isolation` lint rule;
 >   - the viewer's CI job, on PR #89's scope framework.
-> - **Stage b, PR `SPR-033b`** (about 2.2–2.7 agent-days):
+> - **Stage b, PR `SPR-033b`** (about 2.3–2.7 agent-days):
 >   - **Bevy `=0.20.0` enters the viewer's lock at or after 2026-10-22 22:31Z** (two weeks after its release), with `viewer/rust-toolchain.toml` at rustc 1.97.1, which 0.20.0 requires; the engine's toolchain does not move;
 >   - the app: orbital, fly and first-person walking cameras;
 >   - **a level-of-detail controller that measures render work, not the presented interval;**
@@ -35,7 +35,7 @@ version: 1.4.0
 > - **Boundaries.** Tool plane, read-only. No engine crate depends on `viewer/`, the render and window stack never enters the engine's lock, `#![deny(unsafe_code)]` (V-R3D-14, V-VIEW-04). Procedural assets (D53).
 > - **Who.** Developer: AGT-002-TOOLS. Testers per stage: AGT-003-IF and AGT-003-DET, one session, on a different model from the Developer's. The Red Team audits.
 > - **Class.** C1 per stage (tool plane; no plane-A state, hash or golden moves).
-> - **Status:** PLANNING, **revision 1** (v1.4.0). It applies the Architect's rulings of round 1 on the independent review of `c51f07c` (0 BLK, 10 MAJ, 24 MIN, 6 NIT; this plan NEEDS REVISION): A1–A20 and B1. Task ids are kept from v1.3.0, so the review's references still hold: stage a is T-01a, T-02, T-03 and T-06; stage b is T-01b, T-04 and T-05. It needs the Architect's approval as a C1 plan (GOV-005 §2) and goes to the director in D63.
+> - **Status:** PLANNING, **revision 2** (v1.5.0). It applies the Architect's rulings of round 2 on the independent re-check of `2afe53a` (0 BLK, 3 MAJ, 10 MIN, 4 NIT in all; this plan AFTER SMALL FIXES): **V3** (the two-week rule is the viewer workspace's own), **V4 and V4b** (the CI tables count `ci.yml`, PR runs are cold, the fallback is a weekly schedule for the Bevy half), **V6** (one named allow in `rh-view-core`), **V7** (`rh-protocol` in `rh-view-core`), **V12** (the controller's back-off), **V14** (stage b's sum and T-01b's heading), **V16** (water in the reduction) and **V17** (the cache key, the cron, two toolchains). Revision 1 (v1.4.0) applied round 1's A1–A20 and B1 on the review of `c51f07c`. Task ids are kept from v1.3.0: stage a is T-01a, T-02, T-03 and T-06; stage b is T-01b, T-04 and T-05. It needs the Architect's approval as a C1 plan (GOV-005 §2) and goes to the director in D63.
 > - **Optional for the director now:** running Bevy's own 3D example from a throwaway checkout on the P51 retires risk 1 (Maxwell, driver 580) with no repository change.
 
 # SPR-033 — The voxel viewer: the Bevy-free core (a) and the Bevy app (b)
@@ -59,7 +59,7 @@ version: 1.4.0
   - `specs/worldgen/worldgen_lite.md`, `specs/systems/M1.regions.odd.toml` `[algorithm.worldgen_lite]`, `specs/systems/S3.migration.odd.toml` `[algorithm.residence_f0]`, `specs/worldgen/golden/worldgen_lite_v0.txt`;
   - **`specs/viewer/terrain_v0.md`** (new: the first commit of T-03);
   - `bin/ci_scope.py` and `bin/check_all.sh` as PR #89 left them, including the chain's merge rule (`check_all.sh` lines 14–17);
-  - GOV-003 (architecture lints); ADR-0021 as amended (licences: ledger only); D53; the two-week rule as ruled at A12.
+  - GOV-003 (architecture lints); ADR-0021 as amended (licences: ledger only); D53; the viewer workspace's two-week rule (A12, V3).
 - **Requirements covered:**
   - R3D-11, part: the separate process, the workspace, read-only, deterministic content;
   - R3D-2, part: terrain from a seed hierarchy, versioned;
@@ -86,7 +86,7 @@ version: 1.4.0
 
 | Spec | Exists? | Gap | Ruled (round 1) or proposed | Needed by |
 |---|---|---|---|---|
-| **The Bevy pin and the two-week rule** | The rule comes from repository practice (SPR-026's `arc-swap` pin; v1.2.0 T-01). PRJ-003 §3 names Bevy 0.20 but states no age rule | Checked against crates.io on 2026-10-18: `bevy` 0.20.0 was published 2026-10-08T22:31Z and declares `rust-version = 1.97.1`, as do `wesl` and `wgsl-parse`; 0.19.1 (2026-08-13) declares 1.95. The engine pins 1.97.0. A fresh resolve holds 88 packages under 14 days old (the review's count) | **Ruled (Bevy row; A12):**<ul><li>wait for `=0.20.0`, entering the lock at or after 2026-10-22 22:31Z;</li><li>`viewer/rust-toolchain.toml` at 1.97.1, in stage b only;</li><li>**the two-week rule applies to direct pins only:** a crate the viewer names in a `Cargo.toml` is at least 14 days old when it enters the lock;</li><li>transitive versions are what cargo resolves, recorded in a lock-age table.</li></ul>The Architect states the rule in PRJ-003 and GOV-003 | T-01a, T-01b |
+| **The Bevy pin and the two-week rule** | **The rule is the viewer workspace's own:** the red team's text in v1.2.0's T-01, as ruled at A12. It is not repository practice (V3): the engine's `twox-hash` 2.1.5, published 2026-10-04, entered the root lock on 2026-10-16 (`9c051fe`), 12 days later. PRJ-003 §3 names Bevy 0.20 | Checked against crates.io on 2026-10-18: `bevy` 0.20.0 was published 2026-10-08T22:31Z and declares `rust-version = 1.97.1`, as do `wesl` and `wgsl-parse`; 0.19.1 (2026-08-13) declares 1.95. The engine pins 1.97.0. A fresh resolve holds 88 packages under 14 days old (the review's count) | **Ruled (Bevy row; A12; V3):**<ul><li>wait for `=0.20.0`, entering the lock at or after 2026-10-22 22:31Z;</li><li>`viewer/rust-toolchain.toml` at 1.97.1, in stage b only;</li><li>**the two-week rule applies to the viewer's direct pins only:** a crate the viewer names in a `Cargo.toml` is at least 14 days old when it enters `viewer/Cargo.lock`, checked offline by `viewer/tools/lock_age.py`;</li><li>transitive versions are what cargo resolves, recorded in a lock-age table;</li><li>**the engine's lock is not covered,** and no GOV-003 line states the rule (V3).</li></ul>The Architect states it in PRJ-003 | T-01a, T-01b |
 | **The chunk shape** | PRJ-003 §3: 64×64×32 | Binary greedy meshing keeps one 64-bit mask per column with one voxel of padding at each end, so an axis holds at most 62 voxels (`CS_P = CS + 2 ≤ 64`) | **62³ chunks (64³ padded)**, DEPEND on `binary-greedy-meshing` =0.5.2 (MIT, no dependencies, no `unsafe`, `no_std`). Its `fast_mesh` takes both an opaque and a transparent mask, and air is id 0. PRJ-003 §3 is the Architect's (v1.4.1) | T-02 |
 | **The terrain's definition** | None. 30 m ÷ 0.35 m is 600/7, not an integer, so sampling, rounding and route draping need pinning | An independent oracle for the voxelization | **Ruled (A5):** `specs/viewer/terrain_v0.md` is T-03's first commit. It defines the cell-to-voxel mapping, the interpolation and its rounding, materials, the shell, plazas and route draping. `specs/viewer/terrain_ref.py` (stdlib) computes SplitMix64-chosen columns of `hamlet` into `specs/viewer/golden/terrain_v0_columns.txt`, and the Rust voxelizer must reproduce every line | T-03 |
 | **The worldgen-lite export** | The reference computes every raster; nothing writes it out | A file the viewer reads, from the manifest the engine runs | `rehoboam-worldgen-lite-export v0`:<ul><li>`<world>.toml`: format, templates version, case `template seed R K`, manifest path and SHA-256 (the pin of `worlds/<world>/world.toml` when there is one), sea level, seats, edges, routes, land counts, **the scale constants of `terrain_v0`** (F4, as the review suggested), and, when the manifest gives the whole population, each founder's `PersonId` (the reference's `founder(world_seed, k)`) with its settlement;</li><li>two little-endian `u16` rasters.</li></ul>Generated into `target/viewer/exports/`, never committed: the committed golden is the oracle | T-03 |
@@ -98,7 +98,7 @@ version: 1.4.0
 | **Wayland** | — | The `wayland` feature needs `libwayland-dev` at build time (the drafter's measurement; the review could not reproduce it without building Bevy) | **Ruled (A10):** X11 by default; `wayland` an opt-in feature of `rh-view`, for a machine that has the package | T-01b |
 | **The isolation rule's names** | — | v1.3.0 banned `bevy_*` from the root lock, which would block an engine PR adopting `bevy_ecs` (`docs/07`: Trial) (A3) | **Ruled (A3, A11):** rule (b) names the render and window stack explicitly; a passing fixture puts `bevy_ecs` in the root lock; rule (e) is a forward allow-list of the viewer's path dependencies | T-06 |
 | **The catch-up machine after `stream.behind`** | `Catchup` (SPR-026) cannot skip history | — | **Ruled (A8):** stage b restarts `Catchup` from a fresh `stream.status`'s `live.next_seq`. SPR-026's owner is asked for a skip input only if that proves insufficient | T-05 |
-| **The CI trigger** | PRJ-003 §5 | A `main` push trigger fires about 10 times a day (B1) | **Ruled (B1):**<ul><li>pull requests on the viewer's own paths;</li><li>no push trigger on `main`;</li><li>a daily scheduled run and `workflow_dispatch`, with the cache saved only by the schedule.</li></ul> | T-06 |
+| **The CI trigger** | PRJ-003 §5 | A `main` push trigger fires about 10 times a day (B1). Every viewer PR push also runs `ci.yml`'s part core, and all three parts when the diff leaves the viewer's paths (V4) | **Ruled (B1; V4, V4b):**<ul><li>pull requests on the viewer's own paths;</li><li>no push trigger on `main`;</li><li>a daily scheduled run and `workflow_dispatch`, with the cache saved only by runs on `main`, so PR runs restore what `main` saved;</li><li>**the fallback when caches churn:** the Bevy half of the job moves to a weekly hosted schedule plus dispatch, and the Bevy-free half keeps running on pull requests (the cost section).</li></ul> | T-06, T-01b |
 
 ## Compliance (every task)
 
@@ -111,9 +111,9 @@ version: 1.4.0
 | RNG purposes added | None. The terrain has no random draw (the reference's draws are plane A's, already made). The placeholder figures' loops and the colour jitter are render-only, from a hash of position, never content |
 | Golden-hash effect | **None** on any engine ladder. New and plane B, each regenerated only by its tool: `viewer/golden/terrain_v0.txt` and `specs/viewer/golden/terrain_v0_columns.txt` |
 | Fixed-point quantities | The terrain is integer (`i64`), and `rh-view-core` denies `clippy::float_arithmetic` crate-wide. Floats live only in `rh-view`'s rendering and cameras, never hashed |
-| Determinism lints (GOV-003 §2) | **The engine's are unchanged and must pass.** **In `viewer/`:**<ul><li>`unsafe_code = "deny"` workspace-wide;</li><li>`#![forbid(unsafe_code)]` in `rh-view-core`;</li><li>`#![deny(unsafe_code)]` in `rh-view`, because Bevy's derive macros carry their own `allow`, which `forbid` would refuse.</li></ul>The root `clippy.toml` applies, since clippy walks up to it. `rh-view-core` takes no `allow`. Expect many use-site allows with reasons in `rh-view` (Bevy's float math, frame timing; F10) |
+| Determinism lints (GOV-003 §2) | **The engine's are unchanged and must pass.** **In `viewer/`:**<ul><li>`unsafe_code = "deny"` workspace-wide;</li><li>`#![forbid(unsafe_code)]` in `rh-view-core`;</li><li>`#![deny(unsafe_code)]` in `rh-view`, because Bevy's derive macros carry their own `allow`, which `forbid` would refuse.</li></ul>The root `clippy.toml` applies, since clippy walks up to it. **`rh-view-core` takes exactly one named allow, and only from SPR-034 on: `std::process::Command` in `source.rs`, through which SPR-035's materializer spawns too (V6).** Every other ban of the root `clippy.toml` holds there (`HashMap`, `HashSet`, `Instant`, `SystemTime`, the `std::env` reads): the clock, the command line and the environment are `rh-view`'s. Expect many use-site allows with reasons in `rh-view` (Bevy's float math, frame timing; F10) |
 | Assets | Procedural only. `check_viewer.sh`'s assets check finds no image, model or sound file under `viewer/`, except what F11's ruling allows |
-| Tests that gate this sprint | **Stage a:**<ul><li>V-R3D-14: `viewer-isolation` and its fixtures, two must-FAIL and one must-PASS (`bevy_ecs`); the root lock unchanged;</li><li>the terrain reference differential;</li><li>V-R3D-13's method on the terrain digest: two runs, 1 and 4 threads, debug and release;</li><li>the mesher's differential;</li><li>the scope tests;</li><li>`bin/check_all.sh` (parts core, golden, stream as `ci_scope` decides) and `bin/check_viewer.sh`.</li></ul>**Stage b:**<ul><li>the headless app test;</li><li>the controller's synthetic series;</li><li>the live client against a fake host;</li><li>V-VIEW-01's ladder clause (Tester).</li></ul>**Reported, not gated:** V-VIEW-03 (FPS on the P51, after the merge), V-VIEW-01's throughput, the mesher's per-chunk time, the CI job's minutes |
+| Tests that gate this sprint | **Stage a:**<ul><li>V-R3D-14: `viewer-isolation` and its fixtures, two must-FAIL and one must-PASS (`bevy_ecs`); the root lock unchanged;</li><li>the terrain reference differential;</li><li>V-R3D-13's method on the terrain digest: two runs, 1 and 4 threads, debug and release;</li><li>the mesher's differential;</li><li>the scope tests;</li><li>`bin/check_all.sh` (parts core, golden, stream as `ci_scope` decides) and `bin/check_viewer.sh`.</li></ul>**Stage b:**<ul><li>the headless app test;</li><li>the controller's synthetic series, the back-off's included (V12);</li><li>the live client against a fake host;</li><li>V-VIEW-01's ladder clause (Tester).</li></ul>**Reported, not gated:** V-VIEW-03 (FPS on the P51, after the merge), V-VIEW-01's throughput, the mesher's per-chunk time, the CI job's minutes |
 | Docs updated in the same sprint | **Stage a:** `CLAUDE.md` (the viewer's checks); `docs/09` V-R3D-14's method line; `05.0` §6 (`viewer/` built); RUN-001 (the viewer's Python export). **Stage b:** RUN-001 (the Vulkan check, the release build, the FPS protocol), `05.0` §6 (`rh-view`). PRJ-003 is the Architect's (v1.4.1) |
 
 **Rules carried from the engine's sprints (every task):**
@@ -129,11 +129,12 @@ version: 1.4.0
 
 **Levels.**
 - L0 is the canonical content at 0.35 m. L1 (0.70 m) and L2 (1.40 m) are 2×2×2 reductions of the level below.
-- **The reduction is surface-preserving (A7):**
-  - a coarse voxel is solid when at least one of its 8 children is solid;
-  - it takes the material of its highest solid layer of children: the most frequent material among that layer's solid children, ties to the lowest id.
+- **The reduction is surface-preserving (A7), and water counts as a surface (V16):**
+  - a coarse voxel is non-air when at least one of its 8 children is non-air, water included;
+  - it takes the material of its top-most non-air layer of children: the most frequent material among that layer's non-air children, ties to the lowest id;
+  - it is water, and so transparent to the mesher, exactly when that material is water.
 
-  A road, a plaza or a roof on the surface therefore survives at L1 and L2.
+  A road, a plaza, a roof or the sea's surface therefore survives at L1 and L2.
 - The reduction is integer and a pure function, so every level is reproducible.
 - The red team's 0.65 m and 1.0 m tiers are not power-of-two multiples of 0.35 m and would need resampling, so they are not used (F3).
 
@@ -164,7 +165,8 @@ version: 1.4.0
 - **Adaptation while viewing,** over windows of 120 frames:
   - **step down one notch** when more than 5% of a window's frames have `W > R`, two windows running;
   - **step up one notch** when the window's p95 of `W` stays under `0.6 R`, ten windows running.
-- **`--lod fixed:<notch>`** disables both, for measurement.
+- **The back-off (V12).** Without one, a notch costing more than 1.67× the next (1 ÷ 0.6) cycles: up after ten windows under `0.6 R`, down two windows later, about every 12 windows. So after a step-down that follows a step-up into the same notch, the step-up wait into that notch doubles: 20, 40, then 80 windows, the cap (8×). The longer wait is kept until the viewer restarts.
+- **`--lod fixed:<notch>`** disables all three, for measurement.
 - **Reported:** every change prints one line, on stdout and in the HUD, for example `lod 12.4s R=16.7ms W.p95=18.2ms miss=7.5% notch 0->1 (miss > 5% over 2 windows)`. At exit, a summary gives the time at each notch and the final notch. The FPS report carries both.
 
 ## Task graph
@@ -246,9 +248,9 @@ flowchart LR
   - **The reduction:**
     - exact on all-solid and all-empty chunks;
     - a one-voxel road on the surface survives at L1 and L2, a test case;
-    - unit tests for the top-layer and tie rules;
+    - unit tests for the top-layer and tie rules, and a shore case: a coarse voxel whose top-most non-air children are water and sand takes the more frequent, and is transparent exactly when that is water (V16);
     - a planted `mutant-lod-majority` (v1.3.0's rule) must FAIL the road test by name.
-  - **Reported, not gated:** the median and p95 time to mesh one chunk on one core, over 200 terrain chunks (an `#[ignore]` timing test run by `check_viewer.sh`). The red team's bound was 3.0 ms; the crate's own figures are 65–300 µs.
+  - **Reported, not gated:** the mean time to mesh one chunk on one core: a check that meshes 200 terrain chunks, timed by `check_viewer.sh`'s per-check timer and divided by 200. `rh-view-core` reads no clock (V6). The red team's bound was 3.0 ms; the crate's own figures are 65–300 µs.
 - **Status:** [ ] not started
 
 #### T-03: `hamlet`'s real terrain: the spec, the reference, the export and the voxelizer (0.9 day)
@@ -340,37 +342,44 @@ flowchart LR
   - **`.github/workflows/viewer.yml` (B1):**
     - **Triggers:**
       - `pull_request` on `viewer/**`, `specs/viewer/**`, `bin/check_viewer.sh`, `.github/workflows/viewer.yml` and `python/tests/test_viewer_workflow.py`;
-      - **`schedule`: daily**, at a jittered minute (05:17 UTC);
+      - **`schedule`: daily at 04:43 UTC** (`43 4 * * *`; V17): off the hour, and off `nightly.yml`'s 03:17 and `advisories.yml`'s 05:17;
       - `workflow_dispatch`;
       - **no push trigger.**
     - **The daily run:**
       - it runs the whole of `check_viewer.sh` on `main`, catching engine changes that break the viewer, as a priority-2 follow-up and never a blocker;
-      - **when `main` has not moved since the last successful daily run,** it only restores the cache and stops, in about a minute, which keeps the cache alive (GitHub evicts a cache unused for 7 days).
+      - **when `main` has not moved since the last successful daily run,** it only restores the cache and stops, in about a minute, which keeps the cache alive (GitHub evicts a cache unused for 7 days). **This is rare while `main` moves daily** (D61 item 8: the PR tier ran 462 times in 7 days), so the cost section counts every daily run as a full warm run (V4).
     - **One job:** `ubuntu-24.04`, `timeout-minutes: 30`, PR runs cancelled by a newer push.
-    - **The cache:** `Swatinem/rust-cache` with `workspaces: viewer -> ../target/viewer`, `key: viewer-${{ hashFiles('viewer/Cargo.lock') }}`, and **`save-if: ${{ github.event_name == 'schedule' }}`**.
-    - **Tools:** prebuilt `cargo-nextest` and `cargo-deny`; uv with `uv sync --frozen --project python`.
+    - **The cache (V4, V17):** `Swatinem/rust-cache` with `workspaces: viewer -> ../target/viewer`, **no `key` of its own** and **`save-if: ${{ github.ref == 'refs/heads/main' }}`**:
+      - rust-cache keys on its own hash of every `Cargo.lock` and `Cargo.toml` and of every installed `rustc`, and on a lock change restores the newest entry of the same job by prefix, so only changed dependencies rebuild. An explicit `hashFiles('viewer/Cargo.lock')` would duplicate that hash and defeat the prefix fallback;
+      - only runs on `main` save: the schedule, and a dispatch on `main`, which the Architect can start after a lock change to warm the next pull request. **A PR run restores what `main` last saved and saves nothing,** so a PR whose lock adds packages builds them on every push;
+      - rust-cache keeps crates.io dependencies only: the viewer's own crates, and from SPR-034 the engine's path crates, rebuild on every run.
+    - **Tools:** the toolchain installed before rust-cache (`rustup toolchain install`, here the root's 1.97.0, since stage a has no `viewer/rust-toolchain.toml`); prebuilt `cargo-nextest` and `cargo-deny`; uv with `uv sync --frozen --project python`.
     - **Then:** `bin/check_viewer.sh`, uploading the report and the ledger.
-    - **The workflow's pins go in a new file, `python/tests/test_viewer_workflow.py`** (A4): the trigger lists, no `push`, the schedule, the `save-if`, the cache key and the timeout.
-  - **The decision rule (B1):** if two of five consecutive viewer runs are cold (the report says whether the cache was restored), the Architect moves the job to the nightly on `adjutant`'s self-hosted runner.
+    - **The workflow's pins go in a new file, `python/tests/test_viewer_workflow.py`** (A4): the trigger lists, no `push`, the schedule (and that no other workflow's cron has its minute and hour), the `save-if`, no `hashFiles` in the cache step, and the timeout.
+  - **The decision rule (B1, as V4b restates it):**
+    - **A run counts as cold** when rust-cache restored nothing at all, not even by prefix; the report prints the restore result (exact, prefix or none). A PR run whose lock adds packages restores by prefix and builds only the new ones: that is expected, not churn.
+    - **If two of five consecutive viewer runs are cold,** the Architect splits the job (a C1 edit; no director action): the Bevy-free half keeps running on pull requests and daily, and the Bevy half moves to a weekly hosted schedule plus dispatch (the cost section). `adjutant.yml` is not the fallback: it is dispatch-only and runs only while the director has the VM started (about $0.83 an hour, RUN-002).
   - **Docs:** the compliance table's list.
 - **Acceptance:**
   - `lint_arch` is green on the workspace; the three fixtures FAIL by the rule's name and `lock_has_bevy_ecs` passes.
   - The scope tests pass; the inventory is green both ways.
   - The viewer job is green on the PR.
-  - **Its cold and warm times, `df -h` and the cache usage are in the PR,** against the estimate below.
+  - **Its cold time, `df -h` and the cache usage are in the PR,** against the estimate below. Every PR run is cold, since no cache exists before the merge (V4).
+  - **The warm time is measured after the merge, on `main`** (V4): the first run there saves the cache, cold; the next full run (the next daily run on a moved `main`, or a dispatch) restores it. That time is reported to the Architect, as the FPS report is (A6), and is not a merge condition.
 - **Status:** [ ] not started
 
 **Stage a's size and cut order.** T-01a 0.3, T-02 0.6, T-03 0.9, T-06 0.7: **2.5 agent-days.** If it runs long:
 1. `twin_vales`' export (0.05 day).
-2. The restore-only shortcut of the daily run (0.1 day): it then runs in full every day.
+2. The restore-only shortcut of the daily run (0.1 day): it then runs in full every day, as it nearly always does while `main` moves daily (V4).
 
 Nothing in the differentials, the golden checks, the isolation rule or the scope tests is cut.
 
-### Stage b: the Bevy app (PR `SPR-033b`, C1, about 2.2–2.7 agent-days)
+### Stage b: the Bevy app (PR `SPR-033b`, C1, about 2.3–2.7 agent-days)
 
-#### T-01b: `rh-view`, the Bevy pin, the toolchain and the lock-age table (0.3 day)
+#### T-01b: `rh-view`, the Bevy pin, the toolchain, the lock-age table and the job's Bevy half (0.65 day: 0.3 for the crate, the pin and the toolchain; 0.35 for the job)
 - **Deliverable:**
   - **`viewer/rust-toolchain.toml`:** channel 1.97.1, components `rustfmt` and `clippy`, profile minimal; the workspace's `rust-version` becomes 1.97.1.
+  - **`rh-view-core` gains `rh-protocol` as a path dependency** (V7; on rule (e)'s allow-list), so T-05's client compiles in `rh-view-core::live`. T-05's fake host is test code on `rh-protocol`'s dispatcher under `rh-view-core/tests/`; anything more it needs is a dev-dependency.
   - **`viewer/rh-view`:**
     - a member; `#![deny(unsafe_code)]`; labels `tool`/`tool`;
     - **a hand-rolled argument parser** (A18): no `clap`;
@@ -379,20 +388,23 @@ Nothing in the differentials, the golden checks, the isolation rule or the scope
       | Dependency | Pin and features |
       |---|---|
       | `bevy` | **`=0.20.0`**, default features off, with exactly `std`, `default_app`, `multi_threaded`, `bevy_winit`, `x11`, `bevy_render`, `bevy_core_pipeline`, `bevy_pbr`, `bevy_anti_alias` (for FXAA), `bevy_ui`, `bevy_ui_render`, `bevy_text`, `default_font`, `free_camera` and `pan_orbit_camera` (A15). These select `bevy_pbr` and `bevy_core_pipeline` directly, with no `3d_bevy_render` or `3d_api`, and so no `bevy_gltf`, `gltf_animation`, `ktx2`, `zstd_rust`, `tonemapping_luts` or `smaa_luts` |
-      | `rh-view-core` | path |
-      | `rh-protocol` | path, for T-05 |
+      | `rh-view-core` | path (it carries `rh-protocol` for the live client; V7) |
 
     - **an opt-in `wayland` feature** (A10), off by default, for a machine with `libwayland-dev`.
   - **Bevy enters the lock at or after 2026-10-22 22:31Z.** The lock-age table records it, and the direct-pin check refuses it before then.
-  - **The job gains the Bevy build** (0.3 day, counted in the stage's size): `bin/check_viewer.sh` builds `rh-view`, runs its headless tests and its controller series, and reports the cold and warm times; the triggers, the cache key and the `save-if` stay as stage a set them.
+  - **The job gains the Bevy half** (0.35 day, in the heading's figure: the Bevy build 0.3, the two halves 0.05):
+    - **Two halves (V4b):** `bin/check_viewer.sh --part core|app`; no flag runs both. `core` is everything that builds without Bevy: `rh-view-core` (cargo with `-p rh-view-core`), the terrain reference, the export, the lock checks and the planted controls of stage a, and from SPR-034 on the run-based gates. `app` is `rh-view`'s build, clippy over the workspace, the headless app test, the controller's series with `mutant-lod-no-backoff` (V12), and `mutant-unsafe` on `rh-view`. The workflow runs them as two steps of the one job, so V4b's fallback moves one step into a weekly job.
+    - **One job, two toolchains (V17):** the workflow installs the viewer's 1.97.1 (`rustup toolchain install` in `viewer/`) and the root's 1.97.0, both before rust-cache. rust-cache keys on every installed `rustc`, so the root's toolchain is installed from stage b on, although only SPR-034's `rh-cli` builds with it: adding it then would start a new cache line.
+    - The triggers, the cache step and the `save-if` stay as stage a set them; the report gives the cold time in the PR and the warm time after the merge, as T-06's do (V4).
 - **Acceptance:**
   - `cargo build`, `nextest` and `clippy -D warnings` from `viewer/` are clean.
   - `cargo tree -e features` (from `viewer/`) shows none of `bevy_gltf`, `ktx2`, `zstd_rust`, `tonemapping_luts` or `smaa_luts`.
   - The root lock is unchanged, and `viewer-isolation` is green.
-  - **The cold build of this feature set is measured and reported.** The 178 s of v1.3.0 was for the larger set and was not reproduced by the review.
+  - **The cold build of this feature set is measured and reported.** The 178 s of v1.3.0 was for the larger set and was not reproduced by the review. Every PR run of stage b is cold for Bevy: `main`'s cache is stage a's, and the second toolchain starts a new cache line (V4).
+  - `check_viewer.sh --part core` builds no Bevy crate (`cargo tree` of its targets, asserted), and the two parts together run every check of the unsplit script.
 - **Status:** [ ] not started
 
-#### T-04: The app: rendering, three cameras, the controller, the HUD and the bench (1.2–1.6 days)
+#### T-04: The app: rendering, three cameras, the controller, the HUD and the bench (1.25–1.65 days, with V12's back-off)
 - **Deliverable (`rh-view`):**
   - **The command line:**
     - `--world <name>` (reads `target/viewer/exports/<name>.toml`) or `--export <path>`;
@@ -416,7 +428,7 @@ Nothing in the differentials, the golden checks, the isolation rule or the scope
     | **Fly** | Bevy's `free_camera`: WASD, mouse look, Shift fast, Q and E down and up |
     | **Walk (first person at ground level; V.1, D62)** | The fly camera with its eye held 1.6 m above the canonical L0 column top, read from `rh-view-core` even where a coarser level is drawn. It steps up at most 0.7 m, falls to the surface off an edge, and holds 1.4 m/s (Shift: 4 m/s) |
 
-  - **The controller** of the section above (A2), using Bevy's render diagnostics for GPU timestamps when the adapter offers them.
+  - **The controller** of the section above (A2, with V12's back-off), using Bevy's render diagnostics for GPU timestamps when the adapter offers them.
   - **The HUD:**
     - FPS and `W`'s p95;
     - the notch; the camera mode;
@@ -437,6 +449,7 @@ Nothing in the differentials, the golden checks, the isolation rule or the scope
     - a series with 7% of frames at `W = 1.1 R` steps down after two windows;
     - 4% does not;
     - `fixed:` never steps;
+    - **a notch costing twice the next (V12):** `W` at `0.55 R` on notch 1 and `1.1 R` on notch 0. The step-ups into notch 0 come 10, 20, 40, 80, 80, … windows apart, and over 2,000 windows the missed frames stay under 5%; the rule without the back-off misses about 17% (2 windows in every 12). A planted `mutant-lod-no-backoff` fails it by name;
     - each step prints its line, and the test asserts the lines.
   - **The walk camera's height rule:** unit tests on eye height, the 0.7 m step and the fall.
   - **The report's format** is pinned by a test on a synthetic run.
@@ -477,7 +490,7 @@ Nothing in the differentials, the golden checks, the isolation rule or the scope
     - the wall time with and without the client is reported (its throughput clause; SPR-030 gates V-PERF-09).
 - **Status:** [ ] not started
 
-**Stage b's size and cut order.** T-01b 0.3, T-04 1.2–1.6, T-05 0.4, plus 0.3 for the job's Bevy build: **2.2–2.7 agent-days.** If it runs long, cut **effects first** (A15):
+**Stage b's size and cut order.** T-01b 0.65 (0.3, plus 0.35 for the job's Bevy half), T-04 1.25–1.65, T-05 0.4: 0.65 + 1.25 + 0.4 = 2.3 to 0.65 + 1.65 + 0.4 = 2.7, **about 2.3–2.7 agent-days.** The re-check put revision 1's tasks at 2.2–2.6 (V14); V4b's two halves and V12's back-off add 0.05 each. If it runs long, cut **effects first** (A15):
 1. SSAO and the atmosphere flags (0.1 day).
 2. L2 and notches 3–4 (0.15 day): the controller stops at notch 2, and the report says so.
 3. The region tint (0.05 day).
@@ -580,20 +593,37 @@ verdict   V-VIEW-03: MET | NOT MET (reported, not gated). MET = in every segment
 
 **Expectation (55%).** A Maxwell GPU draws the notch-0 bubble at 60 FPS at 1080p with two shadow cascades. That bubble is about 100 L0 and 400 L1 chunks: a few hundred thousand triangles after greedy merging. The risks are SSAO, the atmosphere, a 4K panel, and the Optimus path under XWayland. A miss is reported with the notch the controller chose.
 
-## The CI job's cost (estimate, on the 2-vCPU column; T-06 and T-01b report the measured figures)
+## The CI cost of each stage (estimates on the 2-vCPU column, `ci.yml` included; T-06 and T-01b report the measured figures)
 
-GitHub's hosted runners for a private repository on the Free plan have 2 vCPU, 7 GB of RAM and 14 GB of disk.
+GitHub's hosted runners for a private repository on the Free plan have 2 vCPU, 7 GB of RAM and 14 GB of disk, and GitHub bills each job's time rounded up to the whole minute. **Every viewer push also runs `ci.yml` (V4):** its part core always runs in full, and `bin/ci_scope.py` skips golden and stream only when every changed file is documentation or `VIEWER_ONLY`.
+
+**Per run:**
 
 | Item | Stage a | Stage b | Basis |
 |---|---|---|---|
-| A cold run | about 3–5 min (no Bevy; the Python environment; `rh-view-core` at `opt-level = 2`) | **about 11–16 min** (Bevy built twice, for the build and for clippy's check mode) | The drafter's 178 s cold build on 4 cores, scaled by about 1.8 for 2 vCPU, for the larger feature set. T-01b re-measures |
-| A warm run (cache restored) | about 2 min | about 4–7 min | Only the viewer's crates rebuild |
-| A daily run when `main` has not moved | about 1 min (restore only) | about 1 min | B1 |
-| Runs in an active month | about 45 PR runs + 30 daily runs | as stage a | About 15 pushes per stage |
-| **Minutes per active month** | **about 100–200** | **about 250–500** (300–1,000 if caches churn) | Warm runs on viewer PRs, daily runs mostly restore-only |
-| Actions cache | one entry, under 0.5 GB | one entry of about 1–1.5 GB, keyed on the viewer lock, saved by the schedule only | GitHub's limit is 10 GB per repository, shared with the engine's three parts |
+| `ci.yml` on a PR push | **about 25 min:** all three parts, since stage a's diff holds `bin/`, `python/tests/` and `tests/lint_fixtures/` (and before T-06, `viewer/` is not yet `VIEWER_ONLY`) | **about 12 min:** core in full; golden and stream skip in under a minute each, billed a minute each | PR #89's first run: core 10:00, golden 7:10, stream 7:32 |
+| The viewer job, cold | about 3–5 min (no Bevy; the Python environment; `rh-view-core` at `opt-level = 2`) | about 11–16 min (Bevy built twice, for the build and for clippy's check mode) | The drafter's 178 s cold Bevy build on 4 cores, scaled by about 1.8 for 2 vCPU, for the larger feature set. T-01b re-measures |
+| The viewer job on a PR push | cold, 3–5 min: no cache exists before the merge | cold, 11–16 min: `main`'s cache is stage a's, and the second toolchain starts a new cache line | Only runs on `main` save the cache (T-06) |
+| The viewer job warm (a full daily run on `main`) | about 2 min | about 4–7 min | crates.io dependencies come from the cache; the viewer's own crates rebuild |
+| A daily run when `main` has not moved | about 1 min (restore only) | about 1 min | Rare while `main` moves daily, so the totals count every daily run as a full warm run |
+| Actions cache | one entry, under 0.5 GB | one entry of about 1–1.5 GB | Saved by runs on `main` only. GitHub's limit is 10 GB per repository, shared with the engine's three parts |
 
-**If caches churn,** cold runs become the norm. **Two cold runs in five consecutive ones move the job to the nightly on `adjutant`** (B1), which costs no hosted minutes. The engine's caches win any cache contention (D62).
+**Totals.** About 15 pushes per stage: one commit per task, the merges of `main`, the fixes after the Tester and the audit. A superseded run is cancelled, but bills the minutes it used.
+
+| | Stage a | Stage b |
+|---|---|---|
+| **The PR** | 15 × 25 (`ci.yml`) + 25 (`ci.yml` on the merge's push to `main`) + about 8 × 3–5 (the viewer job, from T-06's commit on) = 375 + 25 + 24–40 = **about 424–440 min** | 15 × (12 + 11–16) + 12 = 345–420 + 12 = **about 357–432 min** |
+| **Each month after the merge** | 30 daily runs × about 2 = **about 60 min** | 30 × 4–7 = **about 120–210 min** |
+
+Against GOV-008's about 2,000 minutes a month on the Free plan (the real allowance is D61 item 8's question), stage a's PR is about a fifth of a month, nearly all of it `ci.yml`'s, as for any C1 change that edits `bin/`. SPR-034 and SPR-035 add their own rows.
+
+**If caches churn (B1's rule, as V4b restates it).**
+- A run counts as cold when rust-cache restored nothing, not even by prefix (T-06's report prints it).
+- Two cold runs in five consecutive ones split the job, as a C1 edit by the Architect; the director does nothing:
+  - the Bevy-free half (`check_viewer.sh --part core`: `rh-view-core`, the terrain, the export, the lock checks, and from SPR-034 on the run-based gates) keeps running on pull requests and daily;
+  - the Bevy half (`--part app`) moves to a weekly hosted schedule plus dispatch.
+- **`adjutant.yml` is not the fallback:** it is dispatch-only, and runs only while the director has the VM started (about $0.83 an hour, RUN-002), so it cannot serve as a nightly.
+- Before stage b the job is all Bevy-free, and the rule has nothing to move. The engine's caches win any cache contention (D62).
 
 ## Out of scope (explicit)
 - **SPR-034's work:** buildings, residents and the grammar; the sealed-segment reader and catch-up; remote sealed reads.
@@ -603,7 +633,7 @@ GitHub's hosted runners for a private repository on the Free plan have 2 vCPU, 7
 - **The camera director and channel C** (SPR-036). **Acting in the world** (SPR-037, V.3).
 - **Wayland by default, Windows, macOS, WebGPU.**
 - **Any engine crate change.** If one is needed, it goes through that crate's own sprint and class (ADR-0036 §6).
-- **PRJ-003, `docs/11`, GOV-003 and D63's text,** which are the Architect's at the close (P1–P4, A12's GOV-003 line).
+- **PRJ-003, `docs/11` and D63's text,** which are the Architect's (P1–P4, V9). There is no GOV-003 line: the two-week rule is the viewer workspace's own (V3).
 
 ## Verification assignment (Testers)
 
@@ -612,7 +642,7 @@ GitHub's hosted runners for a private repository on the Free plan have 2 vCPU, 7
 | a | AGT-003-IF | Written from ADR-0036 §2, PRJ-003 §2 and §5, PR #89's scope rules and this plan's specs table, before reading the code:<ul><li>`viewer-isolation` with fixtures of their own: a dev-dependency on `viewer/`, `wgpu-core` in the root lock, `bevy_ecs` and `bevy_reflect` in the root lock (both must pass), and a viewer path dependency on `rh-sifter`;</li><li>the root lock byte-identical;</li><li>`forbid(unsafe_code)` with an `unsafe` block of their own;</li><li>the scope rule with renames and mixed diffs of their own;</li><li>the inventory both ways;</li><li>the workflow's pins;</li><li>the export against the golden with their own reading of it</li></ul> | `VER-SPR-033a-TEST` |
 | a | AGT-003-DET | Written from `specs/viewer/terrain_v0.md` and ADR-0036 §2.4:<ul><li>**an independent terrain voxelizer of their own** (A5) on columns of their own choosing, including raster edges, plazas, route crossings and sea level;</li><li>their own naive mesher on their own seeds;</li><li>the surface-preserving reduction against their own implementation, with thin features;</li><li>the terrain digest across runs, threads and builds;</li><li>two mutants of their own (a material chosen by completion order; a route drawn in another order)</li></ul> | As above |
 | b | AGT-003-IF | The client's request set and its handling of `stream.behind` (the restart from `live.next_seq`), `stream.end` and a changed history, against a host of their own on the reference's `Viewer`; the 107-byte refusals; the feature set (`cargo tree`); the lock-age table and the direct-pin rule | `VER-SPR-033b-TEST` |
-| b | AGT-003-DET | The controller against synthetic series of their own, vsync-capped included; the headless app's mesh digests; V-VIEW-01's ladder clause with `rh-view --headless-client` attached to `hamlet`, the throughput reported | As above |
+| b | AGT-003-DET | The controller against synthetic series of their own, vsync-capped included, and one where a notch costs more than 1.67× the next (V12's back-off); the headless app's mesh digests; V-VIEW-01's ladder clause with `rh-view --headless-client` attached to `hamlet`, the throughput reported | As above |
 | — | Red Team (audit) | The terrain, seats, routes and regions against the golden's numbers, after stage b. A visual finding is closed only by an automated check (ADR-0036 §4) | Red Team notes |
 
 ## Merge route
@@ -630,7 +660,7 @@ GitHub's hosted runners for a private repository on the Free plan have 2 vCPU, 7
 | 1 | Bevy 0.20.0 or wgpu misbehaves on Maxwell with driver 580 (Vulkan) | Low–medium / high for V-VIEW-03 | The director's optional Bevy example now; the 10-minute render check at the merge; the report's adapter and session lines; `WGPU_BACKEND=gl`, or 0.20.x once a patch is 14 days old |
 | 2 | 60 FPS at 0.35 m is missed on the M2200 | Medium / medium | The controller, reported per notch; effects measured separately and cut first. D62 makes it a reported target |
 | 3 | SPR-026's merge slips | Low (its Tester passed) / schedule | Stage a needs none of its code |
-| 4 | The job's minutes or cache crowd the engine's | Medium / medium | Viewer-only PR triggers; no push trigger; the cache saved by the schedule only and keyed on the viewer lock; the two-in-five rule to `adjutant` |
+| 4 | The job's minutes or cache crowd the engine's | Medium / medium | Viewer-only PR triggers; no push trigger; the cache saved by runs on `main` only, keyed by rust-cache's own hashes; the costs stated with `ci.yml` (V4); the two-in-five rule: the Bevy half to a weekly schedule (V4b); F17 |
 | 5 | The reference export and SPR-018's Rust genesis disagree | Low / medium | Both are pinned to the same golden; SPR-035's materializer compares them |
 | 6 | `binary-greedy-meshing` has a defect | Low / medium | Our oracle and the Tester's; MIT allows a port (about 0.5 day) |
 | 7 | The two locks drift (transitive versions) | Medium / low | Seeded from the root lock; the lock-age table; the engine's direct dependencies are exact pins on both sides |
@@ -662,7 +692,7 @@ GitHub's hosted runners for a private repository on the Free plan have 2 vCPU, 7
 
 ## Findings for the Architect
 
-| # | Finding | Recommendation | Ruling (round 1) |
+| # | Finding | Recommendation | Ruling (rounds 1 and 2) |
 |---|---|---|---|
 | F1 | **Bevy 0.20.0 needs rustc ≥ 1.97.1 and is not 14 days old until 2026-10-22 22:31Z** | Wait for `=0.20.0`, with a viewer-only toolchain at 1.97.1 | Ruled: wait (75%); the split makes the wait free |
 | F2 | **64×64×32 is not a binary-greedy-meshing shape** | 62³, DEPEND on the crate | Accepted (95% on the arithmetic, 80% on DEPEND); PRJ-003 §3 is the Architect's |
@@ -670,13 +700,15 @@ GitHub's hosted runners for a private repository on the Free plan have 2 vCPU, 7
 | F4 | **Worldgen-lite has no physical scale** | Plane-B constants, written into the export; M1 F1 should own a scale | Accepted, with the constants in the export file |
 | F5 | **The terrain is the reference's until SPR-018** | Show it, labelled; SPR-035 compares | Accepted |
 | F6 | **What fits in SPR-033** | As planned | Accepted, with the split (A1) |
-| F7 | **The CI trigger** | PRs on viewer paths only | Ruled B1: no `main` push trigger; a daily schedule; save on the schedule; the two-in-five rule |
+| F7 | **The CI trigger** | PRs on viewer paths only | Ruled B1: no `main` push trigger; a daily schedule; save on `main` only; the two-in-five rule. V4 and V4b: `ci.yml` counted, PR runs cold, the fallback a weekly schedule for the Bevy half |
 | F8 | **`ci_scope` treats viewer-only PRs as engine work** | Extend the skip | Ruled A4: on PR #89's framework, with the rename test |
 | F9 | **`adjutant`'s idle shutdown counts `who` logins only** | `ssh -t` | Accepted, with tmux inside it |
-| F10 | **The root `clippy.toml` applies to `viewer/`** | Keep it. `rh-view-core` takes no `allow`; `rh-view` will need many use-site allows with reasons (Bevy's float math, frame timing) | Accepted (A18's wording) |
+| F10 | **The root `clippy.toml` applies to `viewer/`** | Keep it. `rh-view-core` takes one named allow (`std::process::Command` in `source.rs`, from SPR-034); `rh-view` will need many use-site allows with reasons (Bevy's float math, frame timing) | Accepted (A18's wording); V6: exactly that one allow in `rh-view-core` |
 | F11 | **D53 and dependency data:** Bevy's `default_font` embeds Fira Mono (SIL OFL 1.1) | Rule that D53 covers world content, and that a font embedded in a dependency is that dependency's code, in the licence ledger; otherwise Unscii 16 (public domain, not `unscii-16-full`). The LUTs are gone with A15's feature set | **Ruled by the Architect at the close (80%; PRJ-003 v1.4.1 §8 item 12):** D53 covers world content; Bevy's embedded Fira Mono is dependency code, recorded in `artifacts/viewer_licence_ledger.txt` and allowed under ADR-0021 as amended. A font file the HUD ships itself is public domain or CC0 (Unscii 16, not `unscii-16-full`) |
 | F12 | **Wayland needs a system package to build** | X11 by default | Ruled A10: `wayland` is an opt-in feature |
 | F13 | **The clippy-config crawl and a `viewer/target/`** | `target-dir = "../target/viewer"` | Accepted, with cargo run from `viewer/` (A13) |
 | F14 | **GOV-005 §2 and the director** | D63 asks only for what is the director's | Accepted; D63's restatement is the Architect's (P3) |
 | F15 | **`sha2` 0.11.1 is six days old** (2026-10-12) | Pin `=0.11.0` (2026-03-25) as the dev-dependency | New in revision 1 |
 | F16 | **Dropping `ktx2` and the LUT features changes the look:** no TonyMcMapface tonemapping and no SMAA | `AcesFitted` and FXAA; revisit if the red team's audit dislikes the look, since restoring the LUTs is a feature line and F11's ruling | New in revision 1 |
+| F17 | **After SPR-034 the daily run is the job's largest steady cost.** It runs in full nearly every day, since `main` moves daily: 30 × 8–14.5 = 240–435 minutes a month after SPR-034, and 30 × 10.5–18.5 = 315–555 after SPR-035 (their cost sections), against GOV-008's about 2,000 | Run the full job twice a week (Monday and Thursday) plus dispatch: about 9 runs, so about 90–160 minutes a month after SPR-035. The cache, used every 3–4 days, is never evicted for age; an engine change that breaks the viewer is seen within 3–4 days instead of one, which priority 2 allows (D62) | New in revision 2 (65%); B1 is the Architect's |
+| F18 | **The warm time cannot come from "the first daily run after the merge"** (V4's wording): no PR run saves, so the first run on `main` after the merge finds no entry for the new lock (at best the previous stage's, by prefix), builds what is new, and is the run that saves | Measure warm at the next full run on `main` (the next daily run, or a dispatch), as T-06's acceptance now says | New in revision 2 (85%) |
