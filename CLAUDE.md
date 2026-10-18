@@ -6,6 +6,20 @@ P0 (foundations) is under way. SPR-001 created the Cargo workspace (stub crates 
 ## Operating model (ADR-0032)
 Day-to-day work runs through `CODEX/`: roles (`CODEX/80_AGENTS/`), sprints and backlogs (`CODEX/05_PROJECT/`), governance (`CODEX/10_GOVERNANCE/`), and the generated index (`CODEX/00_INDEX/MANIFEST.yaml`: run `python -I bin/gen_manifest.py` to create it; it is not committed). Start each session with `AGENTS.md`. Run `bin/check_all.sh` before asking for an audit; no report, no pass. Be direct: no flattery, no softened bad news; bring the director decisions with a recommendation and a confidence rating, not open questions.
 
+## Token discipline (GOV-011 §8)
+Cost is roughly context size times number of calls: in 2026-10-15..18, re-reading context was about 70% of all usage and output about 12%.
+- **Keep context small.** `.claude/settings.json` compacts at 200k tokens. Restart a long-running role daily from `HANDOFF.md`, `/clear` between unrelated tasks, and keep state in files, not in the conversation.
+- **Make fewer calls.** Batch independent tool calls in one turn, wait for notifications instead of polling, and make one status pass per check-in.
+- **Keep output short.** Use quiet flags, `| tail`, or grep for FAIL; read sections, not whole files; pass long texts by path instead of pasting them.
+- **Pick the helper by job** (`.claude/agents/`):
+  - `drafter` for design;
+  - `reviewer` for independent review;
+  - `mechanic` for edits already decided;
+  - `scout` for lookups.
+
+  Other helpers default to a mid-tier model. Brief them tightly, and never resume one that has been idle for more than an hour (its cache is gone).
+- **Effort is high by default.** Use `/effort xhigh` for a hard call, then go back. Watch `/usage` and `/context`.
+
 ## Read before any work
 1. `docs/00_executive_summary.md`
 2. `docs/01_vision_and_intent.md` (success criteria S1–S4, principles)

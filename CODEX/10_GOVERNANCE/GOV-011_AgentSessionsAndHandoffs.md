@@ -6,20 +6,21 @@ status: APPROVED
 owner: human
 agents: [all]
 tags: [governance, agents, workflow]
-related: [GOV-005, GOV-007, GOV-009, GOV-010, ADR-0032]
+related: [GOV-005, GOV-007, GOV-009, GOV-010, AGT-001, ADR-0032]
 created: 2026-10-18
 updated: 2026-10-18
-version: 1.0.0
+version: 1.1.0
 ---
 
-> **BLUF:** Several AI agents work on Rehoboam, at the same time or in turns, and possibly from different vendors. Five rules keep them out of each other's way:
+> **BLUF:** Several AI agents work on Rehoboam, at the same time or in turns, and possibly from different vendors. Six rules keep them out of each other's way and within budget:
 > - one Architect at a time, named by the director;
 > - one owner per branch, named on its PR;
 > - reviews by a different model from the author's;
 > - every ruling and finding in a repository file before the session ends;
-> - every session ends with its work pushed and its state written down in `HANDOFF.md`.
+> - every session ends with its work pushed and its state written down in `HANDOFF.md`;
+> - every agent keeps its context small and its calls few (§8).
 >
-> Written on the director's instruction of 2026-10-18, when the work passed to a second AI developer.
+> Written on the director's instruction of 2026-10-18, when the work passed to a second AI developer; §8 added the same day, after the usage analysis.
 
 # GOV-011 — Agent sessions and handoffs
 
@@ -102,3 +103,50 @@ Also:
 - assume a WIP or `backup/` branch passes its gates;
 - merge a branch whose Tester pass or audit is still owed;
 - delete, close or rewrite another agent's branch, PR or record.
+
+## 8. Token and compute discipline
+
+**What costs.** Every model call re-sends the whole conversation. Caching makes the repeated part cheap per token, but it is paid on every call. Cost is therefore roughly **context size times number of calls**.
+
+The analysis of 2026-10-15 to 18 (52 cloud sessions; the director's instruction):
+- re-reading cached context was about 70% of all usage, caching new context about 18%, and output (thinking included) about 12%;
+- the Architect's context averaged 440k tokens per call;
+- 38% of the Architect's calls produced fewer than 300 tokens yet cost 35% of its total;
+- helper agents averaged 274k tokens of context and took in 16M tokens of tool output, 72% of it shell output.
+
+The rules, for every agent of every vendor:
+
+1. **Keep context small.**
+   - Compact at about 200k tokens. In Claude Code, `.claude/settings.json` sets this.
+   - Restart a long-running role at least daily from `HANDOFF.md`, and clear the conversation between unrelated tasks.
+   - Keep state in files (§5), so that compaction and restarts lose nothing.
+2. **Make fewer calls.**
+   - Batch independent tool calls in one turn.
+   - Wait for notifications or events instead of polling.
+   - Make one status pass per check-in (open PRs, CI on their heads, messages), not one call per item.
+   - Batch messages to other sessions.
+3. **Keep output short.**
+   - Use quiet flags, `| tail`, or grep for FAIL.
+   - Read the section you need, not the whole file.
+   - Never paste a full log into a conversation.
+   - Commit long inputs (a red-team document, a report) to a file and pass the path.
+4. **Match model and effort to the job.**
+
+   | Job | Model tier | Effort |
+   |---|---|---|
+   | Judgment: rulings, design, engine code, determinism review | The strongest | High; the highest only for a hard call |
+   | Independent review, Tester passes | A mid tier, different from the author's (§4) | High |
+   | Decided edits: applying findings, write-ups, renames, merges by gate name | A mid tier | Medium |
+   | Lookups, data gathering, status | The smallest | Low |
+
+   In Claude Code the tiers are the helper agents in `.claude/agents/` (`drafter`, `reviewer`, `mechanic`, `scout`). Other helpers default to the mid tier.
+5. **Brief helper agents tightly.**
+   - Give exact files and sections, the output format and a word limit.
+   - One well-briefed agent beats several exploratory ones.
+   - Never resume an agent that has been idle for more than an hour: its cache is gone, and a fresh agent with a short brief is cheaper.
+   - Keep long builds (`check_all.sh`, release builds) out of large-context helpers. A wait of more than 5 minutes makes a helper re-cache its whole context.
+6. **Pace to the limits.**
+   - Run three or four sessions at once, not eight.
+   - Finish or hand off a task before a limit stops it: work cut off by a limit is wasted, and its restart re-caches everything.
+7. **Watch the meters.** In Claude Code, `/usage` shows spend and limits, and `/context` shows what fills the context.
+

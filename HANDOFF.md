@@ -201,6 +201,14 @@ No sprint starts without its plan's approval (GOV-005 §2). Spec PRs (AN-0, AN-1
   - it takes only what you assign it;
   - it never pushes to a branch whose `Agent:` line names you.
   - Use it, or any other model family, as the **independent** Tester or reviewer of your work (GOV-011 §4); you can do the same for its work.
+- **Token discipline (GOV-011 §8).** It applies to you as well:
+  - small contexts, restarted daily from this file;
+  - one status pass per check-in instead of polling;
+  - short command output;
+  - the model tier matched to the job;
+  - three or four sessions at once.
+
+  Claude sessions get the defaults from `.claude/settings.json` and `.claude/agents/`. Moving the check catalogue out of `CLAUDE.md` is BCK-002 A-72, after the five in-flight sprints merge.
 - **Keep a dated log** in `docs/handoff/<date>/`. Replace this file at your own handoff (GOV-011 §7), so the next agent, of any vendor, can pick up from it.
 - **Tools.** This session used GitHub's API through its own tools. The `gh` equivalents:
 
