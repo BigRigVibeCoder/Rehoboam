@@ -1,8 +1,13 @@
 // GENERATED from specs/systems/M2.demography.odd.toml by lint_odd.py --rust. Do not edit; edit the spec.
 pub const SYSTEM_ID: &str = "M2.demography";
-pub const SPEC_VERSION: &str = "0.2.2";
+pub const SPEC_VERSION: &str = "0.2.3";
 pub const SCHEDULE: &[(Pulse, Phase)] = &[
     (Pulse::Month, Phase::Vital),
+    (Pulse::Day, Phase::Vital),
+];
+pub const DRAINS: &[(&str, Pulse, Phase)] = &[
+    ("ScheduleDeath", Pulse::Day, Phase::Vital),
+    ("Marry", Pulse::Day, Phase::Vital),
 ];
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -26,3 +31,10 @@ pub struct Params {
     pub eps_m: Fixed,  // bounds checked against the Registry at load
     pub elite_fertility_mult: Fixed,  // bounds checked against the Registry at load
 }
+pub const ROLE_ACTOR: rh_core::RoleId = rh_core::RoleId(0);
+pub const ROLE_TARGET: rh_core::RoleId = rh_core::RoleId(1);
+/// The role constants by Registry name: registration compares each code with the Registry's.
+pub const ROLES: &[(&str, rh_core::RoleId)] = &[
+    ("actor", ROLE_ACTOR),
+    ("target", ROLE_TARGET),
+];

@@ -8,14 +8,14 @@
 
 use rh_core::access::{AccessSpec, ColumnRead, ColumnWrite, CommandSend, Lag, Plane};
 use rh_core::agenda::TimerEntry;
-use rh_core::command::Command;
+use rh_core::command::{Arg, Command};
 use rh_core::system::{
     InvariantResult, PulseBinding, ResampleCtx, SimError, StepCtx, SystemModel, TimerSpec,
 };
 use rh_core::time::SimTime;
 use rh_core::world::{SystemView, WorldTables};
 use rh_core::{Phase, Pulse};
-use rh_events::EventDraft;
+use rh_events::{EventDraft, EventRef};
 
 use crate::common::{
     PERSONS, check, degrees, fail, from_skeleton, person, person_entity, purposes, r64, row,
@@ -47,7 +47,7 @@ impl Vital {
             if alive[r] == 0 {
                 if ctx.rng(&RngPurpose::Birth, p, 0)? % 3 == 0 {
                     alive[r] = 1;
-                    ctx.emit(EventDraft::new("BIRTH").subject(person_entity(r)))?;
+                    ctx.emit(EventDraft::new("BIRTH").role(ROLE_TARGET, person_entity(r)))?;
                 }
             } else if pending[r] == 0 {
                 if ctx.rng(&RngPurpose::DeathTime, p, 0)? % odds == 0 {
@@ -64,6 +64,7 @@ impl Vital {
                             entity: person_entity(r),
                             kind: 0,
                             payload: r64(r),
+                            cause: EventRef::None,
                         },
                     )?;
                     pending[r] = 1;
@@ -73,7 +74,7 @@ impl Vital {
                     ctx.cancel(t.id())?;
                 }
                 pending[r] = 0;
-                ctx.emit(EventDraft::new("CURED").subject(person_entity(r)))?;
+                ctx.emit(EventDraft::new("CURED").role(ROLE_TARGET, person_entity(r)))?;
             }
         }
         view.write(ALIVE)?.copy_from_slice(&alive);
@@ -140,14 +141,14 @@ impl SystemModel for Vital {
         view.write(DEATHS)?[0] += 1;
         let death = ctx.emit(
             EventDraft::new("X_DEATH")
-                .subject(person_entity(r))
+                .role(ROLE_TARGET, person_entity(r))
                 .with_payload(vec![r64(r), timer.key.time.minutes()]),
         )?;
         ctx.submit(Command {
             kind: "Settle",
             person: person(r),
-            args: vec![r64(r)],
-            cause: Some(death),
+            args: vec![Arg::Int(r64(r))],
+            cause: EventRef::Draft(death),
         })
     }
 

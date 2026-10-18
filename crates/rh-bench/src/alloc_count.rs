@@ -211,6 +211,13 @@ unsafe impl GlobalAlloc for Arena {
     unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {}
 }
 
+/// The bytes the arena has handed out so far: its bump offset. Nothing is freed, so an unchanged
+/// offset across a stretch of code proves it allocated nothing (SPR-038 S16: the quiet instant).
+#[must_use]
+pub fn arena_used() -> usize {
+    ARENA_NEXT.load(Ordering::Relaxed)
+}
+
 /// Stops the process when the arena is spent: a message naming the request and the reservation,
 /// then an abort. The benchmark harness has already printed the bench's name. It writes from a
 /// stack buffer to unbuffered stderr, so it allocates nothing.

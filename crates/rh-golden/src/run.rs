@@ -53,7 +53,7 @@ use rh_core::register::register;
 use rh_core::system::SystemModel;
 use rh_core::time::{Calendar, Pulse, SimTime};
 use rh_ids::BranchSalt;
-use rh_manifest::specs::{load_specs, registry_system_ids};
+use rh_manifest::specs::{load_specs, registry_system_ids, registry_table};
 use rh_registry::ownership::Ownership;
 use rh_snapshot::hash::{LAYOUT, PlaneDigest, xxh3};
 use rh_snapshot::journal::{
@@ -267,6 +267,9 @@ pub struct Outcome {
     pub vitals: Option<Vitals>,
     /// What the stream writer did, for a run with a run directory (SPR-013 T-09).
     pub stream: Option<StreamSummary>,
+    /// The engine's `dropped{system, kind, reason}` counts at the end of the run (`05.1` §2 rule
+    /// 2; SPR-014 T-03): a diagnostic, printed with the vitals, never part of the ladder.
+    pub dropped: Vec<(String, String, &'static str, u64)>,
 }
 
 impl Outcome {
@@ -414,7 +417,9 @@ fn journal_key(p: &Provenance, seed: u64) -> HistoryKey {
 pub fn spec_table(repo: &Path) -> Result<SpecTable, Error> {
     let ids = registry_system_ids(&repo.join(OVERLAY)).map_err(|e| error("overlay")(&e))?;
     let specs = load_specs(&repo.join(SPECS_DIR)).map_err(|e| error("specs")(&e))?;
-    Ok(Ownership::build(&specs, &ids).spec_table())
+    let table = registry_table(&repo.join("specs/manifest/registry_v0.toml"))
+        .map_err(|e| error("registry")(&e))?;
+    Ok(Ownership::build(&specs, &ids).spec_table_with(table))
 }
 
 /// The last minute of sim-year `year` (1-based), on the smoke calendar.
@@ -873,6 +878,13 @@ pub fn run_live(args: &RunArgs, live: Option<LiveHost>) -> Result<Outcome, Error
         dispatch: add(dispatched, engine.dispatch_stats()),
         vitals: timing.and_then(|t| t.vitals()),
         stream,
+        dropped: engine
+            .dropped()
+            .iter()
+            .map(|((system, kind, reason), n)| {
+                ((*system).to_owned(), kind.to_string(), reason.name(), *n)
+            })
+            .collect(),
     })
 }
 
@@ -1155,13 +1167,19 @@ fn stream_host(
 }
 
 /// The `mutant-*` Cargo features compiled into this build, from every crate that has any
-/// (BCK-002 A-52).
+/// (BCK-002 A-52), and `rh-core`'s reference features (`reference-gating-off`, SPR-038 S12),
+/// which no world or baseline may come from either.
 #[must_use]
 pub fn mutant_features() -> Vec<&'static str> {
-    let mut m = rh_sys_demography::MUTANTS.to_vec();
-    m.extend_from_slice(rh_stream::MUTANTS);
-    m.extend_from_slice(rh_protocol::MUTANTS);
-    m
+    [
+        rh_core::MUTANTS,
+        rh_snapshot::MUTANTS,
+        rh_sys_demography::MUTANTS,
+        rh_stream::MUTANTS,
+        rh_protocol::MUTANTS,
+        rh_core::REFERENCE,
+    ]
+    .concat()
 }
 
 /// BCK-002 A-52: a build with a `mutant-*` feature compiled in never runs a world, so a mutant can
@@ -1476,6 +1494,7 @@ mod tests {
             },
             vitals: None,
             stream: None,
+            dropped: Vec::new(),
         }
     }
 

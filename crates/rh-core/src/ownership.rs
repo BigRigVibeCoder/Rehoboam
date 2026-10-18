@@ -243,6 +243,90 @@ pub struct SpecEntry {
     /// The manifest sections its `[initialization] from_manifest` names: genesis writes the
     /// system's columns from those sections only (SPR-011 ruling 10; SPR-012 T-06).
     pub from_manifest: Vec<String>,
+    /// Each `[[emits]]` kind's envelope declaration: roles, motives and snapshots (SPR-020 T-03;
+    /// envelope v0 §1, §2, §4). `StepCtx::emit` checks every draft against it.
+    pub envelope: BTreeMap<String, EmitDecl>,
+    /// Every `[[applies]]` entry: the command, its draining binding, its key rule, key field,
+    /// typed payload and whether it carries a sampled outcome (EVO-001; SPR-014 T-01).
+    pub applies: Vec<SpecApply>,
+    /// Every `[[reads]]` entry's `use` and typed `neutral` (EVO-001 R4, R12; SPR-014 T-04).
+    pub read_uses: Vec<SpecReadUse>,
+    /// `(command, timer, purpose)` for every outcome `[[commands]]` entry (EVO-001 R9).
+    pub outcome_timers: Vec<(String, String, String)>,
+    /// `(purpose, first key name)` for every `[[rng]]` entry (BCK-002 A-50; SPR-014 T-07).
+    pub rng_keys: Vec<(String, String)>,
+    /// `(column, value)` for every `[[owns]] default`, typed as the column (`05.1` §2 rule 2,
+    /// the ledger row insert; SPR-014 T-05).
+    pub defaults: Vec<(String, i64)>,
+}
+
+/// What one `[[emits]]` entry declares a kind's events fill (envelope v0 §2).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct EmitDecl {
+    /// The `[event_roles]` ids the kind may fill; `witness` may repeat on an event.
+    pub roles: Vec<String>,
+    /// The `[motive_edges]` ids its `motivated_by` edges may carry.
+    pub motives: Vec<String>,
+    /// The anchored snapshots it captures.
+    pub snapshots: Vec<SnapshotDecl>,
+}
+
+/// One declared snapshot (envelope v0 §4): `attr` of the role `of` (or `event`), with `partner`
+/// for a two-argument attribute, read from `from`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SnapshotDecl {
+    /// The `[attributes]` id.
+    pub attr: String,
+    /// The role the attribute is read of, or `event`.
+    pub of: String,
+    /// The second argument's role.
+    pub partner: Option<String>,
+    /// The column (`entity.column`) or `algorithm.<name>` the value is read from.
+    pub from: String,
+    /// The value's column type, declared for an `algorithm.*` source (REV-SPR-020 R7).
+    pub ty: Option<String>,
+}
+
+/// One `[[applies]]` entry, as data (`05.1` §2 rule 2; EVO-001).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SpecApply {
+    /// The command.
+    pub command: String,
+    /// `drained_by` as `(pulse, phase)` names.
+    pub drained_by: (String, String),
+    /// `key`: `living` or `any` (`any` when absent: the lint refuses that on a frozen spec).
+    pub key: String,
+    /// `key_field`: a `PersonId` payload field, or `person` (`Command::person` itself).
+    pub key_field: String,
+    /// The typed payload, `(field, type)` in order; `None` for an untyped one (a draft spec).
+    pub payload: Option<Vec<(String, String)>>,
+    /// `outcome`: the command carries a sampled outcome (EVO-001 R9).
+    pub outcome: bool,
+    /// The payload as written when it does not parse as `"{ name: Type, ... }"`: registration
+    /// refuses it by name rather than treat the command as untyped (the review's K10).
+    pub payload_malformed: Option<String>,
+}
+
+/// How one `[[reads]]` entry uses its column (EVO-001 R4, R12): an identity read requires its
+/// owner; a rate or mode read carries a neutral, served when its owner is absent.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SpecReadUse {
+    /// The column.
+    pub column: String,
+    /// `identity`, `rate` or `mode`; anything else (or nothing) is treated as `identity`, which
+    /// is the strict reading: a world without the owner is refused.
+    pub usage: String,
+    /// The neutral, typed as the column (an enum's code, a fixed-point value's raw bits), when
+    /// the spec gives one the loader could type.
+    pub neutral: Option<i64>,
+}
+
+impl SpecReadUse {
+    /// Whether the read is a rate or mode read: dropped, not refused, when its owner is absent.
+    #[must_use]
+    pub fn droppable(&self) -> bool {
+        self.usage == "rate" || self.usage == "mode"
+    }
 }
 
 impl SpecEntry {
@@ -261,6 +345,75 @@ pub struct SpecTable {
     pub owners: BTreeMap<String, Owner>,
     /// Spec entries by system id.
     pub specs: BTreeMap<String, SpecEntry>,
+    /// What registration and `emit` read from the Registry (envelope v0 §8). Empty when the host
+    /// passes no Registry: then no role constant is compared and no attribute is known.
+    pub registry: RegistryTable,
+    /// The number of codes of every enum column whose `[[owns]]` lists its `values` (EVO-001),
+    /// for `enum(<column>)` payload fields.
+    pub enum_codes: BTreeMap<String, usize>,
+}
+
+/// The Registry's envelope vocabulary as plane A compiles it (SPR-020 T-01; envelope v0 §8): the
+/// host builds it from the Registry (`rh_registry::ownership::parse_registry_table`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RegistryTable {
+    /// `[event_roles].ids` in code order: role code `i` is `event_roles[i]`.
+    pub event_roles: Vec<String>,
+    /// `[motive_edges].ids` in index order (a motive's index breaks coalescing ties, §5).
+    pub motives: Vec<String>,
+    /// `[attributes]` by name (the map's order is the `attr_id` order).
+    pub attributes: BTreeMap<String, AttributeDomain>,
+}
+
+impl RegistryTable {
+    /// The first four role codes, which the Registry loader pins (envelope v0 §8): what a role
+    /// name means when the host passes no Registry.
+    pub const PINNED_ROLES: [&'static str; 4] = ["actor", "target", "witness", "instrument"];
+
+    /// A role's code: its index in `[event_roles]`, or among the pinned four when the table is
+    /// empty (no Registry passed).
+    #[must_use]
+    pub fn role_code(&self, name: &str) -> Option<u8> {
+        let position = if self.event_roles.is_empty() {
+            Self::PINNED_ROLES.iter().position(|r| *r == name)
+        } else {
+            self.event_roles.iter().position(|r| r == name)
+        };
+        position.and_then(|i| u8::try_from(i).ok())
+    }
+
+    /// A motive's index in `[motive_edges]`.
+    #[must_use]
+    pub fn motive_index(&self, name: &str) -> Option<usize> {
+        self.motives.iter().position(|m| m == name)
+    }
+}
+
+/// An attribute's value domain (envelope v0 §4 rule 5): its Registry type and, for an enum, the
+/// number of its values.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AttributeDomain {
+    /// `q8_8`: raw bits in `i16`'s range.
+    Q8_8,
+    /// `bool`: 0 or 1.
+    Bool,
+    /// `enum` with this many values: an index below it.
+    Enum(usize),
+    /// `int`: any `i32`.
+    Int,
+}
+
+impl AttributeDomain {
+    /// Whether `value` is in the domain.
+    #[must_use]
+    pub fn contains(&self, value: i32) -> bool {
+        match self {
+            Self::Q8_8 => i16::try_from(value).is_ok(),
+            Self::Bool => value == 0 || value == 1,
+            Self::Enum(n) => usize::try_from(value).is_ok_and(|v| v < *n),
+            Self::Int => true,
+        }
+    }
 }
 
 /// Checks one access declaration (`system` reads `reads`, writes `writes`) against the spec

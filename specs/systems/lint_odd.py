@@ -55,6 +55,14 @@ System specs are data (`specs/systems/*.odd.toml`). This tool checks every spec 
     `timer` kind and the [[rng]] `purpose` it is re-sampled under (05.1 §2 rule 2: the sender's timer submits it),
     and the sender binds the draining binding's pulse and phase, where its timer fires (a sender naming a timer
     for a command that carries no outcome is warned),
+  - observed event kinds (EVO-002; 05.1 §2 rule 2, the instant log's part (c)): each [[observes]] entry names a known
+    kind (a Registry verb: the instant log records known kinds only), its emitter (`owner`, the verb's `emitted_by`,
+    which declares it in [[emits]] and is not the declaring system) and `why`; the emitter is one of the declaring
+    system's reads (a `same_instant` [[reads]] entry of one of its columns, so the scheduling edge orders the
+    emitter's bindings before the observer's in every phase both bind, and the identity rule requires the emitter in
+    every world that registers the observer); the observer binds a phase at or after one the emitter binds (the log
+    is cleared at the instant's end, so an event merged in a later phase is never read); a kind is observed once and
+    no other field is allowed. Every rule is an error on every status (the schema is new: no draft predates it),
 and it generates what people and code need from the same source:
   --brief <id>   one-page summary for the director
   --rust  <id>   a Rust skeleton (system id, schedule, RNG purposes, parameter names) so code cannot drift
@@ -303,9 +311,10 @@ def text_at(spec, m):
     return spec.get("initialization", {}).get("state")
 
 
-GENERIC_PATH = re.compile(r"^(?P<sec>system|purpose|owns|emits|commands|applies|reads|scales|fidelity_ladder|schedule|rng|design|initialization|input_data|params|submodels|invariants|couplings|isolation|verification)\.(?P<rest>.+)$")
+GENERIC_PATH = re.compile(r"^(?P<sec>system|purpose|owns|emits|commands|applies|reads|observes|scales|fidelity_ladder|schedule|rng|design|initialization|input_data|params|submodels|invariants|couplings|isolation|verification)\.(?P<rest>.+)$")
 # keyed sections: the field that names an entry (a repeated key carries its ordinal: key, key[1], key[2], in file order)
-KEYED = {"owns": "column", "emits": "kind", "commands": "command", "applies": "command", "reads": "column", "fidelity_ladder": "level",
+KEYED = {"owns": "column", "emits": "kind", "commands": "command", "applies": "command", "reads": "column", "observes": "kind",
+         "fidelity_ladder": "level",
          "rng": "purpose", "params": "name", "submodels": "name", "invariants": "id"}
 PAIR_KEYED = {"couplings": ("system", "direction"), "schedule": ("pulse", "phase")}  # key = "<a>/<b>"
 SUBKEYED = {"patterns": "test", "forcing": "input"}  # purpose.patterns.<test>, isolation.forcing.<input>
@@ -487,6 +496,7 @@ def lint_duplicate_keys(p, s, errs):
         ("invariant id", [i.get("id") for i in s.get("invariants", [])]),
         ("emitted kind", [e.get("kind") for e in s.get("emits", [])]),
         ("applied command", [a.get("command") for a in s.get("applies", [])]),
+        ("observed kind", [o.get("kind") for o in s.get("observes", []) if isinstance(o, dict)]),
         ("schedule binding", [(x.get("pulse"), x.get("phase")) for x in s.get("schedule", [])]),
     ]
     for x in s.get("schedule", []):
@@ -505,6 +515,21 @@ OVERRIDE = re.compile(r"\b(?:replac\w*|overrid\w*|supersed\w*)\b[^.;]{0,60}\b(S\
 def step_label(step):
     """The id of a step text: its first token (`S9`, `F4`, `apply_death:`)."""
     return str(step).split(None, 1)[0].rstrip(":") if str(step).split() else ""
+
+
+def frozen_default_probe(fs, ns):
+    """The self-check's planted change of a frozen default (REV-SPR-015 R6): a copy of the next version ``ns`` with the
+    default of the first parameter whose FROZEN entry in ``fs`` declares one moved by 1, or None when no frozen
+    parameter has a default. A default the next version adds (a draft's new Registry default, carried by the
+    --next overlay and mirrored in [[params]]: R3 of the P1a re-check, 2026-10-18) is not frozen, so the frozen-default
+    rule does not reach it and planting there would prove nothing."""
+    frozen = {x.get("name") for x in fs.get("params", []) if "default" in x}
+    bad = copy.deepcopy(ns)
+    for x in bad.get("params", []):
+        if x.get("name") in frozen and "default" in x:
+            x["default"] = x["default"] + 1
+            return bad
+    return None
 
 
 def amendment_digests(ns):
@@ -1190,6 +1215,7 @@ def lint(reg, specs, req_ids, test_ids, adr_ids, notes=None, next_ids=()):
         for k in sorted(v for v, d in verbs.items() if d.get("emitted_by") == sid and v not in emitted):
             strict_emits.append(f"{p}: the Registry gives verb {k} to {sid}, but [[emits]] does not declare it")
         lint_envelope(p, s, reg, enum_names, errs, warns, hdr.get("status") == "frozen")   # SPR-020: roles, motives, snapshots, cause_column
+        lint_observes(p, sid, s, reg, specs, errs)   # EVO-002: the instant log's observed kinds
         # submodels earn their place
         for sm in s.get("submodels", []):
             ep = sm.get("earns_its_place_by", [])
@@ -1218,6 +1244,55 @@ def lint(reg, specs, req_ids, test_ids, adr_ids, notes=None, next_ids=()):
 def default_problem(value, ct, enum_codes_of_column):
     """Why ``value`` is not a well-typed default for a column of type ``ct`` (envelope_v0.md §7), or None."""
     return neutral_problem(value, ct, enum_codes_of_column)
+
+
+OBSERVES_KEYS = ("kind", "owner", "why")
+
+
+def lint_observes(p, sid, s, reg, specs, errs):
+    """[[observes]] (EVO-002; 05.1 §2 rule 2, the instant log's part (c)): the event kinds a system reads in the instant
+    log, by (kind, target) or by kind, and cites in the merge-time form. Each entry names a known kind (a Registry verb),
+    its emitter (`owner`: the verb's `emitted_by`, another system, which declares the kind in [[emits]]) and why; the
+    emitter is one of the declaring system's reads at `same_instant` (the scheduling edge then orders the emitter's
+    bindings before the observer's in every phase both bind, 05.1 §2 rule 4, and the identity rule requires the
+    emitter in every world that registers the observer); the observer binds a phase at or after one the emitter binds
+    (the log is cleared at the instant's end); a kind is observed once; no other field. Errors on every status."""
+    verbs = reg.get("verbs", {})
+    near = {r.get("owner") for r in s.get("reads", []) if r.get("lag") == "same_instant"}
+    mine = [PHASES.index(x.get("phase")) for x in s.get("schedule", []) if x.get("phase") in PHASES]
+    for o in s.get("observes", []):
+        if not isinstance(o, dict):
+            errs.append(f"{p}: an [[observes]] entry must be a table with kind, owner and why (EVO-002)")
+            continue
+        kind, owner = o.get("kind"), o.get("owner")
+        where = f"{p}: [[observes]] {kind}"
+        extra = sorted(set(o) - set(OBSERVES_KEYS))
+        if extra:
+            errs.append(f"{where}: unknown field(s) {extra}; an entry has {', '.join(OBSERVES_KEYS)} (EVO-002)")
+        if not o.get("why"):
+            errs.append(f"{where} needs a why: what the system reads the kind for (EVO-002)")
+        if kind not in verbs:
+            errs.append(f"{where} is not a Registry verb ([verbs]): the instant log records known kinds only (EVO-002)")
+            continue
+        emitter = verbs[kind].get("emitted_by")
+        if owner != emitter:
+            errs.append(f"{where}: owner {owner} is not its emitter; the Registry gives {kind} to {emitter} (EVO-002)")
+            continue
+        if owner == sid:
+            errs.append(f"{where}: a system does not observe its own kind; a step names its own drafts by DraftRef "
+                        "(05.1 §2 rule 4; EVO-002)")
+            continue
+        if owner in specs and kind not in [e.get("kind") for e in specs[owner][1].get("emits", [])]:
+            errs.append(f"{where}: {owner}'s [[emits]] does not declare {kind} (EVO-002)")
+        if owner not in near:
+            errs.append(f"{where}: {sid} reads none of {owner}'s columns at same_instant; an observed kind's emitter is one "
+                        "of the declaring system's reads, so that the scheduling edge orders its bindings first in every phase "
+                        "both bind and registration requires it (05.1 §2 rule 4; EVO-002)")
+        if owner in specs:
+            theirs = [PHASES.index(x.get("phase")) for x in specs[owner][1].get("schedule", []) if x.get("phase") in PHASES]
+            if mine and theirs and max(mine) < min(theirs):
+                errs.append(f"{where}: {sid} binds no phase at or after one {owner} binds, so it could never read {kind} "
+                            "before the instant log is cleared at the instant's end (EVO-002)")
 
 
 def lint_envelope(p, s, reg, enum_names, errs, warns, frozen=False):
@@ -1354,7 +1429,28 @@ def brief(sid, specs, reg):
     return "\n".join(out)
 
 
-def rust(sid, specs):
+def envelope_constants(s, reg):
+    """The skeleton's envelope constants (SPR-020 T-01; envelope_v0.md §2): one ``ROLE_*`` per [event_roles] id the
+    spec's [[emits]] fill, with its code (the index in the Registry's list, read at generation time), one ``ATTR_*`` per
+    snapshot attribute and one ``MOTIVE_*`` per motive, so that no system crate types a name; and ``ROLES``, the role
+    constants by name, which registration compares with the Registry it runs under (as it compares SCHEDULE)."""
+    order = reg.get("event_roles", {}).get("ids", [])
+    emits = s.get("emits", [])
+    roles = sorted({r for e in emits for r in e.get("roles", []) if r in order}, key=order.index)
+    attrs = sorted({x["attr"] for e in emits for x in e.get("snapshots", [])})
+    motives = sorted({m for e in emits for m in e.get("motives", [])})
+    up = lambda n: re.sub(r"[^A-Za-z0-9]", "_", n).upper()
+    lines = [f"pub const ROLE_{up(r)}: rh_core::RoleId = rh_core::RoleId({order.index(r)});" for r in roles]
+    lines += ["/// The role constants by Registry name: registration compares each code with the Registry's.",
+              "pub const ROLES: &[(&str, rh_core::RoleId)] = &["]
+    lines += [f'    ("{r}", ROLE_{up(r)}),' for r in roles]
+    lines += ["];"]
+    lines += [f'pub const ATTR_{up(a)}: &str = "{a}";' for a in attrs]
+    lines += [f'pub const MOTIVE_{up(m)}: &str = "{m}";' for m in motives]
+    return lines
+
+
+def rust(sid, specs, reg):
     f, s = specs[sid]
     camel = lambda n: "".join(w.capitalize() for w in n.split("_"))
     shown = f.resolve().relative_to(ROOT).as_posix() if f.resolve().is_relative_to(ROOT) else f.name
@@ -1363,6 +1459,12 @@ def rust(sid, specs):
              f'pub const SPEC_VERSION: &str = "{s["system"]["spec_version"]}";',
              "pub const SCHEDULE: &[(Pulse, Phase)] = &["]
     lines += [f"    (Pulse::{x['pulse']}, Phase::{x['phase']})," for x in s["schedule"]]
+    # DECISION (SPR-014 T-01; REV-EVO-001 NIT-10): one (command, Pulse, Phase) per [[applies]] entry, its drained_by, so
+    # registration can compare the code's draining bindings with the spec as it compares SCHEDULE.
+    lines += ["];", "pub const DRAINS: &[(&str, Pulse, Phase)] = &["]
+    for a in s.get("applies", []):
+        pulse, _, phase = str(a.get("drained_by", "")).partition("/")
+        lines.append(f'    ("{a["command"]}", Pulse::{pulse}, Phase::{phase}),')
     # DECISION: the enum carries the spec's purpose names, so code never maps variants to names by
     # hand (registration checks the names against [[rng]], SPR-005 T-06). An empty enum takes no
     # #[repr]: Rust refuses a representation for a zero-variant enum. REF: SPR-005 ruling 2.
@@ -1377,6 +1479,7 @@ def rust(sid, specs):
     lines += [f"    pub {x['name']}: {'u64' if x.get('type') == 'count' else 'Fixed'},  "
               "// bounds checked against the Registry at load" for x in s["params"]]
     lines += ["}"]
+    lines += envelope_constants(s, reg)
     return "\n".join(lines)
 
 
@@ -1425,7 +1528,7 @@ def main() -> int:
         if overlay_errs:
             print("\n".join(overlay_errs))
             return 1
-        print(brief(sid, specs, reg) if gen[0] == "--brief" else rust(sid, specs))
+        print(brief(sid, specs, reg) if gen[0] == "--brief" else rust(sid, specs, reg))
         return 0
     lint_notes = []
     errs, warns = lint(reg, specs, req_ids, test_ids, adr_ids, lint_notes, next_ids=set(frozen))
@@ -1571,12 +1674,9 @@ def main() -> int:
         bad = copy.deepcopy(ns)
         bad["rng"].insert(0, {"purpose": "planted_first", "key": ["person"]})
         probes.append((bad, "must stay at position 0"))
-        bad = copy.deepcopy(ns)
-        for x in bad.get("params", []):
-            if "default" in x:
-                x["default"] = x["default"] + 1
-                probes.append((bad, "frozen default of"))
-                break
+        bad = frozen_default_probe(fz, ns)
+        if bad is not None:
+            probes.append((bad, "frozen default of"))
         # REV-SPR-015 round 3 NIT-4 and NIT-5: a purpose's use text, an unknown amend path, a dropped frozen test or
         # coupling, a frozen parameter's meaning
         bad = copy.deepcopy(ns)
@@ -1752,7 +1852,7 @@ def main() -> int:
             ("draft", [], [ap(payload="{ a: PersonId, a: u64 }")], [], "field a is repeated", True),
             ("frozen", [], [dict(ap(), drained_by=None)], [], "needs drained_by", True),
             ("frozen", [], [ap(drained_by="Day/Agenda")], [], "is drained_by Day/Agenda, which [[schedule]] does not declare", True),
-            ("frozen", [], [ap(drained_by="Day/Agenda", sprint="SPR-014")], [], "ESCAPE [[applies]] X is drained_by Day/Agenda, which [[schedule]] does not declare until SPR-014", False),
+            ("frozen", [], [ap(drained_by="Day/Agenda", sprint="SPR-015")], [], "ESCAPE [[applies]] X is drained_by Day/Agenda, which [[schedule]] does not declare until SPR-015", False),
             ("frozen", [], [ap(drained_by="Day/Agenda", sprint="SPR-999")], [], "sprint SPR-999 names no sprint: no document under CODEX/05_PROJECT and no PRJ row", True),
             ("frozen", [], [ap(drained_by="Day/Agenda", sprint="SPR-006")], [], "(SPR-006 is CLOSED: declare the binding)", True),
             ("frozen", [], [ap(drained_by="Day/Agenda", sprint="P1.13 (SPR-014)")], [], "sprint must be \"SPR-NNN\"", True),
@@ -1767,7 +1867,7 @@ def main() -> int:
             ("frozen", [], [ap(outcome=True)], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }"}], "carries an outcome, so it needs timer", True),
             ("frozen", [], [ap(outcome=True)], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "nope"}], "needs purpose = one of its [[rng]] purposes", True),
             ("frozen", [], [ap(outcome=True, **{"from": ["S5.daily_life"]})], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "fix"}], "", False),
-            ("frozen", [], [ap(outcome=True, drained_by="Day/Agenda", sprint="SPR-014", **{"from": ["S5.daily_life"]})], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "fix"}], "in the timer pass of Day/Agenda, which S5.daily_life does not bind", True),
+            ("frozen", [], [ap(outcome=True, drained_by="Day/Agenda", sprint="SPR-015", **{"from": ["S5.daily_life"]})], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "fix"}], "in the timer pass of Day/Agenda, which S5.daily_life does not bind", True),
             ("frozen", [], [ap(**{"from": ["S5.daily_life"]})], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "fix"}], "names a timer, but the owner's [[applies]] says it carries no outcome", False),
             ("frozen", [rd("title.holder", "M7.dynasty", "identity")], [], [], "a substrate reads title.holder from M7.dynasty as identity", False),
             ("draft", [rd("title.holder", "M7.dynasty", "identity")], [], [], "a substrate reads title.holder from M7.dynasty as identity", False),
@@ -1776,7 +1876,7 @@ def main() -> int:
         for status, reads, applies, commands, needle, want_err in probes:
             probe_spec = dict(base, system=dict(base["system"], status=status), reads=reads, applies=applies, commands=commands)
             CLOSED_SPRINTS.add("SPR-006")
-            KNOWN_SPRINTS.update({"SPR-006", "SPR-014"})
+            KNOWN_SPRINTS.update({"SPR-006", "SPR-014", "SPR-015"})
             pe, pw = lint(reg, {M2: specs[M2], "M7.dynasty": specs["M7.dynasty"], "S5.daily_life": (Path("probe.odd.toml"), probe_spec)}, req_ids, test_ids, adr_ids) if "M7.dynasty" in specs else lint(reg, {M2: specs[M2], "S5.daily_life": (Path("probe.odd.toml"), probe_spec)}, req_ids, test_ids, adr_ids)
             pe = [e for e in pe if e.startswith("probe.odd.toml")]
             pw = [e for e in pw if e.startswith("probe.odd.toml")]

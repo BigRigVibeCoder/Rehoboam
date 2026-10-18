@@ -9,7 +9,7 @@ tags: [roadmap, project-management]
 related: [PRJ-001, BCK-001, BCK-002, SPR-011, VER-G0]
 created: 2026-10-16
 updated: 2026-10-18
-version: 0.5.12
+version: 0.5.13
 ---
 
 # PRJ-002 — P1a "Bloodlines": sprint plan
@@ -46,9 +46,10 @@ Goal (ADR-0035): a dynasty lives, dies and inherits deterministically, and the t
 | SPR-025 | P3.2a (c) | Minds v0 (c): stress with exact accounting (V-SAGA-16); grief over a kin classification that reaches the Registry's `kin_other`, damped per instant, naming the same-instant `DEATH` through the instant log (X1(c)); dissonance; mental breaks from the typed `[mental_breaks]` (A-24, part), chosen against the binding's start state, with a refractory period (red-team item 1); `FLED` and `DESPAIR_PACT` as the first real verb programs; **V-SAGA-16b made non-vacuous** (a stress-capable gate court, a massacre variant, at least 30 breaks per variant or NOT EXERCISED, nightly-only, with one planted FAIL asserted (R13); `twin_vales` reported only) | SPR-024b (X9) | C2 (X12); about 5.25–6 agent-days, one sprint with a hard checkpoint after T-02 (X8) | `T1.minds` 0.5.0's S-steps (T1-I/S); `[mental_breaks]` typed in the sprint; `registry_version` bumped by SPR-030. Plan: `SPR-025_MindsStressBreaks.md` | P1 |
 | SPR-026 | P1.17 (a) | World Stream v1: live edge over a local socket, viewer cursors, `stream.subscribe` / `stream.status`, catch-up from sealed segments, channel C live | SPR-013 | C2 (IF-0); channel A unchanged | `05.10`, `05.9` IF-0 (exist, prose); wire format, `rh-protocol` (missing) | P1 |
 | SPR-027 | P1.17 (b) | World Stream v1: the materializer (V-STR-02, on SPR-013's replay path), the pace command over `control.sock`, `tail` filters and the world digest (the regional digest moved to SPR-018 by D-4, then to S3 F1 in P1b by D57 item 2), the Textual TUI stub | SPR-026; `specs/stream/control_v1.md` as a reviewed spec PR before its T-03 (W30) | C2 / C1; about 3.5 agent-days | `05.10` (exists, §6 noted); `control_v1.md` (missing: SPR-027 T-01). Plan: `SPR-027_Materializer.md` | P1 |
-| SPR-028 | P1.10 | M9 harness v0: isolation harness (V-SF-22) for M2, M7, `T1.minds`; demography and dynasty bands; censoring-aware lifespans; 32-seed ensembles; the run report; coverage gates (A-15) | SPR-016, SPR-022, SPR-025 | C1 (tools) | `09` §3.1 (exists); `[isolation]` of M7 and T1 (missing with their specs) | P1 |
-| SPR-029 | P2.8a | Family annals v0: templates for births, marriages, deaths, successions, claims and feuds, with provenance links (plane C, `python/`) | SPR-015, SPR-020, SPR-021 | C1 | template set (missing); `05.11` (exists) | P1 |
-| SPR-030 | P1.14 | Determinism and performance at scale: allocations to budget (A-32), benches 1–3, the dynastic fixture world's goldens, CRN pairing (V-DET-17), the G1a performance run | SPR-019, SPR-022, SPR-025 | C1 with C3 (new golden worlds) | dynastic fixture and 10k dynastic manifests (drafting: `twin_vales.yaml`, `kingdom_10k.yaml`, `specs/worldgen/fixture_worlds.md`, `specs/determinism/crn_pairing_v0.md`); `08` §9 (exists) | P1 |
+| SPR-028 | P1.10 | M9 harness v0: isolation harness (V-SF-22) for M2, M7, `T1.minds`; demography and dynasty bands; censoring-aware lifespans; 32-seed ensembles; the run report; coverage gates (A-15) | By task (REV-WAVE8 G19): **stage A (`SPR-028a`)** after SPR-015, SPR-016, SPR-018, SPR-019 stage A and PY-PKG (S6), SPR-038b recommended; **stage B (`SPR-028b`)** after SPR-024b (M7 and T1 `BUILT`, X6), SPR-025, SPR-019b (`worlds/twin_vales/`, X1), SPR-021b (its stub sender and `check_m7_successions.py` reader), SPR-022b, SPR-023 (their stubs) and SPR-038b (`inserted()`). Stage A before SPR-030b1 (`expected_spread`); stage B before SPR-030b2 (`bin/g1a_ensembles.sh`) | **Stage A C1, stage B C2** (the test-only forcing crate on `ENGINE_CRATES`, which no golden world registers; its forcing files pinned by `check_pin`: G13, S2); no baseline moves; about 8.0–9.0 agent-days (A 4.0–4.5 with the harness spec's review round, B 4.0–4.5) (D61 items 1, 9) | `09` §3.1 (exists); M2's `[isolation]` expect (1), gated on the seed-mean r with a 99.9% t-interval since A-62 (PR #94; G10), every gated band at 99.9% (S1); the `[isolation]` tables of M7 and T1 (exist; forcing series in prose: finding F-9); the harness contract, the band and forcing tables (missing: SPR-028 T-01, independently reviewed). V-GOLD-03 runs as an Architect-run dispatch on each C3 PR (G12). Plan: `SPR-028_ValidationHarness.md` (revision 2) | P1 |
+| SPR-029 | P2.8a | Family annals v0: templates for births, marriages, deaths, successions, claims and feuds, with provenance links (plane C, `python/`) | By task (G19, A1): development after SPR-015, SPR-020, PY-PKG (S6) and **AN-1** (the annals fixtures for M7 F1, before T-02); **AN-0** (the fold) before T-03; the dynastic case and **the merge after SPR-024b and SPR-019b** (`worlds/twin_vales/`, X1) | C1; no baseline moves; **no annals fixture or golden regenerated here** (G15); about 4.75–5.25 agent-days, one sprint with a checkpoint after T-01 (D61 items 1, 7) | `specs/annals/` (exists; REV-SPR-029 closed); the run's inputs exported by `rh-cli annals-inputs` in the canonical text form, the rebuilt genesis checked against the tick-0 `LIFE_ENTRY` lines and against rung 1 of `run.ladder` after one replayed year (findings F-2, F-3; G16, A3). Plan: `SPR-029_FamilyAnnals.md` (revision 2) | P1 |
+| SPR-030 | P1.14 | Determinism and performance at scale: allocations to budget (A-32), benches 1–3, the dynastic fixture world's goldens, CRN pairing (V-DET-17), the G1a performance run | By task (G19): **stage A (`SPR-030a`)** after SPR-038a, SPR-038b, SPR-016, SPR-019 stage A (bench 1) and SPR-019b (the A-68 probe); **the Architect rules A-68's form on stage A's probe before stage B1** (C3); **stage B1 (`SPR-030b1`)** after SPR-019b (`worlds/twin_vales/`, X1), SPR-024b, SPR-025, SPR-022b (the band re-derived), SPR-017 and SPR-028a; **stage B2 (`SPR-030b2`)** after B1, SPR-026, SPR-027, SPR-028b and SPR-038b | about 10–12 agent-days in three PRs (G22): **SPR-030a** (A-32's machinery allocations at 0 per site at 1 thread and a per-spawn constant at 4 threads, C1; the two serial numbers, A-45; benches 1–2; A-46's per-draw cost; the 10-year `kingdom_10k` A-68 probe: **C2** with `[perf-baseline]` if every draw stays bit-identical, else T-11 is its own C3 PR (G3); about 3.65–4.15), **SPR-030b1** (V-DET-17 on the engine at A-62 E4's seeds, then `twin_vales` made the fifth golden world on SPR-019b's directory, the population bands from the regenerated goldens; **C3**, the corpus changes; about 3.0–3.75) and **SPR-030b2** (the G1a session in its own `g1a.yml` workflow: the verdict pre-registered with its five terms (C4), V-PERF-09 on SPR-026's memory gate, A-67 on more than 4 unsealed years (C2), A-60 at scale, A-68 only on a miss the digest causes (C3), bench 3; C1; about 3.25–4.0, re-sized at the Tester's first pass). No stage M (G1); the worker pool a P1b spike (G2) (D61 items 1, 2, 5, 6, 9) | `twin_vales.yaml`, `kingdom_10k.yaml`, `specs/worldgen/fixture_worlds.md` (0.5.1), `specs/determinism/crn_pairing_v0.md` (0.4.1) (exist; REV-SPR-030 closed; A-62's goldens on `main`); `08` §9 (exists; benches 1–2 sized against `docs/11`, finding F-6); SPR-026's built memory gate (`crates/rh-cli/tests/memory.rs`, on its sprint branch). Plan: `SPR-030_ScaleAndGoldens.md` (revision 2) | P1 |
+| SPR-030c | P1.14 (conditional) | **Only if A-67 fires at G1a** (REV-WAVE8 C2: more than 4 unsealed years on `kingdom_10k` with V-PERF-09's viewers attached): the live edge's byte cap, as a reviewed D42 (b) amendment of `specs/stream/wire_v1.md` §6.1 (a byte cap under which the host thread waits for its own seal, never for a viewer), then the cap in the stream host, with V-PERF-09 re-run on `adjutant`. Until it lands, V-PERF-09 is FAIL at G1a unless the director waives it | SPR-030b2's session (A-67's outcome); SPR-026 | C2 (IF-0 behaviour; no hash); about 2–3 agent-days with the spec PR's review round | `wire_v1.md` §6.1 (exists; the amendment written only if A-67 fires). Plan: written if A-67 fires | P1 if it fires (it gates G1a's V-PERF-09) |
 | SPR-031 | P1.18 | **Moved to P1b (D33).** `S5.daily_life` F1: virtual telemetry, `rh-cli where` / `who`, `DECISION_TRACE`; exact lags (A-28) | SPR-018, SPR-024 | C3 (lags) with C2 | `S5.daily_life` (draft); its reads of `person.residence` (S3), `person.occupation` (M4), `region.conditions` (M6) have no owner in P1a | P3: in P1b (D33; ruling M-4) |
 | SPR-032 | P1.8 | **Moved to P1b (D33).** M1 Regions F1: route modes and costs, settlement growth | SPR-018 | C3 | `M1.regions` F1 (missing) | P3: in P1b (D33; ruling M-5) |
 | SPR-038a | P1.14 (prep; BCK-002 A-60), stage A | Per-instant engine cost, stage A (exact): owned columns moved by `ColumnId` slots; compaction, `Ledger::check`, the invariants and the lagged snapshot only after a change, with `every-change` semantics in every build; the write guards' pre-image at a column's first `write()` (SPR-014's known narrowing removed); `Ledger::check` and M2's invariants in O(N + L); positional compaction; no `format!` or allocation on a quiet instant; the cached plane hash equal to the full one after every instant; the `instant` bench. Behaviour-neutral: no baseline moves | SPR-014 merged; SPR-020 in either order; **before SPR-015** (REV-SPR-038 S6: CI's core part at the hard limit) | C2 with `[perf-baseline]`; about 3–4.5 agent-days; outside the one-C3 slot | No system spec; a `05.1` §9 sentence by the Architect; `docs/08` §9 line. Plan: `SPR-038_PerInstantCost.md` stage A (PLANNING revision 1; D60) | P1 |
@@ -113,27 +114,54 @@ flowchart LR
   S024b --> S025[SPR-025<br/>P3.2a-c stress, breaks, C2]
   S013 --> S026[SPR-026<br/>P1.17a live edge, cursors]
   S026 --> S027[SPR-027<br/>P1.17b materializer, TUI stub]
-  S016 --> S028[SPR-028<br/>P1.10 M9 harness]
-  S022b --> S028
-  S025 --> S028
-  S038b --> S028
-  S015 --> S029[SPR-029<br/>P2.8a family annals]
+  PYPKG([PY-PKG<br/>Python packaging, C1]) --> S028[SPR-028a<br/>P1.10 harness, demography gates, C1]
+  PYPKG -.T-05.-> S027
+  S015 --> S028
+  S016 --> S028
+  S018 --> S028
+  S019 --> S028
+  S038b -.recommended.-> S028
+  S028 --> S028b[SPR-028b<br/>P1.10 isolation, dynasty report, coverage, C2]
+  S024b --> S028b
+  S025 --> S028b
+  S022b --> S028b
+  S021b --> S028b
+  S023 --> S028b
+  S019b --> S028b
+  S038b --> S028b
+  S015 --> S029[SPR-029<br/>P2.8a family annals, C1]
   S020 --> S029
-  S021b --> S029
-  S019 --> S030[SPR-030<br/>P1.14 scale and goldens]
-  S019b --> S030
-  S022b --> S030
-  S025 --> S030
+  PYPKG --> S029
+  T00a --> AN1([AN-1 spec PR<br/>annals fixtures for M7 F1])
+  AN1 -->|before T-02| S029
+  AN0([AN-0 micro-PR<br/>the annals fold]) -->|before T-03| S029
+  S019b --> S029
+  S024b -->|the merge| S029
+  S016 --> S030[SPR-030a<br/>P1.14 machinery, A-46, A-68 probe, C2]
+  S019 -->|bench 1| S030
+  S019b -->|A-68 probe| S030
   S038b --> S030
+  S030 -->|A-68's form ruled| S030b1[SPR-030b1<br/>P1.14 V-DET-17, twin_vales golden, bands, C3]
+  S017 --> S030b1
+  S019b --> S030b1
+  S022b --> S030b1
+  S024b --> S030b1
+  S025 --> S030b1
+  S028 -->|expected_spread| S030b1
+  S030b1 --> S030b2[SPR-030b2<br/>P1.14 the G1a session, C1]
+  S026 --> S030b2
+  S027 --> S030b2
+  S028b --> S030b2
+  S030b2 -.if A-67 fires.-> S030c[SPR-030c<br/>byte cap, conditional, C2]
   S018 --> S031[SPR-031<br/>P1.18 S5 F1: P1b, D33]
   S024b --> S031
   S018 --> S032[SPR-032<br/>P1.8 M1 F1: P1b, D33]
   S027 --> G1a([G1a])
-  S028 --> G1a
+  S028b --> G1a
   S029 --> G1a
-  S030 --> G1a
+  S030b2 --> G1a
   classDef crit stroke-width:3px
-  class S011,S012,S013,S014,S015,T00a,S021a,S021b,S022a,S022b,S030 crit
+  class S011,S012,S013,S014,S015,T00a,S021a,S021b,S022a,S022b,S030,S030b1,S030b2 crit
 ```
 
 The heavy-bordered nodes are the critical path.
@@ -152,13 +180,24 @@ Three development lanes. The director set 3–4 active agent sessions as the nor
 | 5 | SPR-015 | SPR-016 | SPR-027 | Births unblock M7, minds, population synthesis and residence |
 | 6 | T-00a, then T-00b (M7's spec PRs, C2: X7, ruling R6); SPR-021a's development, which merges after SPR-019 stage A (X13a) | SPR-023 | SPR-018, then SPR-019 (stage A) | M7 needs births, delivery, the effect language, roles, its 0.6.0 text and stage A's `TitleId` and `HouseId`. Minds start as soon as there are relatives to have opinions about |
 | 7 | SPR-021a, SPR-021b, SPR-022a; SPR-022b after SPR-019b (all C2: X6) | SPR-024 (024b after SPR-022a and SPR-019b: X13e, ruling R5) | SPR-019b, the back-fill (in any gap once D56's (e) is settled: D57; in either order with SPR-021a: REV-SPR-019 R13) | Population synthesis needs settlements and houses, and feeds the dynastic world |
-| 8 | SPR-030 (prep: A-32, benches) | SPR-025 | SPR-029 | Annals need successions and the envelope; A-32 is hash-neutral (C1) and can start before the goldens |
-| 9 | SPR-030 (goldens, G1a runs) | SPR-028 | — | The harness and the scale run read everything the systems produce, so they come last |
+| 8 | SPR-030a (A-32's machinery, A-45, benches 1–2, A-46, the A-68 probe; C2) | SPR-025; SPR-028a (the harness, the demography gates; after PY-PKG) | SPR-029 (developed on the rungs after AN-1; merged after SPR-024b) | Stage A and the harness's demography half need only waves 5–7 and SPR-038, so they land early in any gap between C3 merges; the annals need the envelope, AN-1, then M7 and T1 built (REV-WAVE8 G19, A1) |
+| 9 | SPR-030b1 (V-DET-17, `twin_vales` golden, bands; the last C3 of P1a, after A-68's form is ruled on SPR-030a's probe), then SPR-030b2 (the G1a session) | SPR-028b (isolation, the dynasty report, coverage) | SPR-030c only if A-67 fires at G1a | The isolation harness, the golden dynastic world and the scale run read everything the systems produce, so they come last; the `adjutant` session follows SPR-030b2 and SPR-028b |
 | P1b | SPR-031, SPR-032 (D33) | — | — | Not on the G1a path (rulings M-4, M-5) |
 
 **SPR-038** (BCK-002 A-60) runs as two C2 stages with no baseline move, outside the one-C3 slot (REV-SPR-038; D60): **stage A (`SPR-038a`)** right after SPR-014, in either order with SPR-020 and **before SPR-015**, which rebases onto it and hooks its derived index onto stage A's write set; **stage B (`SPR-038b`)** in any gap after stage A, before SPR-018 if possible, before SPR-023 (which consumes its instant log), and before SPR-030's G1a performance run in any case (shared ruling X9). SPR-038 is necessary for G1a; SPR-030 measures whether it is sufficient. Its number follows SPR-033 to SPR-037, which PRJ-003's viewer lane holds.
 
 **The minds lane (D59, pending; the cross-plan rulings X7–X9 and the round-2 rulings R5 and R7 of 2026-10-18)** replaces lane 2's SPR-023 to SPR-025 entries of waves 6 to 8: the T1-A spec PR now, in parallel with T-00a; SPR-023 after SPR-015, T1-A and SPR-038 stage B, in any gap of the C3 slot (C2); the T1-I/S spec PR after T-00a and SPR-023 T-01 (a new `next/T1` 0.5.0 draft over the promoted 0.4.0, on SPR-024a's critical path: R7); SPR-024a (C2) after SPR-021b, SPR-023 and T1-I/S; SPR-024b (C3, the one `BUILT` move for M7 and T1) after SPR-022a and SPR-019b (R5); SPR-025 (C2) after SPR-024b; all before SPR-028 and SPR-030.
+
+**The nightly-minutes ledger** (REV-WAVE8 X2; the Architect keeps it). The golden nightly job's last scheduled run took 32.2 minutes of its 45-minute timeout (run `39015254184`, 2026-10-17), so its headroom is about 12.8 minutes; a plan whose addition would exceed what is left moves it to a weekly workflow. Minutes are per run, the drafters' estimates until measured; the monthly allowance is D61 item 8's question to the director (X3).
+
+| Plan | Addition | Where | Minutes per run |
+|---|---|---|---|
+| SPR-019b or SPR-038b (X1) | `twin_vales`' 300-year debug soak (SPR-038's soak-inventory rule) | the golden nightly, daily | to be measured |
+| SPR-029 | `twin_vales` seed 1: 50 years with the reference differential, 300 years port-only (the timing line) | the golden nightly, daily | about 1–2 |
+| SPR-028a, SPR-028b | the demography ensemble, the mutant checks, the spread's `--resim`, the reduced isolation ensembles, coverage | `validation.yml`, weekly (split if over 45) | about 32–52 |
+| SPR-030b1 | `twin_vales`' 1,000-year ladders, three 300-year run directories, the CRN search and mutants, the allocation control | `dynastic.yml`, weekly (split if over 45) | about 28–55 |
+| SPR-028a, SPR-030b1 | the reduced `pull_request` cases of `validation.yml`, `dynastic.yml` and `ensemble.yml` | on a PR that touches their paths | about 3–5 each |
+| Other plans | the Architect's entries | — | — |
 
 ## 5. What each sprint gives Gate G1a
 
@@ -166,18 +205,18 @@ The G1a list is one list, the same in `docs/11` and `docs/09` §5, with P1a vari
 
 | G1a criterion (`docs/11`) | Tests | Delivered by |
 |---|---|---|
-| Determinism on `smoke`, rungs 0–2 and a dynastic fixture world | V-DET-01, V-DET-02, V-DET-12 | SPR-011–013 (rungs 0–2); SPR-030 (fixture) |
+| Determinism on `smoke`, rungs 0–2 and a dynastic fixture world | V-DET-01, V-DET-02, V-DET-12 | SPR-011–013 (rungs 0–2); SPR-030b1 (`twin_vales`, whose levels are all serial, so `smoke` carries thread invariance) |
 | Invariants over a 1,000-year soak | V-INV-01, -02, -03, -11, -12 | SPR-012, SPR-013 (01, 02, 11); SPR-021 (03, with succession); SPR-019, SPR-022 (12); 03 and 12 in their P1a variants (D34) |
 | Identity and life course | V-DATA-04 (P1a variant, D34), V-DATA-05 | SPR-012 (founders); SPR-015 (births); SPR-018 (residence) |
-| CRN pairing | V-DET-17 | SPR-030 |
-| Demography bands | V-SF-01, V-SF-02, V-SF-02b | SPR-016 with SPR-028 |
-| Isolation | V-SF-22 for M2, M7, `T1.minds` | SPR-028 |
+| CRN pairing | V-DET-17 | SPR-030b1 |
+| Demography bands | V-SF-01, V-SF-02, V-SF-02b | SPR-016 with SPR-028a (V-SF-01 on the seed-mean r) |
+| Isolation | V-SF-22 for M2, M7, `T1.minds` | SPR-028b |
 | Minds | V-COG-03, V-COG-04 | SPR-024a (the probe type), SPR-024b (the real types) |
-| Succession | V-SF-06, V-SF-06b reported; V-SAGA-19 | SPR-022 with SPR-028; SPR-021 |
-| Stream | V-STR-01–03, V-STR-05, V-PERF-09 | SPR-013 (01); SPR-026 (03, 05); SPR-027 (02); SPR-030 (V-PERF-09, P1a variant: D34) |
-| Envelope and stress | V-SAGA-15 (P1a variant: the 10k dynastic world, 100 years); V-SAGA-16's stress-accounting identity (its break band is reported at G1a and gates G1b: D34); V-SAGA-16b, no runaway grief chain on the isolation fixture court | SPR-020; SPR-025 |
-| Performance: 10k persons, ≤ 500 named actors, 1,000 years in ≤ 60 s on 8 cores | (G1a default) | SPR-030 |
-| [H] the family history of 3 seeds | — | SPR-029, then the director |
+| Succession | V-SF-06, V-SF-06b reported; V-SAGA-19 | SPR-022 with SPR-028b (the dynasty report); SPR-021 |
+| Stream | V-STR-01–03, V-STR-05, V-PERF-09 | SPR-013 (01); SPR-026 (03, 05); SPR-027 (02); SPR-030b2 (V-PERF-09, P1a variant: D34, on SPR-026's memory gate; SPR-030c if A-67 fires) |
+| Envelope and stress | V-SAGA-15 (P1a variant: the 10k dynastic world, 100 years); V-SAGA-16's stress-accounting identity (its break band is reported at G1a and gates G1b: D34); V-SAGA-16b, no runaway grief chain on the isolation fixture court | SPR-020 (the tables); SPR-030b2 (V-SAGA-15's P1a measure on `kingdom_10k`'s first 100 years: `specs/chronicle/envelope_v0.md:186`, `SPR-020_EventEnvelope.md:325`; finding F-17); SPR-025 (V-SAGA-16, V-SAGA-16b) |
+| Performance: 10k persons, ≤ 500 named actors, 1,000 years in ≤ 60 s on 8 cores | (G1a default) | SPR-030b2 (the verdict pre-registered: REV-WAVE8 G5, C4) |
+| [H] the family history of 3 seeds | — | SPR-029 (after SPR-024b), then the director |
 
 ## 6. Specs to write before their sprints (replaces BCK-001 §3 for P1a)
 
@@ -200,6 +239,9 @@ The G1a list is one list, the same in `docs/11` and `docs/09` §5, with P1a vari
 | `T1.minds` (with the commands it accepts, stress and breaks, grief damping from red-team item 1, practices from item 10a evaluated) | SPR-023–025 | Frozen 0.3.1 on `main` (D36; PR #32), 0.3.2 (PR #49, EVO-001), 0.3.3 (SPR-020's envelope); prose submodels, no `[algorithm.*]` table and no exact reference. **Two reviewed spec PRs (X7; D59 item 2), counted here and not in the sprints' sizes:** **T1-A** (0.4.0: the A-steps, `[[reads]] person.id`, `mind.person`, world start by X4, the `rh-minds` pin, `specs/minds/selftest_minds_v0.py` with its A-cases and its own `check_all` line; about 3–4 Architect-days plus a review round; commissioned now, before SPR-023, promoted by SPR-023 T-01); **T1-I/S** (the I- and S-steps, `[[observes]]` under EVO-002, `break_timer` as a flag, the timer purposes and re-sample rules, V-SAGA-16b's stress-capable gate fixture, the reference's I- and S-cases; about 3.5–5 Architect-days plus a review round; a new `next/T1` 0.5.0 draft, because `next/` holds one draft per system: written after T-00a and after SPR-023 T-01 promotes 0.4.0, so it sits on SPR-024a's critical path (R7); T1's parameters get `default`s through `specs/systems/next/registry_delta.toml`, which SPR-024a T-01 moves into the Registry, and `manor.yaml` is not edited (R8); proposed: a `manor` case in `specs/worldgen/selftest_fixture_worlds.py`, whose `named_at_start` line SPR-024b's probe reads (no golden holds one today; SPR-024 row 16); promoted by SPR-024a) |
 | Stream v1 wire format (`rh-protocol`) | SPR-026 | In review: `specs/stream/wire_v1.md`, `selftest_wire_v1.py`, `golden/wire_v1.txt`; lint rules `protocol-leaf` and `network` |
 | Family-annals template set | SPR-029 | Drafted (2026-10-17, the annals PR): `specs/annals/annals_v0.md` (the contract), `specs/annals/templates_v0.toml` (16 kinds: births, marriages, deaths, successions, claims, feuds; slots bind only to envelope fields), `specs/annals/selftest_annals_v0.py` (the exact renderer: calendar dates, designation, grouping by house, line and year, the provenance sidecar and digest, golden annals of three fixture chronicles) and `specs/annals/lint_templates.py` (every slot resolves to a declared role, snapshot, payload slot, motive or edge; every out-of-scope kind has a label) and `specs/annals/fixtures/gen_fixtures.py` (the fixtures derived from M2's and M7's rules); round 5 after REV-SPR-029 R1–R42; D49 (names) and D50 (V-NAR-05 and the prologue) ruled by the director on 2026-10-17 |
+| **AN-0** (REV-WAVE8 A1): the annals fold. `[algorithm.annals_fold]`'s reference function and subcommand: XXH3-128 over the 16-byte group digests, as `annals_v0.md` §9 states; no fixture change | SPR-029 T-03 | To commission now. C1, a micro-PR, about 0.5 day, one review round |
+| **AN-1** (REV-WAVE8 A1): annals fixtures for M7 F1. K2's vassal `INTERREGNUM_CRISIS` fixture, F-21's distinguishing child, check 5's rule (an `INTERREGNUM_CRISIS` on a non-sovereign title only while its liege's interregnum is open) and its control; goldens by `--write` | SPR-029 T-02 | To commission after T-00a merges (K2 is M7 0.6.0 text). C1, about 1–1.5 days plus one review round; it merges before SPR-029 T-02. SPR-021's F-21 points here |
+| **PY-PKG** (REV-WAVE8 S6): the Python TUI packaging step carved out of SPR-027 T-05 (`package = true`, the package layout, `uv lock` refreshed) | SPR-028a, SPR-029, SPR-027 T-05 | To commission. C1, about 0.25 day; SPR-027 T-05 consumes it |
 | Dynastic fixture world; 10k dynastic manifest (extend A-06) | SPR-030 | Drafting (2026-10-17, PR #73, REV-SPR-030 round 1 applied): `specs/manifest/examples/twin_vales.yaml` and `kingdom_10k.yaml`, `specs/worldgen/fixture_worlds.md` (per-gate mechanism statements and arithmetic; the population projection with the house-member mechanics, `project_population.py`), the exact reference `specs/worldgen/selftest_fixture_worlds.py` with its golden (the named set under M7's full rule, every title's line), the V-DET-17 protocol `specs/determinism/crn_pairing_v0.md` with `selftest_crn_pairing.py` (VALID pairs, exact CRN, five controls); A-06's `village` stays open (its content is P1b's: `fixture_worlds.md` D-08); `density_capacity: 10000` is SPR-030's first C1 change once M2 F1 is frozen (REV-SPR-030 R1a) |
 | Owners or neutral stand-ins for S5's reads | SPR-031 (P1b, D33) | Missing |
 | `M3.agriculture`, `M4.economy`, `M6.polity`, `S6`/`S7` freeze | P1b | M3, M4, M6 missing; S6, S7 drafts |

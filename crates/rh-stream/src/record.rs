@@ -328,7 +328,7 @@ pub struct StepDigest {
 /// `KEYFRAME`: a pointer to a full snapshot.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Keyframe {
-    /// `rehoboam/rh-snapshot/keyframe/v1`.
+    /// `rehoboam/rh-snapshot/keyframe/v2` (v1 before SPR-020).
     pub keyframe_format: String,
     /// Relative to the run directory.
     pub keyframe_path: String,

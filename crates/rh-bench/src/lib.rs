@@ -31,5 +31,7 @@ pub mod alloc_count;
 // SPR-011 T-02 (BCK-002 A-37): the draw-cost bench's world.
 pub mod draws;
 pub mod fixture;
+// SPR-038 T-01 (BCK-002 A-60): the per-instant cost bench's world.
+pub mod instant;
 pub mod rungs;
 pub mod smoke;

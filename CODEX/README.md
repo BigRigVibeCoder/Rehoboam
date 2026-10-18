@@ -7,7 +7,7 @@
 | You are | Read, in order |
 |---|---|
 | **The director** | `../docs/decisions_pending.md` (what waits on you) → `05_PROJECT/PRJ-001_Roadmap.md` → the latest `40_VERIFICATION/VER-*` |
-| **Any agent** | `../CLAUDE.md` (non-negotiables) → `../AGENTS.md` → `00_INDEX/MANIFEST.yaml` → `10_GOVERNANCE/GOV-007`, `GOV-005`, `GOV-002` → your `80_AGENTS/AGT-*` boot doc → your sprint in `05_PROJECT/` |
+| **Any agent** | `../HANDOFF.md` (while a handoff is in progress) → `../CLAUDE.md` (non-negotiables; binds every agent) → `../AGENTS.md` → `00_INDEX/MANIFEST.yaml` → `10_GOVERNANCE/GOV-007`, `GOV-005`, `GOV-002`, `GOV-009` (Git and GitHub), `GOV-010` (CI), `GOV-011` (agent sessions and handoffs) → your `80_AGENTS/AGT-*` boot doc → your sprint in `05_PROJECT/` |
 
 ## Areas
 
@@ -15,7 +15,7 @@
 |---|---|---|
 | `00_INDEX/` | `MANIFEST.yaml`, **generated locally** by `../bin/gen_manifest.py`; not committed; never edit by hand | Architect (generator) |
 | `05_PROJECT/` | `PRJ-001` roadmap front page, `BCK-001` development backlog, `BCK-002` architect backlog, `SPR-*` sprints | Architect; director approves priorities |
-| `10_GOVERNANCE/` | `GOV-001`–`GOV-008`: documentation, testing, coding, errors and logging, lifecycle, observability, project management, infrastructure | Director |
+| `10_GOVERNANCE/` | `GOV-001`–`GOV-011`: documentation, testing, coding, errors and logging, lifecycle, observability, project management, infrastructure, Git and GitHub, CI, agent sessions and handoffs | Director |
 | `30_RUNBOOKS/` | Step-by-step procedures, starting with `RUN-001` (laptop setup) | Architect |
 | `40_VERIFICATION/` | `VER-SPR-*` sprint audits; `VER-G*` gate reports | Architect, Testers |
 | `50_DEFECTS/` | `DEF-*` | Testers, Architect |

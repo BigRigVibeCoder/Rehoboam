@@ -25,3 +25,9 @@ arrow-buffer = { version = "=60.0.0", default-features = false }
 arrow-ipc = { version = "=60.0.0", default-features = false, features = ["zstd"] }
 arrow-schema = { version = "=60.0.0", default-features = false }
 
+
+[features]
+# The planted control of SPR-014 T-02 (REV-EVO-001 R15): an encoder that writes `u8 0` for a timer
+# without a cause, which the round-3 reviewer measured moving `agenda.timers` at 849 smoke rungs.
+# `tests/golden.rs` must FAIL with it, at its first differing vector. No build of a world enables it.
+mutant-cause-u8-zero = []

@@ -35,6 +35,8 @@ rh-protocol = { version = "0.0.0", path = "../rh-protocol" }
 rh-sifter = { version = "0.0.0", path = "../rh-sifter" }
 
 [dev-dependencies]
+# SPR-020 T-06: the envelope world's stub systems build full-envelope drafts.
+rh-events = { version = "0.0.0", path = "../rh-events" }
 # SPR-013 T-12: the tampered-journal controls edit the journal file below the journal's API (the
 # version and features rh-snapshot already pins: nothing new in the lock).
 rusqlite = { version = "=0.40.2", default-features = false, features = ["bundled"] }

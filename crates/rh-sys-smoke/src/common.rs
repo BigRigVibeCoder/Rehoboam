@@ -3,7 +3,7 @@
 use rh_core::fixed::Q16_16;
 use rh_core::system::SimError;
 use rh_ids::rng::{h64_words, tag};
-use rh_ids::{EntityRef, PersonId, RegionId};
+use rh_ids::{EntityRef, PersonId, RegionId, WorldKey};
 
 /// Person rows.
 pub const PERSONS: usize = 64;
@@ -30,8 +30,10 @@ pub(crate) fn region(row: usize) -> RegionId {
     RegionId::from_raw(u16::try_from(row).unwrap_or(u16::MAX))
 }
 
-/// The key of world-level draws: a region id no region row has.
-pub(crate) const WORLD: RegionId = RegionId::from_raw(u16::MAX);
+/// The key of world-level draws (`[[rng]] key = ["world", ...]`): a world key (BCK-002 A-50,
+/// SPR-014 T-07) whose `entity_id` is 65,535, the region-id sentinel no region row has, which the
+/// smoke world drew with before SPR-014: its draws, and the golden ladder, are unchanged.
+pub(crate) const WORLD: WorldKey = WorldKey::from_raw(65_535);
 
 /// `n` whole units as the Q16.16 bits a column stores.
 pub(crate) const fn degrees(n: i16) -> i64 {
@@ -85,7 +87,8 @@ macro_rules! purposes {
 pub(crate) use purposes;
 
 /// The `SystemModel` items every smoke system takes from its generated skeleton: the descriptor
-/// (`SYSTEM_ID`, `SPEC_VERSION`), the bindings (`SCHEDULE`), the purposes (`RngPurpose`) and no
+/// (`SYSTEM_ID`, `SPEC_VERSION`), the bindings (`SCHEDULE`), the purposes (`RngPurpose`), the role
+/// constants (`ROLES`, SPR-020) and no
 /// parameters or aggregates.
 macro_rules! from_skeleton {
     () => {
@@ -101,6 +104,9 @@ macro_rules! from_skeleton {
         }
         fn rng_purposes(&self) -> Vec<&'static str> {
             <RngPurpose as rh_core::system::SpecPurpose>::names()
+        }
+        fn roles(&self) -> &'static [(&'static str, rh_core::RoleId)] {
+            ROLES
         }
         fn params_schema(&self) -> rh_core::system::ParamSchema {
             rh_core::system::ParamSchema::default()
