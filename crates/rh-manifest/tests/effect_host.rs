@@ -18,9 +18,11 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-use rh_core::access::{AccessSpec, ColumnRead, ColumnWrite, CommandSend, Lag, Plane};
+use rh_core::access::{AccessSpec, ColumnRead, ColumnWrite, CommandApply, CommandSend, Lag, Plane};
 use rh_core::engine::Engine;
-use rh_core::ownership::{Declaration, Source, SpecEntry, SpecTable, single_writer};
+use rh_core::ownership::{
+    Declaration, EmitDecl, Source, SpecApply, SpecEntry, SpecTable, single_writer,
+};
 use rh_core::register::register;
 use rh_core::system::{
     AggregateSpec, InvariantResult, ParamSchema, PulseBinding, SimError, SpecPurpose, StepCtx,
@@ -29,7 +31,7 @@ use rh_core::system::{
 use rh_core::time::{Calendar, DaysPerYear, SeasonsPerYear, SimTime};
 use rh_core::world::{SystemView, WorldTables};
 use rh_core::{Phase, Pulse};
-use rh_events::EventDraft;
+use rh_events::{EventDraft, RoleId};
 use rh_ids::{BranchSalt, EntityRef, PersonId};
 use rh_manifest::effect_cases::{Golden, splitmix64};
 use rh_registry::effect::env::Env;
@@ -175,7 +177,39 @@ fn spec_table(systems: &[TestSystem]) -> SpecTable {
                     .map(|c| (c.target.to_owned(), c.command.to_owned()))
                     .collect(),
                 emits: s.access.emits.iter().map(|k| (*k).to_owned()).collect(),
+                envelope: s
+                    .access
+                    .emits
+                    .iter()
+                    .map(|&k| {
+                        (
+                            k.to_owned(),
+                            EmitDecl {
+                                roles: ["actor", "target", "witness", "instrument"]
+                                    .map(str::to_owned)
+                                    .to_vec(),
+                                ..EmitDecl::default()
+                            },
+                        )
+                    })
+                    .collect(),
+                applies: s
+                    .access
+                    .applies
+                    .iter()
+                    .map(|a| SpecApply {
+                        command: a.command.to_owned(),
+                        drained_by: (
+                            a.drained_by.pulse.name().to_owned(),
+                            a.drained_by.phase.name().to_owned(),
+                        ),
+                        key: "any".to_owned(),
+                        key_field: "person".to_owned(),
+                        ..SpecApply::default()
+                    })
+                    .collect(),
                 from_manifest: Vec::new(),
+                ..Default::default()
             };
             (declaration, entry)
         })
@@ -185,6 +219,7 @@ fn spec_table(systems: &[TestSystem]) -> SpecTable {
     SpecTable {
         owners,
         specs: specs.into_iter().map(|(d, e)| (d.system, e)).collect(),
+        ..Default::default()
     }
 }
 
@@ -674,8 +709,9 @@ fn verb_actions_are_queued_commands_caused_by_the_verb() {
             };
             actions
         };
-        let draft =
-            ctx.emit(EventDraft::new("FLED").subject(EntityRef::person(PersonId::from_raw(16))))?;
+        let draft = ctx.emit(
+            EventDraft::new("FLED").role(RoleId::ACTOR, EntityRef::person(PersonId::from_raw(16))),
+        )?;
         let access = t1_access();
         for a in &actions {
             ctx.submit(to_command(env, &access, a, Some(draft)).unwrap())?;
@@ -684,7 +720,7 @@ fn verb_actions_are_queued_commands_caused_by_the_verb() {
     });
     let taken: Arc<Mutex<Vec<Taken>>> = Arc::default();
     let mut m7 = TestSystem::owner("M7.dynasty", owned["M7.dynasty"].clone());
-    m7.access.applies = vec!["Resign"];
+    m7.access.applies = vec![CommandApply::new("Resign", Pulse::Year, Phase::Agenda)];
     m7.bindings = vec![PulseBinding {
         pulse: Pulse::Year,
         phase: Phase::Agenda,
@@ -695,7 +731,7 @@ fn verb_actions_are_queued_commands_caused_by_the_verb() {
             sink.lock().unwrap().push((
                 q.command.kind.to_owned(),
                 q.command.person.to_raw(),
-                q.command.args.clone(),
+                q.command.args.iter().map(|a| a.int().unwrap()).collect(),
                 q.cause.is_some(),
             ));
         }

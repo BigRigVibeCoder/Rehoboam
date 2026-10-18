@@ -32,7 +32,7 @@ use rh_core::command::Command;
 use rh_core::fixed::{Q8_8, Q16_16};
 use rh_core::system::{SimError, SpecPurpose, StepCtx};
 use rh_core::world::SystemView;
-use rh_events::DraftRef;
+use rh_events::{DraftRef, EventRef};
 use rh_ids::{PersonId, RegionId};
 
 use super::env::{ColumnId, Env, KindId, Ty};
@@ -423,13 +423,13 @@ pub fn to_command(
                     parameter: name.clone(),
                 });
             }
-            (_, Some(v)) => args.push(v),
+            (_, Some(v)) => args.push(rh_core::command::Arg::Int(v)),
         }
     }
     Ok(Command {
         kind: send.command,
         person: PersonId::from_raw(action.person),
         args,
-        cause: verb_draft,
+        cause: verb_draft.map_or(EventRef::None, EventRef::Draft),
     })
 }
