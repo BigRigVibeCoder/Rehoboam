@@ -1508,7 +1508,28 @@ def brief(sid, specs, reg):
     return "\n".join(out)
 
 
-def rust(sid, specs):
+def envelope_constants(s, reg):
+    """The skeleton's envelope constants (SPR-020 T-01; envelope_v0.md §2): one ``ROLE_*`` per [event_roles] id the
+    spec's [[emits]] fill, with its code (the index in the Registry's list, read at generation time), one ``ATTR_*`` per
+    snapshot attribute and one ``MOTIVE_*`` per motive, so that no system crate types a name; and ``ROLES``, the role
+    constants by name, which registration compares with the Registry it runs under (as it compares SCHEDULE)."""
+    order = reg.get("event_roles", {}).get("ids", [])
+    emits = s.get("emits", [])
+    roles = sorted({r for e in emits for r in e.get("roles", []) if r in order}, key=order.index)
+    attrs = sorted({x["attr"] for e in emits for x in e.get("snapshots", [])})
+    motives = sorted({m for e in emits for m in e.get("motives", [])})
+    up = lambda n: re.sub(r"[^A-Za-z0-9]", "_", n).upper()
+    lines = [f"pub const ROLE_{up(r)}: rh_core::RoleId = rh_core::RoleId({order.index(r)});" for r in roles]
+    lines += ["/// The role constants by Registry name: registration compares each code with the Registry's.",
+              "pub const ROLES: &[(&str, rh_core::RoleId)] = &["]
+    lines += [f'    ("{r}", ROLE_{up(r)}),' for r in roles]
+    lines += ["];"]
+    lines += [f'pub const ATTR_{up(a)}: &str = "{a}";' for a in attrs]
+    lines += [f'pub const MOTIVE_{up(m)}: &str = "{m}";' for m in motives]
+    return lines
+
+
+def rust(sid, specs, reg):
     f, s = specs[sid]
     camel = lambda n: "".join(w.capitalize() for w in n.split("_"))
     shown = f.resolve().relative_to(ROOT).as_posix() if f.resolve().is_relative_to(ROOT) else f.name
@@ -1517,6 +1538,12 @@ def rust(sid, specs):
              f'pub const SPEC_VERSION: &str = "{s["system"]["spec_version"]}";',
              "pub const SCHEDULE: &[(Pulse, Phase)] = &["]
     lines += [f"    (Pulse::{x['pulse']}, Phase::{x['phase']})," for x in s["schedule"]]
+    # DECISION (SPR-014 T-01; REV-EVO-001 NIT-10): one (command, Pulse, Phase) per [[applies]] entry, its drained_by, so
+    # registration can compare the code's draining bindings with the spec as it compares SCHEDULE.
+    lines += ["];", "pub const DRAINS: &[(&str, Pulse, Phase)] = &["]
+    for a in s.get("applies", []):
+        pulse, _, phase = str(a.get("drained_by", "")).partition("/")
+        lines.append(f'    ("{a["command"]}", Pulse::{pulse}, Phase::{phase}),')
     # DECISION: the enum carries the spec's purpose names, so code never maps variants to names by
     # hand (registration checks the names against [[rng]], SPR-005 T-06). An empty enum takes no
     # #[repr]: Rust refuses a representation for a zero-variant enum. REF: SPR-005 ruling 2.
@@ -1531,6 +1558,7 @@ def rust(sid, specs):
     lines += [f"    pub {x['name']}: {'u64' if x.get('type') == 'count' else 'Fixed'},  "
               "// bounds checked against the Registry at load" for x in s["params"]]
     lines += ["}"]
+    lines += envelope_constants(s, reg)
     return "\n".join(lines)
 
 
@@ -1597,7 +1625,7 @@ def main() -> int:
         if overlay_errs:
             print("\n".join(overlay_errs))
             return 1
-        print(brief(sid, specs, reg) if gen[0] == "--brief" else rust(sid, specs))
+        print(brief(sid, specs, reg) if gen[0] == "--brief" else rust(sid, specs, reg))
         return 0
     lint_notes = []
     errs, warns = lint(reg, specs, req_ids, test_ids, adr_ids, lint_notes, next_ids=set(frozen), commands_scope=commands_scope)
@@ -1921,7 +1949,7 @@ def main() -> int:
             ("draft", [], [ap(payload="{ a: PersonId, a: u64 }")], [], "field a is repeated", True),
             ("frozen", [], [dict(ap(), drained_by=None)], [], "needs drained_by", True),
             ("frozen", [], [ap(drained_by="Day/Agenda")], [], "is drained_by Day/Agenda, which [[schedule]] does not declare", True),
-            ("frozen", [], [ap(drained_by="Day/Agenda", sprint="SPR-014")], [], "ESCAPE [[applies]] X is drained_by Day/Agenda, which [[schedule]] does not declare until SPR-014", False),
+            ("frozen", [], [ap(drained_by="Day/Agenda", sprint="SPR-015")], [], "ESCAPE [[applies]] X is drained_by Day/Agenda, which [[schedule]] does not declare until SPR-015", False),
             ("frozen", [], [ap(drained_by="Day/Agenda", sprint="SPR-999")], [], "sprint SPR-999 names no sprint: no document under CODEX/05_PROJECT and no PRJ row", True),
             ("frozen", [], [ap(drained_by="Day/Agenda", sprint="SPR-006")], [], "(SPR-006 is CLOSED: declare the binding)", True),
             ("frozen", [], [ap(drained_by="Day/Agenda", sprint="P1.13 (SPR-014)")], [], "sprint must be \"SPR-NNN\"", True),
@@ -1936,7 +1964,7 @@ def main() -> int:
             ("frozen", [], [ap(outcome=True)], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }"}], "carries an outcome, so it needs timer", True),
             ("frozen", [], [ap(outcome=True)], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "nope"}], "needs purpose = one of its [[rng]] purposes", True),
             ("frozen", [], [ap(outcome=True, **{"from": ["S5.daily_life"]})], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "fix"}], "", False),
-            ("frozen", [], [ap(outcome=True, drained_by="Day/Agenda", sprint="SPR-014", **{"from": ["S5.daily_life"]})], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "fix"}], "in the timer pass of Day/Agenda, which S5.daily_life does not bind", True),
+            ("frozen", [], [ap(outcome=True, drained_by="Day/Agenda", sprint="SPR-015", **{"from": ["S5.daily_life"]})], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "fix"}], "in the timer pass of Day/Agenda, which S5.daily_life does not bind", True),
             ("frozen", [], [ap(**{"from": ["S5.daily_life"]})], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "fix"}], "names a timer, but the owner's [[applies]] says it carries no outcome", False),
             ("frozen", [rd("title.holder", "M7.dynasty", "identity")], [], [], "a substrate reads title.holder from M7.dynasty as identity", False),
             ("draft", [rd("title.holder", "M7.dynasty", "identity")], [], [], "a substrate reads title.holder from M7.dynasty as identity", False),
@@ -1945,7 +1973,7 @@ def main() -> int:
         for status, reads, applies, commands, needle, want_err in probes:
             probe_spec = dict(base, system=dict(base["system"], status=status), reads=reads, applies=applies, commands=commands)
             CLOSED_SPRINTS.add("SPR-006")
-            KNOWN_SPRINTS.update({"SPR-006", "SPR-014"})
+            KNOWN_SPRINTS.update({"SPR-006", "SPR-014", "SPR-015"})
             pe, pw = lint(reg, {M2: specs[M2], "M7.dynasty": specs["M7.dynasty"], "S5.daily_life": (Path("probe.odd.toml"), probe_spec)}, req_ids, test_ids, adr_ids) if "M7.dynasty" in specs else lint(reg, {M2: specs[M2], "S5.daily_life": (Path("probe.odd.toml"), probe_spec)}, req_ids, test_ids, adr_ids)
             pe = [e for e in pe if e.startswith("probe.odd.toml")]
             pw = [e for e in pw if e.startswith("probe.odd.toml")]

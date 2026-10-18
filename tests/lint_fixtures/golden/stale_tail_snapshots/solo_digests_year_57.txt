@@ -12,11 +12,11 @@
     701 0057-10-27 00:00 DEATH target Ada (natural) [event #0]
     702 0057-10-27 00:00 EXTINCTION [event #1] <- #0
     703 0057-10-27 00:00 LEAVES Ada: death (natural) <- #0
-    704 0057-11-01 00:00 DIGEST living 0 births 0 deaths 1 state 3f2ace1e4ec6eca0
-    705 0057-12-01 00:00 DIGEST living 0 births 0 deaths 0 state eb61194d5b784b91
-    706 0058-01-01 00:00 DIGEST living 0 births 0 deaths 0 state b4232fc9261b2640
-    707 0058-02-01 00:00 DIGEST living 0 births 0 deaths 0 state b39634509ea564f7
-    708 0058-03-01 00:00 DIGEST living 0 births 0 deaths 0 state a7e057acdb11e4f2
-    709 0058-04-01 00:00 DIGEST living 0 births 0 deaths 0 state 1d1cf6da6561f397
-    710 0058-05-01 00:00 DIGEST living 0 births 0 deaths 0 state 76ce866b82575823
+    704 0057-11-01 00:00 DIGEST living 0 births 0 deaths 1 state cf884c38c1dfc867
+    705 0057-12-01 00:00 DIGEST living 0 births 0 deaths 0 state 9dcc3dca3e7c6b55
+    706 0058-01-01 00:00 DIGEST living 0 births 0 deaths 0 state 0a9a78c73770897f
+    707 0058-02-01 00:00 DIGEST living 0 births 0 deaths 0 state d6ab92de7f468ee1
+    708 0058-03-01 00:00 DIGEST living 0 births 0 deaths 0 state 88458f5a783ed6c5
+    709 0058-04-01 00:00 DIGEST living 0 births 0 deaths 0 state ae41a7bfdf8dcf21
+    710 0058-05-01 00:00 DIGEST living 0 births 0 deaths 0 state 2ba42df3cde4832c
 STATUS sealed through y000199 (tick 103679999, seq 2424) | cursor 711 | lag 1714 records

@@ -323,12 +323,30 @@ def _check_json(value: object, where: str, depth: int = 1) -> None:
         for k, v in value.items():
             if not isinstance(k, str):
                 raise WireError(f"{where}: a non-string key")
+            if any(ord(ch) not in ASCII_PRINTABLE for ch in k):
+                raise WireError(f"{where}: a key outside printable ASCII ({k!r})")
             _check_json(v, f"{where}.{k}", depth + 1)
     elif isinstance(value, (list, tuple)):
         for i, v in enumerate(value):
             _check_json(v, f"{where}[{i}]", depth + 1)
     else:
         raise WireError(f"{where}: {type(value).__name__} is not a JSON value")
+
+
+_ASCII_PRINTABLE_MIN = 0x20
+_ASCII_PRINTABLE_MAX = 0x7E
+
+
+def printable_detail(text: str) -> str:
+    r"""Escape non-printable ASCII as Rust does (\u{..}) (C8)."""
+    out: list[str] = []
+    for ch in text:
+        code = ord(ch)
+        if _ASCII_PRINTABLE_MIN <= code <= _ASCII_PRINTABLE_MAX:
+            out.append(ch)
+        else:
+            out.append(f"\\u{{{code:x}}}")
+    return "".join(out)
 
 
 def cjson(value: object) -> bytes:
@@ -376,8 +394,11 @@ def response(rid: int | str | None, result: Json) -> Json:
 def error(rid: int | str | None, reason: str, **data: object) -> Json:
     """A JSON-RPC error response for ``reason`` (wire_v1.md §4.4) with extra ``data`` fields."""
     code, message = ERRORS[reason]
+    cleaned = dict(data)
+    if "detail" in cleaned and isinstance(cleaned["detail"], str):
+        cleaned["detail"] = printable_detail(cleaned["detail"])
     return {
-        "error": {"code": code, "data": {"reason": reason, **data}, "message": message},
+        "error": {"code": code, "data": {"reason": reason, **cleaned}, "message": message},
         "id": rid,
         "jsonrpc": JSONRPC,
     }
@@ -973,7 +994,18 @@ class Host:
             return error(rid, "behind_live_edge", **_behind_data(snap))
         if n > snap.next_seq:
             return error(rid, "future_seq", finished=self.writer.finished, next_seq=snap.next_seq)
-        conn.cursor, conn.seal_index = n, len(self.writer.seal_log)
+        if frm is None:
+            conn.seal_index = len(self.writer.seal_log)
+        else:
+            conn.seal_index = next(
+                (
+                    i
+                    for i, seg in enumerate(self.writer.seal_log)
+                    if (seg.last_seq >= n if seg.last_seq is not None else seg.first_seq >= n)
+                ),
+                len(self.writer.seal_log),
+            )
+        conn.cursor = n
         return response(rid, {"first_seq": n})
 
     def unsubscribe(self, conn: Connection, rid: int | str) -> Json:
@@ -994,6 +1026,8 @@ class Host:
         while conn.seal_index < len(log):
             seg = log[conn.seal_index]
             if seg.last_seq is not None and seg.last_seq >= c:
+                break
+            if seg.last_seq is None and seg.first_seq > c:
                 break
             frames.append(self._notify("stream.sealed", _sealed_params(seg)))
             conn.seal_index += 1
@@ -1038,7 +1072,12 @@ class Host:
             )
             return [encode_frame(control_frame(error(None, reason, **extra)))]
         del length
-        return [encode_frame(control_frame(self._answer(conn, frame.payload)))]
+        answer = self._answer(conn, frame.payload)
+        if answer.get("id") is None:
+            # An answer with a null id (no request id could be read) closes the connection, as a
+            # header refusal does (the Architect's C16 ruling).
+            conn.closed = True
+        return [encode_frame(control_frame(answer))]
 
     def _answer(self, conn: Connection, payload: bytes) -> Json:
         try:
@@ -1914,11 +1953,17 @@ def _dispatch_cases() -> list[tuple[str, bytes]]:
 
 def dispatch_transcript() -> list[tuple[str, bytes, bytes]]:
     """Each planted request and the host's reply bytes, on a fresh connection."""
+    return [(name, data, reply) for name, data, reply, _ in _dispatched()]
+
+
+def _dispatched() -> list[tuple[str, bytes, bytes, bool]]:
+    """Each planted request, the host's reply bytes, and whether the host closed the connection."""
     out = []
     for name, data in _dispatch_cases():
         host = Host(Writer("A", []))
-        replies = host.dispatch(host.connect(), data)
-        out.append((name, data, b"".join(replies)))
+        conn = host.connect()
+        replies = host.dispatch(conn, data)
+        out.append((name, data, b"".join(replies), conn.closed))
     return out
 
 
@@ -1941,16 +1986,44 @@ EXPECTED_REASONS = {
 }
 
 
+# Whether the host closes the connection after its answer, one case per class (C16): a refusal of
+# the header or the frame, and every answer whose id is null (parse_error, invalid_request, a float
+# anywhere), closes; an answer to a request with an id (a result, or method_not_found,
+# invalid_params, future_seq, not_subscribed) leaves the connection open.
+EXPECTED_CLOSED = {
+    "dispatch_status": False,
+    "dispatch_player_act": False,
+    "dispatch_timeline_fork": False,
+    "dispatch_stream_pace": False,
+    "dispatch_status_with_param": False,
+    "dispatch_subscribe_filter": False,
+    "dispatch_subscribe_float": True,
+    "dispatch_subscribe_future": False,
+    "dispatch_unsubscribe_none": False,
+    "dispatch_notification": True,
+    "dispatch_batch": True,
+    "dispatch_not_json": True,
+    "dispatch_version_2": True,
+    "dispatch_records_from_viewer": True,
+    "dispatch_oversize": True,
+}
+
+
 def _dispatch_checks() -> list[str]:
     """The host answers only the three methods; everything else is the read-only refusal."""
     problems = []
-    for name, _, reply in dispatch_transcript():
+    for name, _, reply, closed in _dispatched():
         frame, used = decode_frame(reply)
         _, obj = decode_control(frame.payload)
         if used != len(reply):
             problems.append(f"{name}: more than one reply frame")
         if _reason(obj) != EXPECTED_REASONS[name]:
             problems.append(f"{name}: {_reason(obj)}, expected {EXPECTED_REASONS[name]}")
+        if closed != EXPECTED_CLOSED[name]:
+            want = "close" if EXPECTED_CLOSED[name] else "keep open"
+            problems.append(f"{name}: the host should answer and {want} the connection")
+        if closed != (obj.get("id") is None):
+            problems.append(f"{name}: closed={closed} but the answer's id is {obj.get('id')!r}")
     err = error(7, "method_not_found")["error"]
     assert isinstance(err, dict)
     if err["message"] != READ_ONLY_MESSAGE:

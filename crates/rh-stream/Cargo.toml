@@ -26,3 +26,16 @@ rh-snapshot = { version = "0.0.0", path = "../rh-snapshot" }
 parquet = { version = "=60.0.0", default-features = false, features = ["zstd"] }
 # Already in the lock through parquet (no new crate): parquet's in-memory reader reads `Bytes`.
 bytes = { version = "=1.12.1", default-features = false }
+# SPR-026 T-02 (REV-SPR-026 R22, pre-approved for rh-stream alone): the live edge's one snapshot.
+# 1.7.1 (2024-03-23) is the newest release with no dependency: 1.8.0 and later depend on
+# rustversion, a crate the review did not cover. MIT OR Apache-2.0; default features off.
+arc-swap = { version = "=1.7.1", default-features = false }
+
+[features]
+# The planted control of SPR-026 T-02: the window moves at a year end before the dropped year is on
+# disk (I4 broken); a viewer must detect `I1 broken`. Never in a release build (BCK-002 A-52).
+mutant-window-gap = []
+# DEF-2: LiveEdge::bytes() counts the window alone, understating live bytes while completed years wait in the seal queue.
+mutant-bytes-window-only = []
+# DEF-2: the seal queue counts canonical text bytes instead of allocated records, understating the queue by ~2.5x.
+mutant-bytes-queue-canonical = []

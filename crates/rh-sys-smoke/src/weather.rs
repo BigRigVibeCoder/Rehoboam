@@ -56,7 +56,7 @@ impl Weather {
         for r in frost {
             ctx.emit(
                 EventDraft::new("FROST")
-                    .subject(EntityRef::region(region(r)))
+                    .role(ROLE_TARGET, EntityRef::region(region(r)))
                     .with_payload(vec![crate::common::r64(r)]),
             )?;
         }

@@ -53,7 +53,7 @@ use rh_core::register::register;
 use rh_core::system::SystemModel;
 use rh_core::time::{Calendar, Pulse, SimTime};
 use rh_ids::BranchSalt;
-use rh_manifest::specs::{load_specs, registry_system_ids};
+use rh_manifest::specs::{load_specs, registry_system_ids, registry_table};
 use rh_registry::ownership::Ownership;
 use rh_snapshot::hash::{LAYOUT, PlaneDigest, xxh3};
 use rh_snapshot::journal::{
@@ -137,6 +137,9 @@ pub struct RunArgs {
     pub threads: usize,
     /// Rung kind.
     pub rung: RungKind,
+    /// Whether `--ladder` was given (a resumed run directory's rung is otherwise its `run.toml`'s;
+    /// BCK-002 A-58, VER-SPR-013-TEST GAP-8).
+    pub rung_set: bool,
     /// Where the ladder is written.
     pub out: PathBuf,
     /// The input journal: created by a full run (replacing any file there), read by a resumed one.
@@ -172,6 +175,14 @@ pub struct RunArgs {
     /// Replay: build the run from the history tuple and the journal at `journal` alone, journaling
     /// nothing (`rh-cli replay`; SPR-013 T-12, V-DET-04, V-DET-18).
     pub replay: bool,
+    /// A test hook that poisons the engine at the first instant at or after this tick
+    /// (`--test-poison`; SPR-026 T-03, A-42): an observer that panics, which the engine turns into
+    /// a fatal `SimError::Observer`. Never on a baseline.
+    pub poison: Option<i64>,
+    /// A test hook that sleeps this many milliseconds after each stop of the run loop
+    /// (`--test-pace-ms`; SPR-026 T-05): a slow host, so a viewer can be ahead of a resumed one.
+    /// It changes no byte of the run. Never on a baseline.
+    pub pace_ms: Option<u64>,
 }
 
 impl RunArgs {
@@ -187,6 +198,7 @@ impl RunArgs {
             years,
             threads,
             rung,
+            rung_set: false,
             out: out.to_path_buf(),
             journal: out.with_extension("journal.sqlite"),
             until: None,
@@ -203,9 +215,46 @@ impl RunArgs {
             stall: None,
             inputs: None,
             replay: false,
+            poison: None,
+            pace_ms: None,
         }
     }
 }
+
+/// The planted poison of `--test-poison` (module docs of [`RunArgs::poison`]).
+struct Poison(i64);
+
+impl rh_core::observe::Observer for Poison {
+    #[allow(
+        clippy::panic,
+        reason = "the planted poison: the engine catches the panic and poisons itself (A-42 test)"
+    )]
+    fn notify(&self, notice: &rh_core::observe::Notice) {
+        if notice.boundary == rh_core::observe::Boundary::InstantStart
+            && notice.at.minutes() >= self.0
+        {
+            panic!(
+                "planted poison at tick {} (--test-poison)",
+                notice.at.minutes()
+            );
+        }
+    }
+}
+
+/// How a host serves the live edge of a run's World Stream (SPR-026; `rh-cli run --socket`):
+/// the window policy, the seal clock, and what to do with the edge once the stream exists, before
+/// its first record is pushed (start the socket server).
+pub struct LiveHost {
+    /// The window policy (D42: [`rh_stream::live::Policy::YearEnd`] by default).
+    pub policy: rh_stream::live::Policy,
+    /// The seal-latency clock.
+    pub clock: Option<Arc<dyn rh_stream::writer::SealClock>>,
+    /// Called once with the edge and the run directory.
+    pub on_edge: OnEdge,
+}
+
+/// What a host does with the live edge once the stream exists ([`LiveHost::on_edge`]).
+pub type OnEdge = Box<dyn FnOnce(rh_stream::live::LiveEdge, &Path) -> Result<(), Error>>;
 
 /// What a run leaves: its ladder and what the scheduler dispatched.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -218,6 +267,9 @@ pub struct Outcome {
     pub vitals: Option<Vitals>,
     /// What the stream writer did, for a run with a run directory (SPR-013 T-09).
     pub stream: Option<StreamSummary>,
+    /// The engine's `dropped{system, kind, reason}` counts at the end of the run (`05.1` §2 rule
+    /// 2; SPR-014 T-03): a diagnostic, printed with the vitals, never part of the ladder.
+    pub dropped: Vec<(String, String, &'static str, u64)>,
 }
 
 impl Outcome {
@@ -317,6 +369,18 @@ pub fn history(seed: u64) -> History {
 /// [`Error`] naming the first check that fails.
 pub(crate) fn open_journal(path: &Path, world: &Setup) -> Result<Replay, Error> {
     if wal_has_rows(path) {
+        // BCK-002 A-58: a write-ahead log is also what a running writer leaves; say which.
+        let dir = path.parent().unwrap_or_else(|| Path::new("."));
+        let running =
+            dir.join(crate::stream::WRITER_LOCK).is_file() && !crate::stream::writer_gone(dir);
+        if running {
+            return Err(Error(format!(
+                "journal: {} is being written: the run's writer is still running (it holds {}). \
+                 Replay it once the run has ended",
+                path.display(),
+                dir.join(crate::stream::WRITER_LOCK).display()
+            )));
+        }
         return Err(Error(format!(
             "journal: {} still has a write-ahead log: the run was killed and not resumed. Resume \
              it first (rh-cli run --resume), which folds the log in (REV-SPR-013 MAJ-3)",
@@ -353,7 +417,9 @@ fn journal_key(p: &Provenance, seed: u64) -> HistoryKey {
 pub fn spec_table(repo: &Path) -> Result<SpecTable, Error> {
     let ids = registry_system_ids(&repo.join(OVERLAY)).map_err(|e| error("overlay")(&e))?;
     let specs = load_specs(&repo.join(SPECS_DIR)).map_err(|e| error("specs")(&e))?;
-    Ok(Ownership::build(&specs, &ids).spec_table())
+    let table = registry_table(&repo.join("specs/manifest/registry_v0.toml"))
+        .map_err(|e| error("registry")(&e))?;
+    Ok(Ownership::build(&specs, &ids).spec_table_with(table))
 }
 
 /// The last minute of sim-year `year` (1-based), on the smoke calendar.
@@ -467,12 +533,49 @@ pub fn run(args: &RunArgs) -> Result<Ladder, Error> {
 ///
 /// # Errors
 /// As [`run`].
+pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
+    run_live(args, None)
+}
+
+/// [`run_reporting`] with a live edge served by `live` (SPR-026): the edge is built only here, so
+/// a headless run builds none.
+///
+/// # Errors
+/// As [`run`]; also a run with `live` but no run directory, and `live.on_edge`'s error.
 #[allow(
     clippy::too_many_lines,
     reason = "the run loop in one place: every stop's steps in their order (ladder, keyframe, stream)"
 )]
-pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
+pub fn run_live(args: &RunArgs, live: Option<LiveHost>) -> Result<Outcome, Error> {
     refuse_mutants()?;
+    // BCK-002 A-58 (GAP-8): a resumed run directory's rung is the one its run.toml records; a
+    // different --ladder is refused, and none is needed.
+    let resolved;
+    let recorded = match (&args.resume, &args.run_dir) {
+        (Some(_), Some(d)) => RunToml::read(d)
+            .ok()
+            .and_then(|t| t.rung)
+            .and_then(|r| crate::ladder::RungKind::from_name(&r)),
+        _ => None,
+    };
+    let args = match recorded {
+        Some(r) if args.rung_set && r != args.rung => {
+            return Err(Error(format!(
+                "--ladder {} conflicts with the run directory's rung, {} (run.toml): a resume \
+                 keeps its run's ladder; nothing was written",
+                args.rung.name(),
+                r.name()
+            )));
+        }
+        Some(r) => {
+            resolved = RunArgs {
+                rung: r,
+                ..args.clone()
+            };
+            &resolved
+        }
+        None => args,
+    };
     let smoke = args.world == SMOKE;
     if args.leak_thread && !smoke {
         return Err(Error(format!(
@@ -539,6 +642,16 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
         }
     }
     let run_dir = args.run_dir.clone().map(RunDir);
+    if live.is_some() && run_dir.is_none() {
+        return Err(Error(
+            "a live edge is served from a run directory (--socket needs --run-dir)".to_owned(),
+        ));
+    }
+    if args.poison.is_some() && args.vitals {
+        return Err(Error(
+            "--test-poison plants its own observer and is refused with --vitals".to_owned(),
+        ));
+    }
     if run_dir.is_some() && world.stream.is_none() {
         return Err(Error(format!(
             "--run-dir streams a manifest world; {} has no World Stream (SPR-013 T-09)",
@@ -571,16 +684,35 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
         std::fs::create_dir_all(&dir.0).map_err(|e| error("run directory")(&e))?;
     }
     // The writer's lock, held until the run returns (a tail --wait sees it released).
+    let creating = run_dir.is_some() && args.resume.is_none();
+    let step = |n: u8| {
+        if creating && args.stall == Some(Stall::Create { step: n }) {
+            Hook::stall(&format!("create step {n}"));
+        }
+    };
+    step(1);
     let _writer_lock = run_dir
         .as_ref()
         .map(|d| crate::stream::lock_writer(&d.0))
         .transpose()?;
+    step(2);
+    // BCK-002 A-58 (VER-SPR-013-TEST DEF-3): run.toml is the last file a new run creates, so a
+    // directory with a journal or a ladder but no run.toml is a creation killed before it ended:
+    // under the writer's lock, its leftovers are removed and the run is created afresh.
+    if let (Some(dir), true, false) = (&run_dir, creating, args.replay) {
+        remove_creation_leftovers(dir)?;
+    }
     let (mut engine, journal, identity, rows) = start(args, &world, &registered)?;
+    step(3);
     // SPR-009 T-03: the host's clock-free observer; the engine carries no clock (ruling 4).
     let timing = args.vitals.then(|| Arc::new(Timing::default()));
+    let poison = args.poison.map(|t| Arc::new(Poison(t)));
     let attach = |e: &mut Engine| {
         if let Some(t) = &timing {
             e.set_observer(Some(t.clone()));
+        }
+        if let Some(p) = &poison {
+            e.set_observer(Some(p.clone()));
         }
     };
     attach(&mut engine);
@@ -615,12 +747,15 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
         Some(dir) if args.resume.is_some() => {
             let mpy = world.calendar.minutes_per_year();
             let through = ((start.minutes() - 1).div_euclid(mpy) + 1) * mpy - 1;
-            let (log, prefix) = LadderLog::resume(&dir.ladder(), &ladder.header, through)?;
+            let at_keyframe = state_digest(&engine.snapshot());
+            let (log, prefix) =
+                LadderLog::resume(&dir.ladder(), &ladder.header, through, &at_keyframe)?;
             ladder.rungs = prefix;
             Some(log)
         }
         Some(dir) => Some(LadderLog::create(&dir.ladder(), &ladder.header)?),
     };
+    step(4);
     let store = KeyframeStore::default();
     // Keyframes: the --keyframes directory of a full run (SPR-008), or the run directory's of
     // any streaming run, resumed ones included (their markers are part of channel A).
@@ -634,6 +769,12 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
         )?),
         _ => None,
     };
+    step(5);
+    // SPR-026: the live edge, before the first record is pushed (the socket exists first).
+    if let (Some(l), Some(h), Some(dir)) = (live, host.as_mut(), &run_dir) {
+        let edge = h.attach_live(l.policy, l.clock, args.stall)?;
+        (l.on_edge)(edge, &dir.0)?;
+    }
     // The genesis keyframe (year 0) is written for a full run's --keyframes directory (SPR-008)
     // only. A run directory has none: every keyframe there has its KEYFRAME marker in channel A,
     // and a tick of years 0-9 is rebuilt from genesis, which the history tuple determines (the
@@ -701,6 +842,9 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
             )),
             _ => None,
         };
+        if let Some(ms) = args.pace_ms {
+            std::thread::sleep(std::time::Duration::from_millis(ms));
+        }
         if let Some(h) = host.as_mut() {
             let rel = kf.as_ref().map(|(year, _)| keyframe_rel(*year));
             let marker = rel
@@ -708,12 +852,20 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
                 .zip(kf.as_ref().map(|(_, (_, header))| header));
             h.push(t, marker)?;
         }
-        if let (Some((year, (bytes, _))), Some(dir)) = (&kf, &keyframes) {
+        if let (Some((year, (bytes, _))), Some(dir)) = (kf, &keyframes) {
             // run.ladder reaches the keyframe before the keyframe exists (REV-SPR-013 MAJ-3 (b)).
             if let Some(log) = log.as_mut() {
                 log.sync()?;
             }
-            write_file(&keyframe_path(dir, *year), bytes)?;
+            let path = keyframe_path(dir, year);
+            match host.as_mut() {
+                // The file follows its year's segment: at once, or behind the seal in flight on a
+                // live edge's seal thread (SPR-026 T-02).
+                Some(h) => {
+                    h.after_seal(Box::new(move || write_file(&path, &bytes).map_err(|e| e.0)))?;
+                }
+                None => write_file(&path, &bytes)?,
+            }
         }
     }
     let stream = host.map(StreamHost::finish).transpose()?;
@@ -726,6 +878,13 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
         dispatch: add(dispatched, engine.dispatch_stats()),
         vitals: timing.and_then(|t| t.vitals()),
         stream,
+        dropped: engine
+            .dropped()
+            .iter()
+            .map(|((system, kind, reason), n)| {
+                ((*system).to_owned(), kind.to_string(), reason.name(), *n)
+            })
+            .collect(),
     })
 }
 
@@ -770,7 +929,12 @@ impl LadderLog {
     /// and to reach the keyframe; everything after them, a partial line left by a kill included,
     /// is dropped; the file is rewritten atomically with `header` (an extended run's horizon) and
     /// those rungs, and the resumed rungs are appended.
-    fn resume(path: &Path, header: &Header, through: i64) -> Result<(Self, Vec<Rung>), Error> {
+    fn resume(
+        path: &Path,
+        header: &Header,
+        through: i64,
+        at_keyframe: &PlaneDigest,
+    ) -> Result<(Self, Vec<Rung>), Error> {
         let fail = |what: String| Error(format!("{}: {what}", path.display()));
         let text = std::fs::read_to_string(path).map_err(|e| fail(e.to_string()))?;
         let mut cut = 0;
@@ -808,6 +972,24 @@ impl LadderLog {
             return Err(fail(format!(
                 "the ladder does not reach the keyframe at tick {through}"
             )));
+        }
+        // BCK-002 A-58 (VER-SPR-013-TEST GAP-12): the keyframe's own rung must be whole: its lines
+        // are exactly its rendering, and its state hash and table roots are the restored state's.
+        if let Some(last) = prefix.rungs.last().filter(|_| through >= 0) {
+            let roots: Vec<(String, u64)> = at_keyframe
+                .tables
+                .iter()
+                .map(|(name, d)| (name.clone(), d.root))
+                .collect();
+            if !text[..cut].ends_with(&crate::ladder::render_rung(last))
+                || last.hash != at_keyframe.hash
+                || last.roots != roots
+            {
+                return Err(fail(format!(
+                    "the rung at the keyframe's tick {through} is torn or is not the keyframe's \
+                     state: resume from an earlier keyframe"
+                )));
+            }
         }
         let kept = Ladder {
             header: header.clone(),
@@ -854,6 +1036,39 @@ impl LadderLog {
     }
 }
 
+/// Removes what a new run killed during its creation left (BCK-002 A-58, DEF-3): the journal (and
+/// its write-ahead files) and the ladder, when `run.toml`, which the creation writes last, is
+/// absent. Called under the writer's lock, after `refuse_used_run_dir`.
+fn remove_creation_leftovers(dir: &RunDir) -> Result<(), Error> {
+    if dir.run_toml().exists() {
+        return Ok(());
+    }
+    let journal = dir.journal();
+    let mut leftovers = vec![journal.clone(), dir.ladder()];
+    for suffix in ["-wal", "-shm"] {
+        let mut p = journal.as_os_str().to_owned();
+        p.push(suffix);
+        leftovers.push(PathBuf::from(p));
+    }
+    let mut removed = Vec::new();
+    for p in leftovers.iter().filter(|p| p.is_file()) {
+        std::fs::remove_file(p).map_err(|e| Error(format!("{}: {e}", p.display())))?;
+        removed.push(
+            p.file_name()
+                .map_or_else(String::new, |n| n.to_string_lossy().into_owned()),
+        );
+    }
+    if !removed.is_empty() {
+        eprintln!(
+            "note: {} held the leftovers of a run killed while it was being created (no run.toml): \
+             removed {}",
+            dir.0.display(),
+            removed.join(", ")
+        );
+    }
+    Ok(())
+}
+
 /// A new run needs a run directory that holds no run (REV-SPR-013 MAJ-2): no stream, no keyframe,
 /// and (unless it is a replay's fresh directory, which holds the copied `run.toml` and journal)
 /// no `run.toml` or journal. Checked before any file is touched, so a refused run leaves the
@@ -867,7 +1082,8 @@ fn refuse_used_run_dir(dir: &RunDir, replay: bool) -> Result<(), Error> {
     if nonempty(&dir.keyframes()) {
         found.push("keyframes/".to_owned());
     }
-    if !replay {
+    // A journal without run.toml is a creation killed before it ended (DEF-3), not a run.
+    if !replay && dir.run_toml().exists() {
         for p in [dir.run_toml(), dir.journal()] {
             if p.exists() {
                 found.push(
@@ -951,12 +1167,21 @@ fn stream_host(
 }
 
 /// The `mutant-*` Cargo features compiled into this build, from every crate that has any
-/// (BCK-002 A-52).
+/// (BCK-002 A-52), and `rh-core`'s reference features (`reference-gating-off`, SPR-038 S12),
+/// which no world or baseline may come from either.
 #[must_use]
 pub fn mutant_features() -> Vec<&'static str> {
-    let mut all = rh_sys_demography::MUTANTS.to_vec();
-    all.extend(rh_registry::MUTANTS);
-    all.extend(rh_manifest::MUTANTS);
+    let mut all = [
+        rh_core::MUTANTS,
+        rh_manifest::MUTANTS,
+        rh_protocol::MUTANTS,
+        rh_registry::MUTANTS,
+        rh_snapshot::MUTANTS,
+        rh_stream::MUTANTS,
+        rh_sys_demography::MUTANTS,
+        rh_core::REFERENCE,
+    ]
+    .concat();
     all.sort_unstable();
     all.dedup();
     all
@@ -1274,6 +1499,7 @@ mod tests {
             },
             vitals: None,
             stream: None,
+            dropped: Vec::new(),
         }
     }
 

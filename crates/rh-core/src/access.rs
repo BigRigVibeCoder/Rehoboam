@@ -25,6 +25,9 @@
 use core::fmt;
 
 use crate::ownership::Declaration;
+use crate::phase::Phase;
+use crate::system::PulseBinding;
+use crate::time::Pulse;
 
 /// The plane a column lives in (ADR-0024).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -143,6 +146,39 @@ pub struct CommandSend {
     pub target: &'static str,
 }
 
+/// A declared command the system owns and applies, with the one binding that drains it
+/// (`[[applies]] drained_by`; `05.1` §2 rule 2, EVO-001 R2). The engine hands the system's queue
+/// of this kind to that binding only; every other job of the system, its timer pass included,
+/// leaves it queued. A generated skeleton's `DRAINS` lists them ([`CommandApply::from_drains`]),
+/// and registration compares them with the spec under rule `spec` (REV-EVO-001 NIT-10).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct CommandApply {
+    /// The command's Registry name.
+    pub command: &'static str,
+    /// The binding that takes it.
+    pub drained_by: PulseBinding,
+}
+
+impl CommandApply {
+    /// `command`, drained by `(pulse, phase)`.
+    #[must_use]
+    pub const fn new(command: &'static str, pulse: Pulse, phase: Phase) -> Self {
+        Self {
+            command,
+            drained_by: PulseBinding { pulse, phase },
+        }
+    }
+
+    /// The entries of a generated `DRAINS` table.
+    #[must_use]
+    pub fn from_drains(drains: &[(&'static str, Pulse, Phase)]) -> Vec<Self> {
+        drains
+            .iter()
+            .map(|&(command, pulse, phase)| Self::new(command, pulse, phase))
+            .collect()
+    }
+}
+
 /// The access one system declares (`05.1` §2: `fn access(&self) -> AccessSpec`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AccessSpec {
@@ -152,10 +188,15 @@ pub struct AccessSpec {
     pub writes: Vec<ColumnWrite>,
     /// Lifecycle commands submitted, with their owner (SPR-006).
     pub sends: Vec<CommandSend>,
-    /// Lifecycle commands owned and applied (SPR-006).
-    pub applies: Vec<&'static str>,
+    /// Lifecycle commands owned and applied (SPR-006), each with its draining binding (SPR-014).
+    pub applies: Vec<CommandApply>,
     /// Event kinds emitted (SPR-006).
     pub emits: Vec<&'static str>,
+    /// The bindings whose only step is the drain of an `[[applies]]` entry (SPR-014, BCK-002 A-60
+    /// part): at an instant where such a binding's inbox is empty its job has no work, and the
+    /// ledger guard keeps only its row counts. Registration refuses an entry that is not the
+    /// `drained_by` of one of the system's own applies.
+    pub drain_only: Vec<PulseBinding>,
 }
 
 impl AccessSpec {
@@ -182,6 +223,12 @@ impl AccessSpec {
     #[must_use]
     pub fn send_of(&self, command: &str) -> Option<&CommandSend> {
         self.sends.iter().find(|c| c.command == command)
+    }
+
+    /// The declared application of `command`, if the system owns it.
+    #[must_use]
+    pub fn apply_of(&self, command: &str) -> Option<&CommandApply> {
+        self.applies.iter().find(|a| a.command == command)
     }
 
     /// Whether `kind` is a declared event kind.

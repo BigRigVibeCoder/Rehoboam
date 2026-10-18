@@ -1,7 +1,12 @@
 //! Keyframes: the plane-A state written as Arrow IPC with zstd, and read back into an engine
 //! (SPR-007 T-02, ruling 2; V-DET-05).
 //!
-//! # Format `rehoboam/rh-snapshot/keyframe/v1`
+//! # Format `rehoboam/rh-snapshot/keyframe/v2`
+//!
+//! Version 2 (SPR-020; envelope v0 §6, R12 (d)) changes only the `rh-core/events.held` row: an
+//! undrained event carries the envelope ([`crate::state`]). The envelope, the guard and the layout
+//! are v1's. A v1 file is refused by its format name ([`KEYFRAME_FORMAT_V1`]), which says which
+//! decoder it needs.
 //!
 //! A keyframe file is an envelope, then one Arrow IPC file. The envelope is the 8 bytes
 //! [`KEYFRAME_MAGIC`] and the XXH3-128 (big-endian) of the Arrow bytes that follow; it is checked
@@ -75,7 +80,11 @@ use crate::journal::JournalPosition;
 use crate::state::{DecodeError, decode_engine_tables, engine_tables, state_hash};
 
 /// The keyframe format.
-pub const KEYFRAME_FORMAT: &str = "rehoboam/rh-snapshot/keyframe/v1";
+pub const KEYFRAME_FORMAT: &str = "rehoboam/rh-snapshot/keyframe/v2";
+
+/// The previous format (SPR-007 to SPR-013): its `rh-core/events.held` rows are SPR-006's event,
+/// which a v2 reader cannot decode, so it is refused by name.
+pub const KEYFRAME_FORMAT_V1: &str = "rehoboam/rh-snapshot/keyframe/v1";
 
 /// The first 8 bytes of every keyframe file, before the digest of the Arrow bytes.
 pub const KEYFRAME_MAGIC: [u8; 8] = *b"RHKF\0v1\n";
@@ -511,6 +520,11 @@ fn parse_header(
             .parse()
             .map_err(|_| bad(format!("{} is not a decimal u64", HEADER_KEYS[k])))
     };
+    if values[0] == KEYFRAME_FORMAT_V1 {
+        return Err(bad(format!(
+            "format {KEYFRAME_FORMAT_V1} needs the v1 decoder (SPR-007 to SPR-013); this build reads {KEYFRAME_FORMAT} only"
+        )));
+    }
     if values[0] != KEYFRAME_FORMAT {
         return Err(bad(format!("format {:?}", values[0])));
     }

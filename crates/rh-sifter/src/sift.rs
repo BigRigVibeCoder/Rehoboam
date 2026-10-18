@@ -496,6 +496,102 @@ pub struct SiftSummary {
     pub a_records: u64,
 }
 
+/// One channel-A segment sifted: the channel-C segment it sealed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Sifted {
+    /// The sim-year.
+    pub sim_year: i32,
+    /// The segment's first seq (an empty year: the next seq).
+    pub first_seq: u64,
+    /// Its matches, in seq order (none: an empty year, sealed all the same, R7).
+    pub records: Vec<Record>,
+    /// Its canonical digest (of the empty string for an empty year).
+    pub canonical_digest: [u8; 16],
+    /// The channel-A segment's last seq.
+    pub a_last_seq: u64,
+}
+
+/// A sifter of one run directory, one channel-A segment at a time, in sim-year order: what
+/// [`sift_run`] does in one go, and what `rh-cli sift --follow` does as segments seal (SPR-026
+/// T-04). Starting it replaces channel C (the old tree is removed); channel A, the journal and the
+/// keyframes are never touched (V-PLN-04).
+pub struct Sifter<'a> {
+    dir_c: std::path::PathBuf,
+    patterns: &'a [Pattern],
+    packs: &'a [String],
+    chain: [u8; 16],
+    next: u64,
+    /// What was sifted so far.
+    pub summary: SiftSummary,
+}
+
+impl<'a> Sifter<'a> {
+    /// A sifter of `run_dir`'s timeline `timeline_id`: channel C is removed, to be rewritten.
+    ///
+    /// # Errors
+    /// [`SiftError::Io`] if the old channel C cannot be removed.
+    pub fn start(
+        run_dir: &Path,
+        timeline_id: u32,
+        patterns: &'a [Pattern],
+        packs: &'a [String],
+    ) -> Result<Self, SiftError> {
+        let dir_c = channel_dir(&run_dir.join("stream"), timeline_id, Channel::C);
+        if dir_c.exists() {
+            std::fs::remove_dir_all(&dir_c)
+                .map_err(|e| SiftError::Io(format!("{}: {e}", dir_c.display())))?;
+        }
+        Ok(Self {
+            dir_c,
+            patterns,
+            packs,
+            chain: chain_genesis(timeline_id),
+            next: 0,
+            summary: SiftSummary::default(),
+        })
+    }
+
+    /// Sifts the next channel-A segment and seals its channel-C segment.
+    ///
+    /// # Errors
+    /// [`SiftError`] if the segment cannot be encoded or sealed.
+    pub fn sift(&mut self, seg: &SegmentA) -> Result<Sifted, SiftError> {
+        self.chain = chain_next(&self.chain, &seg.row.canonical_digest);
+        let records = sift_segment(seg, self.patterns, self.next);
+        let files = encode_c(
+            seg,
+            &records,
+            self.patterns,
+            self.packs,
+            &self.chain,
+            self.next,
+        )?;
+        seal(
+            &self.dir_c,
+            Channel::C,
+            i64::from(seg.row.sim_year),
+            &files,
+            &mut NoHook,
+        )
+        .map_err(|e| table_err(&e))?;
+        let first_seq = self.next;
+        let n = u64::try_from(records.len()).unwrap_or(u64::MAX);
+        self.next += n;
+        self.summary.matches += n;
+        self.summary.segments += 1;
+        self.summary.a_records += seg.row.record_count;
+        let canonical_digest =
+            canonical::digest_records(&records).map_err(|e| SiftError::Segment(e.to_string()))?;
+        Ok(Sifted {
+            sim_year: seg.row.sim_year,
+            first_seq,
+            records,
+            canonical_digest,
+            a_last_seq: seg.row.last_seq,
+        })
+    }
+}
+
 /// Sifts a run directory's sealed channel A with `patterns` (of `packs`, in order) and rewrites its
 /// channel C (module docs).
 ///
@@ -511,33 +607,11 @@ pub fn sift_run(
     let root = run_dir.join("stream");
     let a = rh_stream::writer::read_channel_a(&root, timeline_id, minutes_per_year)
         .map_err(|e| table_err(&e))?;
-    let dir_c = channel_dir(&root, timeline_id, Channel::C);
-    if dir_c.exists() {
-        std::fs::remove_dir_all(&dir_c)
-            .map_err(|e| SiftError::Io(format!("{}: {e}", dir_c.display())))?;
-    }
-    let mut chain = chain_genesis(timeline_id);
-    let mut next = 0u64;
-    let mut summary = SiftSummary::default();
+    let mut sifter = Sifter::start(run_dir, timeline_id, patterns, packs)?;
     for seg in &a {
-        chain = chain_next(&chain, &seg.row.canonical_digest);
-        let records = sift_segment(seg, patterns, next);
-        let files = encode_c(seg, &records, patterns, packs, &chain, next)?;
-        seal(
-            &dir_c,
-            Channel::C,
-            i64::from(seg.row.sim_year),
-            &files,
-            &mut NoHook,
-        )
-        .map_err(|e| table_err(&e))?;
-        let n = u64::try_from(records.len()).unwrap_or(u64::MAX);
-        next += n;
-        summary.matches += n;
-        summary.segments += 1;
-        summary.a_records += seg.row.record_count;
+        sifter.sift(seg)?;
     }
-    Ok(summary)
+    Ok(sifter.summary)
 }
 
 fn blob16(v: &[u8]) -> Result<[u8; 16], SiftError> {

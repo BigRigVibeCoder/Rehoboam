@@ -168,7 +168,7 @@ fn run(w: &World) -> Vec<(i64, u64)> {
         .drain_events()
         .into_iter()
         .filter(|ev| ev.kind == DEATH)
-        .map(|ev| (ev.tick, ev.subjects[0].raw()))
+        .map(|ev| (ev.tick, ev.roles[0].entity.raw()))
         .collect();
     deaths.sort_unstable();
     deaths

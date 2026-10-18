@@ -6,6 +6,8 @@ pub const SCHEDULE: &[(Pulse, Phase)] = &[
     (Pulse::Day, Phase::Agenda),
     (Pulse::Month, Phase::Agenda),
 ];
+pub const DRAINS: &[(&str, Pulse, Phase)] = &[
+];
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RngPurpose {
@@ -32,3 +34,12 @@ pub struct Params {
     pub grudge_on_harm: Fixed,  // bounds checked against the Registry at load
     pub broken_vow_opinion: Fixed,  // bounds checked against the Registry at load
 }
+pub const ROLE_ACTOR: rh_core::RoleId = rh_core::RoleId(0);
+pub const ROLE_TARGET: rh_core::RoleId = rh_core::RoleId(1);
+/// The role constants by Registry name: registration compares each code with the Registry's.
+pub const ROLES: &[(&str, rh_core::RoleId)] = &[
+    ("actor", ROLE_ACTOR),
+    ("target", ROLE_TARGET),
+];
+pub const ATTR_VOW_PUBLIC: &str = "vow_public";
+pub const MOTIVE_VOW_OF: &str = "VOW_OF";

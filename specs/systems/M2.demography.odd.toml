@@ -14,12 +14,14 @@
 # 0.2.2 (2026-10-17, SPR-020, the event envelope; specs/chronicle/envelope_v0.md; no mechanics or hashes changed by this text):
 # every [[emits]] entry declares the Registry [event_roles] it fills (DEATH: target the deceased, actor a culprit; EXTINCTION:
 # none), checked by lint_odd.py; the engine's role codes arrive with SPR-020.
+# 0.2.3 (2026-10-17, SPR-014, approved by the Architect in its PR; C2): the Day/Vital [[schedule]] entry that drained_by names (take
+# the inbox, apply each command or drop it), so both [[applies]] sprint escapes are removed; the Month/Vital binding is unchanged.
 odd_r = 2
 
 [system]
 id = "M2.demography"
 name = "Demography"
-spec_version = "0.2.2"
+spec_version = "0.2.3"
 fidelity = "F1"
 status = "frozen"                          # 2026-10-16, director D30/D36
 crate = "rh-sys-demography"
@@ -202,8 +204,8 @@ meaning = "As person.death_cause (none | natural | murder | battle | execution |
 fixed_point = false
 
 # Lifecycle commands M2 applies (round 3 of PR #32, REV-P1a MAJ-4; typed by EVO-001): one payload per command, which every
-# sender uses. For P1.13 (SPR-014): M2 gains a Day/Vital binding that drains its queue each day start (not yet in
-# [[schedule]]: SPR-014 adds it; drained_by names it). A command carries no date (05.1 §2 rule 2): the drain applies it in
+# sender uses. For P1.13 (SPR-014, 0.2.3): M2's Day/Vital binding drains its queue each day start (drained_by names
+# it). A command carries no date (05.1 §2 rule 2): the drain applies it in
 # the Vital it arrives in, before the bindings that read M2 at same_instant (T1.minds, M7.dynasty). Both carry a sampled
 # outcome (outcome = true), so each arrives from its sender's own timer, fired in this Vital's timer pass: T1's DEATH_DUE
 # and MARRY_DUE at (the next day start, Vital), M7's MURDER_DUE at (the drawn day, Vital); a material input re-samples
@@ -218,7 +220,6 @@ drained_by = "Day/Vital"
 key = "living"
 key_field = "victim"
 outcome = true
-sprint = "SPR-014"
 [[applies]]
 command = "Marry"
 payload = "{ a: PersonId, b: PersonId }"
@@ -227,7 +228,6 @@ drained_by = "Day/Vital"
 key = "living"
 key_field = "a"
 outcome = true
-sprint = "SPR-014"
 
 [[emits]]
 kind = "DEATH"
@@ -258,6 +258,14 @@ steps = [
   "mortality: one Bernoulli per living person on this month's probability; a hit becomes a death timer at the start of a keyed day inside the month, never the Month-pulse instant",
 ]
 when = "always"
+
+[[schedule]]
+pulse = "Day"
+phase = "Vital"
+steps = [
+  "lifecycle: the drain of M2's command queue (05.1 §2 rule 2; EVO-001, REV-EVO-001 R9 shape (b); drained_by Day/Vital; SPR-014): the inbox of ScheduleDeath and Marry is taken in (tick, phase, PersonId, seq) order, after the timers of the slot (the sender's own timer submitted each command in this instant's timer pass); rh-core has dropped each one whose key person was dead at the level's start (key = living, dropped{M2, kind, dead_key}; BCK-002 A-30); a ScheduleDeath is applied through apply_death (S12) with the command's cause, and dropped (dead) if its victim died earlier in this drain; a Marry writes person.spouse both ways, and is dropped (dead) if either party is dead (households and the marriage rows are SPR-015's, P1.3); the queue-age allowance is one day (A-31: the drain binds Day)",
+]
+when = "always (the binding runs at every day start; a when clause is documentation, round 3 BLK-1)"
 
 [[rng]]
 purpose = "death_time"
