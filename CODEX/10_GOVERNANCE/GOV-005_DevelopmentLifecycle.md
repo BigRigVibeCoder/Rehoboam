@@ -6,10 +6,10 @@ status: APPROVED
 owner: human
 agents: [all]
 tags: [governance, workflow]
-related: [GOV-007, GOV-002, ADR-0032, ADR-0033]
+related: [GOV-007, GOV-002, GOV-009, GOV-010, GOV-011, ADR-0032, ADR-0033]
 created: 2026-10-16
-updated: 2026-10-16
-version: 1.3.1
+updated: 2026-10-18
+version: 2.0.0
 ---
 
 > **BLUF:** Every piece of work follows one loop: conversation → spec → sprint → verification → audit → merge by change class. Specs come before code. One agent works on one branch per sprint, with one commit per task. Merges follow the change classes in `docs/13` §4.2: routine work merges on green tests plus independent audits; the director approves only contract, determinism-machinery and out-of-tolerance changes. Adapted from `agentic_architect` GOV-005.
@@ -53,7 +53,10 @@ version: 1.3.1
 |---|---|
 | Sprint | `sprint/SPR-NNN-short-name` |
 | Defect fix | `fix/DEF-NNN-short-name` |
-| Architect sprint | `arch/SPR-NNN-ARCH-short-name` |
+| Architect work (plans, spec PRs, records, micro-PRs, handoffs) | `arch/<topic>` |
+| Independent evidence, audit drafts, snapshots | `review/<topic>`, `audit/<topic>`, `backup/<topic>` (GOV-009 §2) |
+
+The full rules for branches, commits, pull requests and merges are GOV-009; CI is GOV-010; ownership, independence and handoffs between agents are GOV-011.
 
 - **`main` is the only long-lived branch.** Everything else branches from `main` and returns to it through one pull request.
 - **One agent per branch, one branch per sprint.** No per-task branches.
@@ -65,7 +68,7 @@ version: 1.3.1
 - **One pull request per sprint**, from the sprint branch into `main`, opened as a draft by the Developer when the first task lands. CI runs on every push to it.
 - **The title** is `SPR-NNN: <title> [C<n>]`. **The body** links the `SPR-` document, carries its compliance table, and ends with the check report verdict.
 - **Ready for review** only when `bin/check_all.sh` passes and the Developer's report is attached. The Tester's `VER` evidence and the Architect's audit (`VER-SPR-NNN`) are committed to the sprint branch before merge.
-- **Merge method: rebase and merge.** It keeps one commit per task on a straight `main`, which the divergence bisect tool (`docs/13` §4.5) needs.
+- **Merge method: a merge commit** pinned to the head SHA CI passed (GOV-009 §6). This replaces v1's rebase-and-merge (2.0.0, 2026-10-18), which every merge since SPR-008 had already set aside: branches carry merges of `main` and `[C3]`/`[perf-baseline]` commits whose ranges CI re-checks, and audit records cite branch SHAs that must stay valid. The bisect tool compares revisions, not a linear history.
 - **One merge at a time.** The Architect merges, then updates the next waiting branch from `main` and lets CI re-run before merging it. At most one C3 pull request is open for merge at a time.
 - **Who presses merge:** §6.
 
