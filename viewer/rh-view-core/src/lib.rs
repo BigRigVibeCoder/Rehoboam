@@ -5,9 +5,11 @@
 
 pub mod chunk;
 pub mod digest;
+pub mod export;
 pub mod lod;
 pub mod mesh;
 pub mod palette;
+pub mod terrain;
 
 #[cfg(feature = "mutant-unsafe")]
 fn _planted_unsafe() {

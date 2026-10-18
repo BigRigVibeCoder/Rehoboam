@@ -79,3 +79,41 @@ pub fn reduce_voxel(children: &[u16; 8]) -> u16 {
         best_id
     }
 }
+
+/// Reduces 8 child chunks (2x2x2) at level L into 1 chunk at level L+1.
+///
+/// Children are ordered by `dx + dz * 2 + dy * 4` where dx, dz, dy in {0, 1}.
+#[must_use]
+pub fn reduce_chunk(
+    children: [&crate::chunk::Chunk; 8],
+    coord: crate::chunk::ChunkCoord,
+) -> crate::chunk::Chunk {
+    let mut coarse = crate::chunk::Chunk::new(coord);
+    for y in 0..crate::chunk::CS {
+        let sub_y = y / 31;
+        let ly = (y % 31) * 2;
+        for z in 0..crate::chunk::CS {
+            let sub_z = z / 31;
+            let lz = (z % 31) * 2;
+            for x in 0..crate::chunk::CS {
+                let sub_x = x / 31;
+                let lx = (x % 31) * 2;
+                let child_chunk_idx = sub_x + sub_z * 2 + sub_y * 4;
+                let child = children[child_chunk_idx];
+
+                let mut child_voxels = [palette::AIR; 8];
+                for dy in 0..2 {
+                    for dz in 0..2 {
+                        for dx in 0..2 {
+                            let idx = dx + dz * 2 + dy * 4;
+                            child_voxels[idx] = child.get(lx + dx, ly + dy, lz + dz);
+                        }
+                    }
+                }
+                let mat = reduce_voxel(&child_voxels);
+                coarse.set(x, y, z, mat);
+            }
+        }
+    }
+    coarse
+}
