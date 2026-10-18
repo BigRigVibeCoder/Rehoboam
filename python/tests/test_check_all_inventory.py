@@ -200,6 +200,8 @@ REQUIRED_GATES = (
     "Golden vectors: fixture worlds twin_vales (seeds 1-3) and kingdom_10k (seed 1) at genesis, "
     "exact reference, with the altered-golden control in the same run (SPR-030; REV-SPR-030 R6, "
     "R10)",
+    "Golden vectors: minds v0 part A, the A-steps of T1 0.4.0, exact reference and golden file "
+    "(selftest_minds_v0 --check; T1-A)",
     "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference, with the "
     "effect_ref differential, its reversed-line control, and the altered-golden and stale-spec "
     "controls in the same run (SPR-019; REV-SPR-019 R3, R5; REV-SPR-030 R10, R27)",
@@ -209,6 +211,10 @@ REQUIRED_GATES = (
     "Golden vectors: rh-snapshot plane hashes match the independent reference (gen_hash_golden "
     "--check; SPR-007 T-01)",
     "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference (SPR-018)",
+    "Instant log model v0: phases, levels, bindings and serial merges on eleven scripted "
+    "scenarios; what each step sees in inserted(), exited() and the observed events, the "
+    "merge-time form and its refusals, the genealogy index, thread invariance, the hash, resume; "
+    "the transcript and the vectors current (instant_log_model --check; EVO-002)",
     "Keyframe sizes per rung: solo, household and hamlet's 200-year golden runs (SPR-013 T-13; "
     "reported)",
     "Licence ledger control: the GPL fixture is listed as GPL-3.0-only",
@@ -512,6 +518,23 @@ REQUIRED_GATES = (
     "gen_sampler_reference positive control: stale reference must FAIL",
     "gen_skeletons positive control: a hand-edited smoke skeleton must FAIL (SPR-008 ruling 2)",
     "gen_skeletons positive control: hand-edited skeleton must FAIL",
+    "instant_log_model positive control: M7's naming criteria without the manifest's cast, so that "
+    "tick 0's pass demotes a cast member, must FAIL (EVO-002; X4)",
+    "instant_log_model positive control: a genealogy index kept only at the instant's end must "
+    "FAIL (EVO-002)",
+    "instant_log_model positive control: a log not cleared at the instant's end must FAIL "
+    "(EVO-002)",
+    "instant_log_model positive control: a state hash that covers the log must FAIL (EVO-002)",
+    "instant_log_model positive control: an append in place of exited()'s sorted insert must FAIL "
+    "the order check, a later merge's death having the lower id (EVO-002; R9; T-00a MAJ-1)",
+    "instant_log_model positive control: an append in place of inserted()'s sorted insert must "
+    "FAIL the order check (EVO-002)",
+    "instant_log_model positive control: jobs that merge as they finish, so a later job sees its "
+    "level's peers, must FAIL thread invariance (EVO-002)",
+    "instant_log_model positive control: the merge-time form resolved against the log at the job's "
+    "own merge must FAIL visibility (EVO-002)",
+    "instant_log_model positive control: vectors with one state hash altered must FAIL as stale "
+    "(EVO-002; T-00a MIN-5)",
     "kill -9 by name: a kill during sealing leaves no partial segment and the resume reseals "
     "the same bytes; a mid-year kill re-emits no seq below the first unsealed year (SPR-013 "
     "T-09; GOV-002 tier 15; wire_v1.md §11)",
@@ -529,6 +552,8 @@ REQUIRED_GATES = (
     "lint_arch positive control: a clippy.toml reached through a symlinked member must FAIL "
     "(SPR-003 GAP-13)",
     "lint_arch positive control: a crate enabling rh-bench/count-alloc must FAIL (SPR-009 T-05)",
+    "lint_arch positive control: a crate neither named rh-sys-* nor pinned declaring kind system "
+    "must FAIL, beside rh-minds passing by its pin (T1-A; REV-MINDS finding 3)",
     "lint_arch positive control: a crate-local clippy.toml must FAIL (SPR-003 GAP-12)",
     "lint_arch positive control: a non-bench target requiring count-alloc must FAIL (SPR-009 T-05)",
     "lint_arch positive control: a plane-A crate enabling rh-bench/arena-alloc must FAIL "
@@ -559,6 +584,8 @@ REQUIRED_GATES = (
     "lint_arch positive control: rand_chacha outside rh-ids must FAIL",
     "lint_arch positive control: relabelled rh-snapshot must FAIL",
     "lint_arch positive control: rh-manifest relabelled as plane A must FAIL (SPR-004)",
+    "lint_arch positive control: rh-minds relabelled out of kind system must FAIL (T1-A; "
+    "REV-MINDS finding 3)",
     "lint_arch positive control: rh-protocol depending on a workspace crate must FAIL "
     "(protocol-leaf; SPR-026)",
     "lint_arch positive control: rh-protocol depending on tokio must FAIL (protocol-leaf "
@@ -739,6 +766,24 @@ REQUIRED_GATES = (
     "cognatic again in the summary, must FAIL (R3)",
     "lint_odd next positive control: the reviewer's q5_why case, Demote's why applied "
     "to minors, must FAIL (R3)",
+    "lint_odd observes control: an [[observes]] entry naming a Registry verb, its emitter and a "
+    "same_instant read of the emitter passes (EVO-002)",
+    "lint_odd observes positive control: a kind observed twice must FAIL (EVO-002; T-00a MIN-8)",
+    "lint_odd observes positive control: a system observing its own kind must FAIL (EVO-002; T-00a "
+    "MIN-8)",
+    "lint_odd observes positive control: an entry that is not a table must FAIL (EVO-002; T-00a "
+    "MIN-8)",
+    "lint_odd observes positive control: an entry with an unknown field must FAIL (EVO-002; T-00a "
+    "MIN-8)",
+    "lint_odd observes positive control: an entry without its why must FAIL (EVO-002; T-00a MIN-8)",
+    "lint_odd observes positive control: an observed kind that is not a Registry verb must FAIL "
+    "(EVO-002)",
+    "lint_odd observes positive control: an observed kind whose emitter is none of the system's "
+    "same_instant reads must FAIL (EVO-002)",
+    "lint_odd observes positive control: an observed kind whose owner is not its emitter must FAIL "
+    "(EVO-002)",
+    "lint_odd observes positive control: an observer bound only before its emitter's phase must "
+    "FAIL (EVO-002; T-00a MIN-8)",
     "lint_odd positive control: a smoke overlay id that is not X-prefixed must FAIL (SPR-008 "
     "ruling 2)",
     "lint_odd positive control: a smoke spec missing from the overlay must FAIL (SPR-008 ruling 2)",
@@ -777,6 +822,26 @@ REQUIRED_GATES = (
     "(REV-SPR-029 F14)",
     "lint_templates positive control: enum ids that differ from the emitter's column codes must "
     "FAIL (REV-SPR-029 F13)",
+    "minds v0 mutant: opinion-no-expiry changes the probe at the modifier's expiry (SPR-023 T-04; "
+    "T1-A)",
+    "minds v0 mutant: relation-not-ended changes the first monthly refresh's end line (SPR-023 "
+    "T-04; T1-A)",
+    "minds v0 mutant: repromote-redraw changes the re-promoted mind's golden line (SPR-023 T-03; "
+    "T1-A)",
+    "minds v0 mutant: trait-k-swap changes the first created mind's golden line (SPR-023 T-03; "
+    "T1-A)",
+    "minds v0 positive control: a Demote that cancels an owed DEATH_DUE or MARRY_DUE must FAIL A7 "
+    "(REV-MINDS M6; T1-A)",
+    "minds v0 positive control: a re-promotion that redraws the traits must FAIL INV-T1-05 "
+    "(REV-P1a MAJ-9; T1-A)",
+    "minds v0 positive control: a stale check value in the next T1 spec must FAIL (T1-A)",
+    "minds v0 positive control: a trait draw keyed at the wrong instant must FAIL INV-T1-05 (A3; "
+    "T1-A)",
+    "minds v0 positive control: an altered golden line must FAIL (T1-A)",
+    "minds v0 positive control: an index lookup that misses rows its own binding appended must "
+    "FAIL A2 (REV-MINDS M7; T1-A)",
+    "minds v0 positive control: genesis naming more than the manifest's cast must FAIL INV-T1-11 "
+    "(Architect ruling X4; T1-A)",
     "population synthesis positive control: conceptions inside the closed period must FAIL the "
     "spacing invariant (SPR-019 B6)",
     "population synthesis positive control: floors in place of the age-sex allocation must FAIL "
