@@ -182,10 +182,11 @@ def decode_ws_frame(data: bytes):
     return (opcode, decoded), rest
 
 class StreamServer:
-    def __init__(self, host="0.0.0.0", port=8089, interval=1.2):
+    def __init__(self, host="0.0.0.0", port=8089, interval=1.2, run_dir=None):
         self.host = host
         self.port = port
         self.interval = interval
+        self.run_dir = run_dir
         self.clients = set()
         self.sim = SimulationState()
         self.sim.interval = interval
@@ -459,21 +460,113 @@ class StreamServer:
 
             await asyncio.sleep(self.interval)
 
+    async def run_real_stream_loop(self):
+        import os
+        print(f"[STREAM-SERVER] Real Stream Mode Active for: {self.run_dir}")
+        cli = "target/debug/rh-cli"
+        if os.path.exists("target/release/rh-cli"):
+            cli = "target/release/rh-cli"
+        
+        cmd = [cli, "tail", self.run_dir, "--canonical", "--wait"]
+        print(f"[STREAM-SERVER] Spawning real stream tail: {' '.join(cmd)}")
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+
+        months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        while True:
+            line_bytes = await proc.stdout.readline()
+            if not line_bytes:
+                break
+            line = line_bytes.decode("utf-8", errors="ignore").strip()
+            if not line or line.startswith("#rehoboam") or line.startswith("# STATUS"):
+                continue
+
+            if line.startswith("STEP_DIGEST"):
+                parts = line.split()
+                if len(parts) >= 8:
+                    tick = int(parts[3])
+                    living = int(parts[4])
+                    births = int(parts[5])
+                    deaths = int(parts[6])
+                    state_hash = parts[7]
+                    year = tick // 518400
+                    month_idx = (tick % 518400) // 43200
+                    packet = {
+                        "type": "SIMULATION_TICK",
+                        "mode": "REAL_PLANE_A_STREAM",
+                        "tick": tick,
+                        "calendar": {
+                            "year": year,
+                            "month": months[month_idx % 12],
+                            "season": ["Winter", "Spring", "Summer", "Autumn"][(month_idx // 3) % 4]
+                        },
+                        "village": {
+                            "name": os.path.basename(os.path.abspath(self.run_dir)),
+                            "population": living,
+                            "births": births,
+                            "deaths": deaths,
+                            "state_hash": state_hash
+                        },
+                        "raw": line
+                    }
+                    await self.broadcast(packet)
+                    await asyncio.sleep(self.interval)
+
+            elif line.startswith("EVENT"):
+                parts = line.split()
+                verb = parts[7] if len(parts) > 7 else "UNKNOWN"
+                tick = int(parts[3]) if len(parts) > 3 else 0
+                packet = {
+                    "type": "PLANE_A_EVENT",
+                    "verb": verb,
+                    "tick": tick,
+                    "raw": line,
+                    "message": f"[Plane A Event] {verb} at tick {tick}"
+                }
+                await self.broadcast(packet)
+
+            elif line.startswith("LIFE_EXIT"):
+                parts = line.split()
+                tick = int(parts[3]) if len(parts) > 3 else 0
+                person_id = parts[4] if len(parts) > 4 else "unknown"
+                packet = {
+                    "type": "LIFE_EXIT",
+                    "tick": tick,
+                    "person_id": person_id,
+                    "message": f"Person #{person_id} exited simulation at tick {tick}"
+                }
+                await self.broadcast(packet)
+
+            elif line.startswith("#^ match"):
+                pattern = line[2:].strip()
+                packet = {
+                    "type": "SIFT_MATCH",
+                    "pattern": pattern,
+                    "message": f"[Plane C Story Sifter] Match: {pattern}"
+                }
+                await self.broadcast(packet)
+
     async def start(self):
         server = await asyncio.start_server(self.handle_client, self.host, self.port)
-        print(f"[STREAM-SERVER] Plane A WebSocket Broadcast Server listening on ws://{self.host}:{self.port}")
+        mode_str = f"REAL STREAM ({self.run_dir})" if self.run_dir else "POTEMKIN MOCK (Synthetic)"
+        print(f"[STREAM-SERVER] Plane A WebSocket Broadcast Server listening on ws://{self.host}:{self.port} [{mode_str}]")
+        sim_task = self.run_real_stream_loop() if self.run_dir else self.run_simulation_loop()
         await asyncio.gather(
             server.serve_forever(),
-            self.run_simulation_loop()
+            sim_task
         )
 
 def main():
     parser = argparse.ArgumentParser(description="Rehoboam Plane A Stream Server")
     parser.add_argument("--port", type=int, default=8089, help="WebSocket port (default 8089)")
     parser.add_argument("--interval", type=float, default=1.2, help="Tick interval in seconds (default 1.2)")
+    parser.add_argument("--run-dir", type=str, default=None, help="Optional path to real Rehoboam run directory to stream live")
     args = parser.parse_args()
 
-    srv = StreamServer(port=args.port, interval=args.interval)
+    srv = StreamServer(port=args.port, interval=args.interval, run_dir=args.run_dir)
     try:
         asyncio.run(srv.start())
     except KeyboardInterrupt:
