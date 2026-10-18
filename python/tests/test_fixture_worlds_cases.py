@@ -94,7 +94,10 @@ def test_tiers_follow_the_rulings() -> None:
     assert ref.SEEDS == {"twin_vales": (1, 2, 3), "kingdom_10k": (1, 2)}
     assert ref.PR_TIER == {"twin_vales": (1, 2, 3), "kingdom_10k": (1,)}
     crn = _load("selftest_crn_pairing", CRN)
-    assert crn.SEEDS == (1, 2, 3)  # seed 1 in check_all, every seed in golden_nightly.sh
+    # check_all: the first VALID seed of 1 to 4; golden_nightly.sh: seeds 1, 2, ... until two are
+    # VALID, up to seed 12 (BCK-002 A-62, the review's E4)
+    assert crn.PR_SEEDS == (1, 2, 3, 4)
+    assert (crn.NIGHTLY_VALID, crn.NIGHTLY_CAP) == (2, 12)
 
 
 def test_crn_calendar_mirrors_twin_vales() -> None:

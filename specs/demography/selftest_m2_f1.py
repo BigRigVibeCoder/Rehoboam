@@ -39,8 +39,10 @@ thousandths, the gestation and postpartum months, the sex ratio) are READ FROM T
      husband), run over the cases F6 states (a commoner couple, a daughter of a house married to a
      commoner, a wife married into a house, two member spouses drawing one multiplier and never
      E^2, a woman with no husband drawing nothing), at the fixture worlds' elite_fertility_mult
-     1.2; the NRR of a wife married into a house is the elite chain's; and the F6, F5, F3 and
-     elite_fertility_mult texts state the rule.
+     1.2; the NRR of a wife married into a house is the elite chain's, which assumes a member
+     husband for life and so is an upper bound (one who remarries a commoner after his death
+     bears less, and more than a commoner couple's wife: the chain with a first-marriage bit);
+     and the F6, F5, F3 and elite_fertility_mult texts state the rule.
 
 Run: python -I specs/demography/selftest_m2_f1.py
      python -I specs/demography/selftest_m2_f1.py --spec <path>   (a planted control: must FAIL)
@@ -636,6 +638,52 @@ def check_prose(st: Standards, spec: dict[str, Any]) -> bool:
     return ok
 
 
+def nrr_married_in(st: Standards, m_bits: int, elite_bits: int) -> float:
+    """NRR of a wife married into a house who remarries a commoner after her husband's death.
+
+    Check 5's widowhood chain with one more state bit: she draws ``elite_bits``' table while
+    her first husband (the member) lives, and ``m_bits``' after his death, when she remarries
+    on M2's market. The elite chain's NRR assumes a member husband for life, so it is the upper
+    bound of this one (D56 (e); the review of A-62).
+    """
+    chains = {
+        True: Chain(st, elite_bits, "30", mortality=True, gap=HUSBAND_OLDER_YEARS),
+        False: Chain(st, m_bits, "30", mortality=True, gap=HUSBAND_OLDER_YEARS),
+    }
+    x15 = FIRST_AGE * YEAR_360 + MONTH_360 // 2
+    p: dict[tuple[int, int, bool], float] = {(0, 0, True): 1.0}  # (married, k, first marriage)
+    births = []
+    for a in range(BANDS * BAND_MONTHS):
+        x = x15 + a * MONTH_360
+        due = sum(v for (_, k, _), v in p.items() if k == st.gestation)
+        births.append(due * chains[True].survival(x + MONTH_360 // 2))
+        q_h = chains[True].husband_death(x)
+        nxt: dict[tuple[int, int, bool], float] = {}
+        for (mm, k, first), v in p.items():
+            for (nm, nk), w in chains[first].step({(mm, k): v}, a // BAND_MONTHS, q_h).items():
+                widowed = first and mm == 1 and nm == 0  # the member husband died this month
+                key = (nm, nk, first and not widowed)
+                nxt[key] = nxt.get(key, 0.0) + w
+        p = nxt
+    return nrr_and_mean_age(births, st)[0]
+
+
+def couple_read_prose(spec: dict[str, Any]) -> bool:
+    """Check 9's prose part: F3, F5, F6 and elite_fertility_mult's meaning state the couple read."""
+    ok = True
+    for (step_table, label), needles in F6_PROSE.items():
+        text = step_text(spec, step_table, label)
+        for needle in needles:
+            if needle not in text:
+                ok = False
+                print(f"   {label} does not state {needle!r} (the couple read, D56 (e))")
+    meaning = next(p["meaning"] for p in spec["params"] if p["name"] == "elite_fertility_mult")
+    if MULT_MEANING not in meaning:
+        ok = False
+        print(f"   elite_fertility_mult's meaning does not state {MULT_MEANING!r}")
+    return ok
+
+
 def check_couple_read(st: Standards, spec: dict[str, Any], read: str) -> bool:
     """Check 9: F6's table choice is the read on the couple (D56 (e)), on F6's own cases."""
     m = level_bits(st, default_tfr_bits(spec))
@@ -670,23 +718,20 @@ def check_couple_read(st: Standards, spec: dict[str, Any], read: str) -> bool:
     if wife != daughter:
         ok = False
         print(f"   a wife married into a house: NRR {wife:.4f}, a daughter of one {daughter:.4f}")
-    fert = spec["algorithm"]["fertility_f1"]
-    for (step_table, label), needles in F6_PROSE.items():
-        text = step_text(spec, step_table, label)
-        for needle in needles:
-            if needle not in text:
-                ok = False
-                print(f"   {label} does not state {needle!r} (the couple read, D56 (e))")
-    meaning = next(p["meaning"] for p in spec["params"] if p["name"] == "elite_fertility_mult")
-    if MULT_MEANING not in meaning:
+    remarried = nrr_married_in(st, m, elite_level_bits(m, mult))
+    if read == "couple" and not commoner < remarried < wife:
         ok = False
-        print(f"   elite_fertility_mult's meaning does not state {MULT_MEANING!r}")
+        print(f"   a widow remarried out: NRR {remarried:.4f} not inside ({commoner}, {wife})")
+    ok &= couple_read_prose(spec)
+    fert = spec["algorithm"]["fertility_f1"]
     print(
         f"   F6 ({fert['version']}), read {read}, elite_fertility_mult {FIXTURE_MULT}: "
         + "; ".join(got_cases)
         + f". NRR at e0 = 30 with widowhood: a wife married into a house {wife:.4f}, a daughter "
         f"of a house {daughter:.4f}, a commoner couple's wife {commoner:.4f}; c_i^e at 20-24 = "
-        f"{tables['c_i^e'][1]} against c_i = {tables['c_i'][1]}"
+        f"{tables['c_i^e'][1]} against c_i = {tables['c_i'][1]}. For a wife married in, the elite "
+        f"{daughter:.4f} assumes a member husband for life, so it is an upper bound: one who "
+        f"remarries a commoner after his death bears {remarried:.4f}"
     )
     return ok
 

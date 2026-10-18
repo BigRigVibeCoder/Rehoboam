@@ -21,7 +21,7 @@
 "fidelity_ladder.F1.representation" = "sha256:b3a75edeceaae677883d0bae6237cac566c0d93e2e52a95e198520acffe2876b"
 "initialization.state" = "sha256:5706c83a4dd5985404d1586cc6d793307fbbaf0381318bdc5e3c5a700e297a27"
 "invariants.INV-M2-03.statement" = "sha256:0360341e475d4cd6fb5f34b9ed30993212d6c2b4ab7ce2fca30355306c8b9e13"
-"isolation.expect" = "sha256:1a38d224607ed5296625445564fa4ae18dd857d2cfac95672640ff1a24c6d6db"
+"isolation.expect" = "sha256:0d26275101982c7cc0e46161ae8bd827503df620b9bc8e1d95f8d3f67c262633"
 "owns.life_course.origin.meaning" = "sha256:4fea8dc0b4f98df973ca7b02379de4f02479479f2c45cecaa1264ea7dc478066"
 "owns.person.birth_tick.meaning" = "sha256:fdb05ea3070a4a18a51f6c44862005e4fe832e3139ba2c5caeff594f7d19b0c6"
 "owns.person.father.meaning" = "sha256:f8b91bef72c85eff590cb8bc7708deaa0963c8aac9b0b7591570648c9f39acb9"

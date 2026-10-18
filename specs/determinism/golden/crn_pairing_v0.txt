@@ -6,8 +6,9 @@
 # pending death; the affected set by component, with how many of it are alive at the input;
 # the living at the input and the unaffected; the pair's validity, the deaths, the pairs,
 # the identical pairs and rho^2 (exact rationals, rounded down); the target's death in each
-# run; the digests of both runs' death instants.
-constants crn-pairing-v0 horizon_years 10 input_offset 367 threshold 9/10 min_unaffected 100 e0 30 beta 1
+# run; the digests of both runs' death instants. The seeds are those the nightly tier
+# tries: 1, 2, ... until enough are VALID (the PR tier takes the first VALID of its seeds).
+constants crn-pairing-v0 horizon_years 10 input_offset 367 threshold 9/10 min_unaffected 100 e0 30 beta 1 pr_seeds 1,2,3,4 nightly_valid 2 nightly_cap 12
 world twin_vales 1 horizon_years 10 t_end 5184000
 candidate title 0 primogeniture founder 106 runA_death_year 2.29 runA_informative 230 chosen
 candidate title 3 tanistry founder 171 runA_death_year 0.65 runA_informative 289 rejected
@@ -28,3 +29,23 @@ candidate title 0 primogeniture founder 8 runA_death_year none rejected
 candidate title 3 tanistry founder 125 runA_death_year none rejected
 deaths_sha256 A 5474a47b705187e1b742fbb582ad4b643a7b52b45ecdeecefcca853009a5c41c
 pair SKIPPED no_sovereign_qualifies
+world twin_vales 4 horizon_years 10 t_end 5184000
+candidate title 0 primogeniture founder 8 runA_death_year none rejected
+candidate title 3 tanistry founder 185 runA_death_year 7.97 runA_informative 65 rejected
+deaths_sha256 A 8ffec9901f605a04c17c9dacc9155fd2f4a8e549321208776d17b9a6c5e56133
+pair SKIPPED no_sovereign_qualifies
+world twin_vales 5 horizon_years 10 t_end 5184000
+candidate title 0 primogeniture founder 8 runA_death_year none rejected
+candidate title 3 tanistry founder 99 runA_death_year 5.84 runA_informative 117 rejected
+deaths_sha256 A 05b0cdd1482ac89bc79bcabdf0702e6002272df327557436863678eacfef75b7
+pair SKIPPED no_sovereign_qualifies
+world twin_vales 6 horizon_years 10 t_end 5184000
+candidate title 0 primogeniture founder 15 runA_death_year 0.19 runA_informative 308 chosen
+candidate title 3 tanistry founder 156 runA_death_year none rejected
+target founder 15 id 6295801544934402858 age_years 72 title 0 law primogeniture
+input tick 98287 kind scope_only founder 15 epoch 0->1 pending 99360 resample miss window_years 9.81
+affected line 23 house 43 named_realm 19 realm_members 99 households 15 total 114 alive_at_input 54
+living_at_input A 1495 B 1495 unaffected 1441
+pair VALID deaths A 324 B 324 pairs 308 identical 308 rho2 1.000000000 rho_at_least_0.9 yes
+target_death A 99360 B 3866400
+deaths_sha256 A 537d7c13c184ae530dab9864975a0ed3c87dfca87ac21d202ba88e64667bc523 B 39b01977ffcaec7c3cf8274fe481babdcc22109e65aa123e9a70b777f956858a

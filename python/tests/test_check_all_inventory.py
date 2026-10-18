@@ -168,8 +168,9 @@ REQUIRED_GATES = (
     "Golden thread-leak positive control: the planted thread-identity leak must FAIL the "
     "1-versus-N comparison (VER-SPR-008 DEF-2)",
     "Golden vectors: Brass (M2)",
-    "Golden vectors: CRN pairing v0, the V-DET-17 worked computation on twin_vales at seed 1, "
-    "with its five controls on the same run A (SPR-030; REV-SPR-030 R3, R4, R10)",
+    "Golden vectors: CRN pairing v0, the V-DET-17 worked computation on twin_vales, the PR tier "
+    "(the first VALID seed of 1 to 4), with its five controls on the same run A (SPR-030; "
+    "REV-SPR-030 R3, R4, R10; BCK-002 A-62)",
     "Golden vectors: M2 F1 fertility and partnering, exact reference (SPR-015)",
     "Golden vectors: M2 F1 mortality, exact reference and golden file (selftest_m2_f1_mortality "
     "--check; SPR-016)",

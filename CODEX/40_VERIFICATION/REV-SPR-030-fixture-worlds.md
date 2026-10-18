@@ -8,10 +8,12 @@ agents: [architect]
 tags: [verification]
 related: [PRJ-002, SPR-030, SPR-019, SPR-021, SPR-022, SPR-015, REV-SPR-019, REV-SPR-029, BCK-002]
 created: 2026-10-17
-updated: 2026-10-17
-version: 1.0.0
+updated: 2026-10-18
+version: 1.0.1
 ---
 
+> **Supersession note (2026-10-18; BCK-002 A-62, D56 (e); the rulings below are unchanged).** D56 (e) moved the back-fill: every back-filled wife now draws `c_i^e`, so `fixture_worlds_v0.txt` and `crn_pairing_v0.txt` were regenerated. **R2's pinned empty-line route is retired**: no sovereign's line is empty at any pinned genesis (the one empty line, `kingdom_10k` seed 1's House Moss title, is a major title and goes to a regrant). **R8's routes are now the short lines** (`twin_vales` seed 1's Lord of Ash has a line of one; the tanistry lines are 1 to 9 long) **and a T1 pressed claim**. `specs/worldgen/fixture_worlds.md` §2.3 keeps its own statement of the routes.
+>
 > **BLUF: CLOSED on `3b42714` (round 4, verified by the Architect, 2026-10-17). The SPR-030 spec deliverables are ready to merge** (§0d).
 > - R23–R27 hold.
 > - Every SPR-030 gate passes or fails as required in the PR tier, and both nightly commands pass.
