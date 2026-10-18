@@ -1,12 +1,15 @@
-//! `rh-view-core`: Bevy-free core voxel processing, greedy meshing, terrain voxelization, and digests.
+//! `rh-view-core`: Bevy-free core voxel processing, greedy meshing, terrain voxelization, and digests (SPR-033).
 
 #![forbid(unsafe_code)]
 #![deny(clippy::float_arithmetic)]
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_workspace_init() {
-        assert_eq!(2 + 2, 4);
-    }
+pub mod chunk;
+pub mod digest;
+pub mod lod;
+pub mod mesh;
+pub mod palette;
+
+#[cfg(feature = "mutant-unsafe")]
+fn _planted_unsafe() {
+    unsafe {}
 }

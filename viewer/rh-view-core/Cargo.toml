@@ -18,6 +18,13 @@ twox-hash = { version = "=2.1.5", default-features = false, features = ["xxhash3
 [dev-dependencies]
 sha2 = "=0.11.0"
 
+[features]
+default = []
+mutant-mesh-drop-face = []
+mutant-lod-majority = []
+mutant-terrain-off-by-one = []
+mutant-unsafe = []
+
 [[bin]]
 name = "terrain_golden"
 path = "src/bin/terrain_golden.rs"
