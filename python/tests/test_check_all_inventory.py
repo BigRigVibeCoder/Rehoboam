@@ -83,6 +83,8 @@ REQUIRED_GATES = (
     "Doctest count gate positive control: one typed-ID case missing must FAIL",
     "Doctest count gate: every expected compile-fail case and twin ran (SPR-002 T-01; DEF-2)",
     "Document index builds (gen_manifest --check)",
+    "Effect enums: the Registry's keyed tables in the Rust loader's order equal tomllib's "
+    "(check_key_order; SPR-017 T-06)",
     "Effect programs positive control: a Registry whose seniority has no order must FAIL "
     "(SPR-017 T-06)",
     "Effect programs: every Registry program compiles against the real environment (rh-cli "
@@ -400,6 +402,8 @@ REQUIRED_GATES = (
     "(VER-SPR-008-TEST GAP-7)",
     "check_all verdict: a chain of passing gates exits 0 (check_all_selftest; VER-SPR-008-TEST "
     "GAP-3)",
+    "check_key_order positive control: every keyed table in sorted order must FAIL (SPR-017 "
+    "T-06)",
     "check_segments positive control: a DOUBLE column planted in a sealed table must FAIL "
     "(SPR-013 T-09; R2)",
     "check_segments positive control: an altered canonical_digest must FAIL (SPR-013 T-09; R7)",

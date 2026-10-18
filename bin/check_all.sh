@@ -824,6 +824,16 @@ effect_programs_control() {
   "$RH_CLI" effect check --registry "$planted"
 }
 
+# SPR-017 T-06: the keyed tables' order; the control feeds check_key_order the Rust lines with every table sorted.
+key_order_control() {
+  local planted="$PWD/target/rendered-fixtures/key_order_sorted.txt"
+  mkdir -p "$(dirname "$planted")" || return 1
+  "$RH_CLI" effect keys | while IFS=: read -r section ids; do
+    printf '%s: %s\n' "$section" "$(printf '%s\n' $ids | LC_ALL=C sort | tr '\n' ' ')"
+  done > "$planted" || return 1
+  "$PY" -I bin/check_key_order.py --rust-output "$planted"
+}
+
 # SPR-009 T-02a: the instruction-count gate (V-PERF-04) and its controls. The gate measures benches 7
 # and 8 under callgrind (bin/perf_gate.py) and compares them with the committed baseline; a second
 # run must give identical counts; a changed baseline must equal the tool's output (ruling 3).
@@ -1305,6 +1315,8 @@ run "V-WC-04 parity positive control: drifted Registry must FAIL" "fail:PARITY M
 run "V-WC-04 parity positive control: message-only drift must FAIL (GAP-3)" "fail:PARITY MISMATCH specs/manifest/examples/invalid_draft_style.yaml" "$PY" -I bin/manifest_parity.py --rust-bin "$RH_CLI" --rust-registry tests/lint_fixtures/parity/registry_drift_message.toml specs/manifest/examples/invalid_draft_style.yaml &&
 run "Effect programs: every Registry program compiles against the real environment (rh-cli effect check; SPR-017 T-06)" "pass:EFFECT PROGRAMS: PASS (7 laws, 21 programs)" "$RH_CLI" effect check &&
 run "Effect programs positive control: a Registry whose seniority has no order must FAIL (SPR-017 T-06)" "fail:ERROR succession_laws.seniority: no order program" effect_programs_control &&
+run "Effect enums: the Registry's keyed tables in the Rust loader's order equal tomllib's (check_key_order; SPR-017 T-06)" "pass:KEY ORDER: PASS" "$PY" -I bin/check_key_order.py --rust-bin "$RH_CLI" &&
+run "check_key_order positive control: every keyed table in sorted order must FAIL (SPR-017 T-06)" "fail:MISMATCH [opinion_modifiers]" key_order_control &&
 run "Ownership lint: single writer from specs/systems (SPR-004 T-03)" "pass:0 violations" "$RH_CLI" ownership &&
 run "Ownership lint positive control: unowned write must FAIL" "fail:VIOLATION [single-writer] S5.daily_life: writes person.alive, which M2.demography owns" "$RH_CLI" ownership tests/lint_fixtures/ownership/unowned_write.access.toml &&
 run "Ownership lint positive control: a write declared twice must FAIL (SPR-005 DEF-3)" "fail:VIOLATION [duplicate] M2.demography: declares a write to person.alive twice" "$RH_CLI" ownership tests/lint_fixtures/ownership/duplicate_write.access.toml &&
