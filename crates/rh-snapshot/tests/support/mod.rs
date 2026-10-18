@@ -183,6 +183,7 @@ impl Stub {
             key_field: "person".to_owned(),
             payload: None,
             outcome: false,
+            payload_malformed: None,
         });
         self
     }

@@ -707,3 +707,93 @@ fn a_natural_timer_after_a_commanded_death_is_dropped_as_dead() {
     );
     println!("probes: a natural timer after a commanded death is dropped as dead");
 }
+
+/// A scenario's world, built afresh for each thread count.
+type MakeEngine = Box<dyn Fn() -> Engine>;
+
+/// The review's K7: every death-path scenario of this file is thread-invariant. Each runs at 1, 2,
+/// 4 and 8 threads with equal `EngineState` and equal `dropped{…}` counters: the commanded deaths
+/// of V-INV-03, a natural and a commanded death in one slot, two commanded deaths of one victim,
+/// and the survivor's spouse cleared (DEF-2).
+#[test]
+fn every_death_path_scenario_is_thread_invariant() {
+    let ids = founder_ids(3, 8, 20, 85);
+    let v = [ids[0], ids[1]];
+    let mut probe = engine(5, 30, 99, 20, IDLE, IDLE);
+    probe.advance_until(SimTime::EPOCH, |_, _| {}).unwrap();
+    let (key, _) = probe
+        .agenda()
+        .pending()
+        .into_iter()
+        .find(|(k, t)| t.owner == system_id("M2.demography") && k.time.minutes() > DAY)
+        .expect("a natural death timer in month 0");
+    let (natural, tau) = (key.entity.raw(), key.time.minutes());
+    let x7_due = MONTH + 9 * DAY;
+    let x1_due = MONTH + 15 * DAY;
+    let scenarios: Vec<(&str, MakeEngine, i64)> = vec![
+        (
+            "V-INV-03",
+            Box::new(move || {
+                engine(
+                    3,
+                    8,
+                    20,
+                    85,
+                    plan(v[0], MONTH, x7_due),
+                    plan(v[1], x1_due - DAY, x1_due),
+                )
+            }),
+            2 * MONTH,
+        ),
+        (
+            "same slot",
+            Box::new(move || engine(5, 30, 99, 20, IDLE, plan(natural, tau - DAY, tau))),
+            MONTH,
+        ),
+        (
+            "double command",
+            Box::new(move || {
+                let due = MONTH + 12 * DAY;
+                engine(
+                    3,
+                    8,
+                    20,
+                    85,
+                    plan(v[0], MONTH, due),
+                    plan(v[0], due - DAY, due),
+                )
+            }),
+            2 * MONTH,
+        ),
+        (
+            "DEF-2",
+            Box::new(move || {
+                engine_with(
+                    3,
+                    (8, 20, 85),
+                    IDLE,
+                    plan(v[1], x1_due - DAY, x1_due),
+                    |t| {
+                        marry(t, v[0], v[1]);
+                    },
+                )
+            }),
+            2 * MONTH,
+        ),
+    ];
+    for (name, make, end) in &scenarios {
+        let at = |threads: usize| {
+            let mut e = make();
+            e.set_threads(threads);
+            drop(run(&mut e, *end));
+            (e.snapshot(), e.dropped().clone())
+        };
+        let (state, dropped) = at(1);
+        for threads in [2, 4, 8] {
+            let (s, d) = at(threads);
+            assert!(s == state, "{name}: EngineState at {threads} threads");
+            assert_eq!(d, dropped, "{name}: dropped at {threads} threads");
+        }
+    }
+    println!("K7: four death-path scenarios equal at 1, 2, 4 and 8 threads");
+}

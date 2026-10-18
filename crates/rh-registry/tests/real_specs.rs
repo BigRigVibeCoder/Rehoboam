@@ -1033,3 +1033,50 @@ fn a_drain_that_differs_from_its_spec_is_refused_by_name() {
     );
     println!("DRAINS: a drain that differs from its spec, or is missing, is refused by name");
 }
+
+/// The review's K10: a payload that does not parse is kept as malformed (registration refuses it
+/// by name), never read as an untyped command; a well-formed one is typed.
+#[test]
+fn a_malformed_applies_payload_is_kept_as_malformed() {
+    let text = |payload: &str| {
+        format!(
+            "[system]\nid = \"M2.demography\"\n[[applies]]\ncommand = \"Kill\"\npayload = \"{payload}\"\ndrained_by = \"Day/Vital\"\nkey = \"living\"\nkey_field = \"victim\"\n"
+        )
+    };
+    let entry = |payload: &str| {
+        let spec = SystemSpec::from_toml(Path::new("M2.odd.toml"), &text(payload)).unwrap();
+        let ids = std::iter::once("M2.demography".to_owned()).collect();
+        let table = Ownership::build(&[spec], &ids).spec_table();
+        table.specs["M2.demography"].applies[0].clone()
+    };
+    let bad = entry("victim PersonId");
+    assert_eq!(bad.payload, None);
+    assert_eq!(bad.payload_malformed.as_deref(), Some("victim PersonId"));
+    let good = entry("{ victim: PersonId }");
+    assert_eq!(
+        good.payload,
+        Some(vec![("victim".to_owned(), "PersonId".to_owned())])
+    );
+    assert_eq!(good.payload_malformed, None);
+}
+
+/// The review's K11: a rate read of a column whose owner has no spec yet gets its neutral typed by
+/// the literal alone: a zero is zero in every type; a non-zero integer is left untyped (it might be
+/// a `q8_8` or `q16_16` value).
+#[test]
+fn a_non_zero_neutral_for_a_column_with_no_spec_is_left_untyped() {
+    let neutral = |value: &str| {
+        let text = format!(
+            "[system]\nid = \"M3.agriculture\"\n[[reads]]\ncolumn = \"era.level\"\nowner = \"M6.polity\"\nlag = \"lagged\"\nuse = \"rate\"\nneutral = {value}\n"
+        );
+        let spec = SystemSpec::from_toml(Path::new("M3.odd.toml"), &text).unwrap();
+        let ids = ["M3.agriculture", "M6.polity"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        let table = Ownership::build(&[spec], &ids).spec_table();
+        table.specs["M3.agriculture"].read_uses[0].neutral
+    };
+    assert_eq!(neutral("0"), Some(0));
+    assert_eq!(neutral("5"), None);
+}

@@ -189,6 +189,7 @@ impl Stub {
             key_field: "person".to_owned(),
             payload: None,
             outcome: false,
+            payload_malformed: None,
         });
         self
     }
@@ -215,6 +216,17 @@ impl Stub {
         );
         key_field.clone_into(&mut a.key_field);
         key.clone_into(&mut a.key);
+        self
+    }
+
+    /// Declares an applied command outcome-carrying in its spec (`outcome = true`; EVO-001 R9).
+    pub fn outcome(mut self, command: &str) -> Self {
+        let a = self
+            .apply_specs
+            .iter_mut()
+            .find(|a| a.command == command)
+            .unwrap_or_else(|| panic!("{} does not apply {command}", self.id));
+        a.outcome = true;
         self
     }
 

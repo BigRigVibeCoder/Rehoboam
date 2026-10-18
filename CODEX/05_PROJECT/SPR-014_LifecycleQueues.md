@@ -2,7 +2,7 @@
 id: SPR-014
 title: "Lifecycle queues for P1a: delivery, one draining binding, event-typed slots, the dead-person drop, absent owners (P1.13)"
 type: how-to
-status: APPROVED
+status: CLOSED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
@@ -12,7 +12,7 @@ updated: 2026-10-17
 version: 0.1.0
 ---
 
-> **BLUF:** Builds EVO-001 (`05.1` v1.12 §2 rule 2) in the engine. A command reaches only the one binding its owner's spec names, within the instant when that binding runs later. Event-typed slots in commands and timers are rewritten at the merge. The sprint also delivers the dead-person drop (BCK-002 A-30), the queue-age invariant (A-31), the absent-owner registration rule (REV-P1a NEW-4), M2's `Day`/`Vital` drain, the ledger row insert that births need, `rh-contracts` v0 for M2's columns, and A-50. No golden ladder moves: `smoke`, `solo`, `household` and `hamlet` stay byte-identical (REV-EVO-001 R1, R15; EVO-001 §5). Developer: AGT-002-CORE. Testers: AGT-003-DET and AGT-003-IF (one Tester session may hold both roles, on a different model from the Developer's). About 3.5 agent-days. The class is **C3** because the sprint changes scheduler semantics (PRJ-002), even though no hash moves. It contains C2 work: the contract crate and M2 0.2.3. **Plan approved by the director on 2026-10-17 (D48; GOV-005 §2).**
+> **BLUF:** Builds EVO-001 (`05.1` v1.12 §2 rule 2) in the engine. A command reaches only the one binding its owner's spec names, within the instant when that binding runs later. Event-typed slots in commands and timers are rewritten at the merge. The sprint also delivers the dead-person drop (BCK-002 A-30), the queue-age invariant (A-31), the absent-owner registration rule (REV-P1a NEW-4), M2's `Day`/`Vital` drain, the ledger row insert that births need, `rh-contracts` v0 for M2's columns, and A-50. `smoke` stays byte-identical; `solo`, `household` and `hamlet` move only through `rh-core/engine.meta`'s cursor, which M2's daily drain instants advance, and are re-recorded in a `[C3]` commit (REV-EVO-001 R1 and EVO-001 §5 as amended; T-08; the Architect's option A, 2026-10-17). Developer: AGT-002-CORE. Testers: AGT-003-DET and AGT-003-IF (one Tester session may hold both roles, on a different model from the Developer's). About 3.5 agent-days. The class is **C3** because the sprint changes scheduler semantics (PRJ-002); the only hash that moves is the engine cursor's. It contains C2 work: the contract crate and M2 0.2.3. **Plan approved by the director on 2026-10-17 (D48; GOV-005 §2).**
 
 # SPR-014 — Lifecycle queues for P1a (WP P1.13)
 

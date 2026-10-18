@@ -1650,7 +1650,7 @@ impl Engine {
             // INVARIANT: `StepCtx::emit` admits only references to earlier drafts.
             draft
                 .causes
-                .extend(local.iter().filter_map(|r| ids.get(r.0).copied()));
+                .extend(local.iter().filter_map(|r| ids.get(r.index()).copied()));
             let id = self
                 .events
                 .append(t.minutes(), phase.index(), e.id, draft)
@@ -1662,7 +1662,7 @@ impl Engine {
             tally.events += 1;
         }
         // INVARIANT: `StepCtx` admits only references to drafts this step already emitted.
-        let resolve = |r: rh_events::EventRef| r.resolved(|d| ids.get(d.0).copied());
+        let resolve = |r: rh_events::EventRef| r.resolved(|d| ids.get(d.index()).copied());
         for (spec, purpose) in out.timers {
             self.agenda.insert(
                 spec.time,
@@ -1678,12 +1678,30 @@ impl Engine {
             );
         }
         for mut command in out.commands {
-            let Some(owner) = self.registered.commands.get(command.kind).map(|d| d.owner) else {
+            let Some(decl) = self.registered.commands.get(command.kind) else {
                 return Err(SimError::UndeclaredCommand {
                     system: e.id,
                     command: command.kind,
                 });
             };
+            let owner = decl.owner;
+            // R9 (05.1 §2 rule 2; the review's K3): an outcome-carrying command is applied in the
+            // instant it is submitted, so its draining binding must run later in this instant.
+            let drain = decl.drained_by;
+            if decl.outcome
+                && !(self.calendar.is_boundary(drain.pulse, t)
+                    && drain.phase.index() >= phase.index())
+            {
+                return Err(SimError::Timer {
+                    system: e.id,
+                    message: format!(
+                        "submitted outcome-carrying command {} at ({t}, {phase}), but its drain \
+                         {}/{} does not run later in this instant: an outcome is submitted only \
+                         where its draining binding fires after it (05.1 §2 rule 2; R9)",
+                        command.kind, drain.pulse, drain.phase
+                    ),
+                });
+            }
             let draft = command.cause.draft();
             command.cause = resolve(command.cause);
             for arg in &mut command.args {

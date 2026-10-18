@@ -273,7 +273,7 @@ fn send_step(
     };
     if v.read("send.bad")?[0] == 1 {
         let none = || Arg::Event(EventRef::None);
-        let draft = EventRef::Draft(rh_events::DraftRef(9));
+        let draft = EventRef::Draft(rh_events::DraftRef::from_index(9));
         let refused = [
             ("arity", c.submit(req(vec![Arg::Int(1)], EventRef::None))),
             (
@@ -480,5 +480,186 @@ fn a_skipped_month_drain_in_a_365_day_year_trips_the_queue_age() {
             "invariant queue-no-stale-command of rh-core violated: B1.own's Req command"
         ) && text.contains(&format!("has waited {} minutes", 28 * DAY)),
         "{text}"
+    );
+}
+
+fn untyped_send(
+    _: &Stub,
+    _: PulseBinding,
+    _: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    c.submit(Command {
+        kind: "Note",
+        person: person(1),
+        args: vec![Arg::Int(1), Arg::Event(EventRef::None)],
+        cause: EventRef::None,
+    })
+}
+
+/// The review's K1: an untyped command (its owner's `[[applies]]` declares no payload) with an
+/// event field is refused at `submit`, naming the sender, the kind and the field position, never
+/// queued to fail at the next keyframe.
+#[test]
+fn an_event_field_in_an_untyped_command_is_refused_at_submit() {
+    let stubs = vec![
+        Stub::new("A1.send")
+            .sends("Note", "B1.own")
+            .at(Pulse::Day, Phase::Agenda)
+            .stepping(untyped_send),
+        Stub::new("B1.own")
+            .writes("own.n")
+            .at(Pulse::Day, Phase::Vital)
+            .applies("Note")
+            .stepping(own_step),
+    ];
+    let specs = agreeing_specs(&stubs);
+    let registered = register(stubs.into_iter().map(Stub::boxed).collect(), &specs)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let mut tables = WorldTables::new();
+    tables.insert("own.n", vec![0]);
+    let mut e = Engine::new(
+        CALENDAR,
+        3,
+        BranchSalt::from_raw(0),
+        registered,
+        tables,
+        SimTime::EPOCH,
+    );
+    let err = e
+        .advance_until(SimTime::from_minutes(DAY - 1), |_, _| {})
+        .expect_err("an event slot in an untyped command must be refused");
+    assert_eq!(
+        err.to_string(),
+        "A1.send submitted command Note: field 1 is an event slot, but B1.own's [[applies]] \
+         declares no payload: an untyped command carries integers only"
+    );
+    assert_eq!(e.commands().len(), 0, "nothing queued");
+}
+
+/// `F1.doom` at day 0's Agenda: schedules its outcome timer, in `Vital` (where it is also bound,
+/// so the timer can fire), at the minute `doom.at` holds.
+fn doom_schedule(
+    _: &Stub,
+    b: PulseBinding,
+    v: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    if c.now().minutes() != 0 || b.phase != Phase::Agenda {
+        return Ok(());
+    }
+    c.schedule(
+        &Due::Due,
+        TimerSpec {
+            time: SimTime::from_minutes(v.read("doom.at")?[0]),
+            phase: Phase::Vital,
+            entity: EntityRef::person(person(1)),
+            kind: 1,
+            payload: 0,
+            cause: EventRef::None,
+        },
+    )
+}
+
+/// The outcome timer's fire submits the outcome-carrying `Doom` (R9: only a sender's timer does).
+fn doom_fire(
+    _: &Stub,
+    _: &TimerEntry,
+    _: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    c.submit(Command {
+        kind: "Doom",
+        person: person(1),
+        args: Vec::new(),
+        cause: EventRef::None,
+    })
+}
+
+fn doom_world(at: i64) -> Engine {
+    let stubs = vec![
+        Stub::new("F1.doom")
+            .writes("doom.at")
+            .purposes_of::<Due>()
+            .sends("Doom", "E1.own")
+            .at(Pulse::Day, Phase::Agenda)
+            .at(Pulse::Day, Phase::Vital)
+            .stepping(doom_schedule)
+            .firing(doom_fire),
+        Stub::new("E1.own")
+            .writes("own.n")
+            .at(Pulse::Day, Phase::Vital)
+            .applies("Doom")
+            .outcome("Doom")
+            .stepping(own_step),
+    ];
+    let specs = agreeing_specs(&stubs);
+    let registered = register(stubs.into_iter().map(Stub::boxed).collect(), &specs)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let mut tables = WorldTables::new();
+    tables.insert("doom.at", vec![at]);
+    tables.insert("own.n", vec![0]);
+    Engine::new(
+        CALENDAR,
+        3,
+        BranchSalt::from_raw(0),
+        registered,
+        tables,
+        SimTime::EPOCH,
+    )
+}
+
+/// The review's K3 (R9, 05.1 §2 rule 2): an outcome-carrying command is applied in the instant it
+/// is submitted. Fired at a day start, Day/Vital's drain runs after the timer pass and applies it;
+/// fired at 12:00 (no Day pulse) the merge refuses it, naming the sender and the command.
+#[test]
+fn an_outcome_command_whose_drain_does_not_follow_is_refused_at_the_merge() {
+    let mut day_start = doom_world(DAY);
+    through_day(&mut day_start, 1);
+    assert_eq!(day_start.tables().get("own.n").map(|t| t[0]), Some(1));
+    assert_eq!(day_start.commands().len(), 0, "applied in its instant");
+    let err = doom_world(DAY + 720)
+        .advance_until(SimTime::from_minutes(2 * DAY), |_, _| {})
+        .expect_err("an outcome submitted where its drain does not follow must be refused");
+    let text = err.to_string();
+    assert!(
+        text.starts_with("F1.doom")
+            && text.contains("submitted outcome-carrying command Doom at (t=2160min, Vital)")
+            && text.contains("its drain Day/Vital does not run later in this instant"),
+        "{text}"
+    );
+    println!("probes: an outcome command is refused unless its drain follows in the instant");
+}
+
+/// The review's K10: registration fails closed on an `[[applies]]` entry, as `lint_odd.py` does: a
+/// key rule other than `living` or `any`, and a payload that does not parse, are refused by name.
+#[test]
+fn registration_refuses_an_unknown_key_and_a_malformed_payload() {
+    let refused = |edit: fn(&mut Stub)| {
+        let mut owner = Stub::new("B1.own")
+            .writes("own.n")
+            .at(Pulse::Day, Phase::Vital)
+            .applies("Req")
+            .stepping(own_step);
+        edit(&mut owner);
+        let stubs = vec![owner];
+        let specs = agreeing_specs(&stubs);
+        register(stubs.into_iter().map(Stub::boxed).collect(), &specs)
+            .err()
+            .expect("refused")
+            .to_string()
+    };
+    let key = refused(|s| "maybe".clone_into(&mut s.apply_specs[0].key));
+    assert!(
+        key.contains("VIOLATION [spec] B1.own: command Req's key is maybe, not living or any"),
+        "{key}"
+    );
+    let payload =
+        refused(|s| s.apply_specs[0].payload_malformed = Some("victim PersonId".to_owned()));
+    assert!(
+        payload.contains(
+            "VIOLATION [spec] B1.own: command Req's payload \"victim PersonId\" does not parse"
+        ),
+        "{payload}"
     );
 }
