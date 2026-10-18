@@ -1425,6 +1425,11 @@
       color: var(--violet);
       border: 1px solid rgba(168, 85, 247, 0.3);
     }
+    .crate-plane-tag.plane-b {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--amber);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
     .crate-plane-tag.plane-c {
       background: rgba(16, 185, 129, 0.15);
       color: var(--emerald);
@@ -1520,8 +1525,8 @@
               <div class="meter-bar-fill" style="width: 100%; background: linear-gradient(90deg, #10b981 0%, #00f0ff 100%);"></div>
             </div>
             <div class="meter-details">
-              <span>Active Sprints: SPR-014 (Queues), SPR-020 (Envelope), SPR-026 (Stream)</span>
-              <span>Viewer Lane: PRJ-003 / SPR-033 Bevy Spike</span>
+              <span>Active Sprints: SPR-014 (Queues @ 28ab29e), SPR-020 (Envelope), SPR-026 (Stream v1), SPR-038a</span>
+              <span>Viewer Lane: PRJ-003 / SPR-033a/b Bevy Spike (PR #100 Merged · D63 Filed)</span>
             </div>
           </div>
         </div>
@@ -1532,28 +1537,28 @@
     <div class="dev-stats-hud">
       <div class="dev-hud-card" onclick="switchTab('stats')" style="cursor: pointer;">
         <div class="dev-hud-lbl">Rust Core Engine</div>
-        <div class="dev-hud-val emerald">51,280</div>
-        <div class="dev-hud-sub">390 Files · 14 Crates</div>
+        <div class="dev-hud-val emerald">61,463</div>
+        <div class="dev-hud-sub">426 Files · 16 Crates</div>
       </div>
       <div class="dev-hud-card" onclick="switchTab('stats')" style="cursor: pointer;">
         <div class="dev-hud-lbl">Total Code & Specs</div>
-        <div class="dev-hud-val cyan">165,400+</div>
-        <div class="dev-hud-sub">1,020+ Total Files</div>
+        <div class="dev-hud-val cyan">1,360,877</div>
+        <div class="dev-hud-sub">2,714 Total Files (233k Code/Specs)</div>
       </div>
       <div class="dev-hud-card" onclick="switchTab('stats')" style="cursor: pointer;">
         <div class="dev-hud-lbl">Automated Test Checks</div>
-        <div class="dev-hud-val emerald">1,301</div>
-        <div class="dev-hud-sub">538 PR-Tier + 714 Pytest + 14 Domain + 35 Chaos/Fuzz/Probes</div>
+        <div class="dev-hud-val emerald">1,273+</div>
+        <div class="dev-hud-sub">519 Gates (PR-Tier) + 714 Pytest + 14 Domain + 35 Probes (100% Green)</div>
       </div>
       <div class="dev-hud-card" onclick="switchTab('stats')" style="cursor: pointer;">
         <div class="dev-hud-lbl">Git Commits / PRs</div>
-        <div class="dev-hud-val violet">649+ / 96</div>
-        <div class="dev-hud-sub">PR #95 & #96 Merged · D60 Approved · D58/59 Pending</div>
+        <div class="dev-hud-val violet">787 / 103</div>
+        <div class="dev-hud-sub">PR #102 Merged (Handoff) · PR #103 In Flight (Token Discipline)</div>
       </div>
       <div class="dev-hud-card" onclick="switchTab('stats')" style="cursor: pointer;">
         <div class="dev-hud-lbl">Bitwise Parity Gates</div>
         <div class="dev-hud-val emerald">100%</div>
-        <div class="dev-hud-sub">bin/check_all.sh Pipeline</div>
+        <div class="dev-hud-sub">bin/check_all.sh Pipeline (519 Gates)</div>
       </div>
       <div class="dev-hud-card" onclick="switchTab('stats')" style="cursor: pointer;">
         <div class="dev-hud-lbl">Float Operations</div>
@@ -2674,10 +2679,10 @@
             <span style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">Rungs 0–2 (1 to 60 people)</span>
           </div>
           <div class="phase-body">
-            <div class="phase-plain-text" data-plain="Spawning the first actual human beings! Solo lived and died (SPR-012 merged); World Stream live flight recorder is in flight (SPR-013 PR #64); Wave 4 plans approved by Director (D48)." data-arch="Rungs 0-2 (solo, household, hamlet); M2 demography; M7 succession; minds v0 with stress & mental breaks; cinematic event envelope; World Stream v1.">
-              Spawning the first actual human beings! Solo lived and died (SPR-012 merged); World Stream live flight recorder is in flight (SPR-013 PR #64); Wave 4 plans approved by Director (D48).
+            <div class="phase-plain-text" data-plain="Spawning the first actual human beings! Solo lived and died (SPR-012 merged); World Stream live flight recorder active (SPR-013 merged); Bevy voxel viewer plans ratified (PR #100 / D63); Google Architect handoff complete (PR #102); Token Discipline in flight (PR #103)." data-arch="Rungs 0-2 (solo, household, hamlet); M2 demography; M7 succession; minds v0 with stress & mental breaks; cinematic event envelope; World Stream v1.">
+              Spawning the first actual human beings! Solo lived and died (SPR-012 merged); World Stream live flight recorder active (SPR-013 merged); Bevy voxel viewer plans ratified (PR #100 / D63); Google Architect handoff complete (PR #102); Token Discipline in flight (PR #103).
             </div>
-            <div class="phase-tech-text">SPR-011 & SPR-012 Merged · SPR-013 In Flight · Wave 4 (SPR-014, 020, 026) Approved</div>
+            <div class="phase-tech-text">SPR-012 & SPR-013 Merged · Wave 4 (SPR-014, 020, 026) & Wave 7 Approved · PR #100 Merged · PR #102 Merged · PR #103 In Flight</div>
           </div>
           <div class="phase-status-box">
             <span class="status-pill active">In Progress</span>
@@ -3246,25 +3251,91 @@
           </div>
         </div>
 
-        <!-- D63 (QUEUED ON BRANCH) -->
+        <!-- PR #103 (OPEN / IN FLIGHT) -->
+        <div class="interactive-card" style="border: 1px solid var(--cyan); background: rgba(0, 240, 255, 0.05); box-shadow: 0 0 25px rgba(0, 240, 255, 0.15);">
+          <div class="card-top">
+            <span class="ledger-item-id" style="color: var(--cyan); font-weight: 800;">PR #103</span>
+            <span class="status-pill active" style="border-color: var(--cyan); color: var(--cyan);">⚡ OPEN · IN FLIGHT</span>
+          </div>
+          <h4 style="color: #ffffff; margin: 4px 0 8px 0;">Token Discipline & Subagent Governance (GOV-011 §8)</h4>
+          <p style="font-size: 0.84rem; color: var(--slate-300);">
+            <strong>Pushed by Claude Architect:</strong> Codifies project settings and subagent hierarchy to eliminate context runaway ($3,966 / 52 sessions identified in token audit):<br>
+            • <code>.claude/settings.json</code>: Effort high by default, auto-compact at 200k tokens, bash output capped at 12,000 characters inline.<br>
+            • <code>.claude/agents/</code>: Deploys 4 specialized helper agents: <code>drafter</code> (strongest tier), <code>reviewer</code> (read-only audit), <code>mechanic</code> (surgical edits), and <code>scout</code> (low-tier research).<br>
+            • <code>GOV-011 §8</code>: Mandates token and compute discipline across all AI agent sessions and vendors.
+          </p>
+          <div style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--cyan); margin-top: 10px;">
+            Branch: origin/arch/token-discipline · Commit 2f472cc · 13 files (+194, -9)
+          </div>
+        </div>
+
+        <!-- PR #102 (MERGED) -->
+        <div class="interactive-card" style="border: 1px solid var(--emerald); background: rgba(16, 185, 129, 0.05); box-shadow: 0 0 20px rgba(16, 185, 129, 0.1);">
+          <div class="card-top">
+            <span class="ledger-item-id" style="color: var(--emerald); font-weight: 800;">PR #102</span>
+            <span class="status-pill merged">✓ Merged (69ded24)</span>
+          </div>
+          <h4 style="color: #ffffff; margin: 4px 0 8px 0;">Architect Handoff 2026-10-18: Google Gemini Takes Helm</h4>
+          <p style="font-size: 0.84rem; color: var(--slate-300);">
+            <strong>Milestone Governance Transition:</strong> Outgoing Claude Opus Architect hit token exhaustion and completed formal project transfer to incoming Google Gemini Architect under <code>HANDOFF.md</code>:<br>
+            • Codifies <code>GOV-009</code> (Git & PR workflows), <code>GOV-010</code> (CI tier), <code>GOV-011</code> (Agent session independence & ownership), and <code>GOV-005 2.0.0</code>.<br>
+            • Confirms priority hierarchy (D62): P1 Core Engine (SPR-014/020/026/038a) &gt; P2 Bevy Viewer (PRJ-003) &gt; P3 Era Packs.<br>
+            • Pushes remote session recovery branches (<code>backup/*-handoff-20261018</code>) and rulings.
+          </p>
+          <div style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--emerald); margin-top: 10px;">
+            HANDOFF.md · docs/handoff/2026-10-18/ · GEMINI.md Pointer Active
+          </div>
+        </div>
+
+        <!-- PR #101 (MERGED) -->
+        <div class="interactive-card" style="border: 1px solid var(--emerald); background: rgba(16, 185, 129, 0.05);">
+          <div class="card-top">
+            <span class="ledger-item-id" style="color: var(--emerald); font-weight: 800;">PR #101</span>
+            <span class="status-pill merged">✓ Merged (66ec301)</span>
+          </div>
+          <h4 style="color: #ffffff; margin: 4px 0 8px 0;">PY-PKG: Python uv Packaging (rehoboam_tools)</h4>
+          <p style="font-size: 0.84rem; color: var(--slate-300);">
+            Standardized the Python cleanroom and tooling package via <code>uv_build==0.11.32</code>. Packages <code>rehoboam_tools</code> with explicit layout tests and resolves import hygiene across AST linters, ODD references, and verification harnesses. Unblocks SPR-027 T-05 and Wave 8.
+          </p>
+          <div style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--emerald); margin-top: 10px;">
+            uv_build 0.11.32 · python/rehoboam_tools · PR #101 Merged
+          </div>
+        </div>
+
+        <!-- PR #100 (MERGED) -->
+        <div class="interactive-card" style="border: 1px solid var(--violet); background: rgba(168, 85, 247, 0.05);">
+          <div class="card-top">
+            <span class="ledger-item-id" style="color: var(--violet); font-weight: 800;">PR #100</span>
+            <span class="status-pill merged">✓ Merged (fc979ee)</span>
+          </div>
+          <h4 style="color: #ffffff; margin: 4px 0 8px 0;">Viewer Plans Rev 2: Bevy 3D Spike Staging (SPR-033..035)</h4>
+          <p style="font-size: 0.84rem; color: var(--slate-300);">
+            Formally ratified the viewer roadmap (<code>PRJ-003 v1.4.2</code>). Splits SPR-033 into 033a (Bevy-free terrain voxelizer, 2.5 days) and 033b (Native Bevy 0.20 render loop, 2.5 days). Closed REV-VIEWER review, resolved BCK-002 A-68..A-71, and submitted Decision D63 to Director.
+          </p>
+          <div style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--violet); margin-top: 10px;">
+            SPR-033a/b, SPR-034, SPR-035 · PRJ-003 v1.4.2 · D63 Submitted
+          </div>
+        </div>
+
+        <!-- D63 (PENDING DIRECTOR RULING) -->
         <div class="interactive-card" style="border: 1px solid var(--violet); background: rgba(168, 85, 247, 0.05); box-shadow: 0 0 20px rgba(168, 85, 247, 0.15);">
           <div class="card-top">
             <span class="ledger-item-id" style="color: var(--violet); font-weight: 800;">D63</span>
-            <span class="status-pill active" style="border-color: var(--violet); color: var(--violet);">⏳ QUEUED ON VIEWER BRANCH</span>
+            <span class="status-pill active" style="border-color: var(--violet); color: var(--violet);">📋 PLANS MERGED (PR #100) · AWAITING RULING</span>
           </div>
           <h4 style="color: #ffffff; margin: 4px 0 8px 0;">Approve Viewer Lane Sprint Plans (SPR-033, SPR-034, SPR-035)</h4>
           <p style="font-size: 0.84rem; color: var(--slate-300);">
-            <strong>Pending Question:</strong> Approve the viewer lane's first three sprint plans (branch <code>origin/arch/viewer-plans</code>): SPR-033 Bevy diorama spike (starts when SPR-026 merges), SPR-034 stream hydration and building grammar v0, and SPR-035 materializer scrubber with watched history cache. Target: &ge;60 FPS and &le;250ms scrub latency on Director's ThinkPad P51.
+            <strong>Pending Question:</strong> Approve the viewer lane's first three sprint plans (merged on main via PR #100): SPR-033 Bevy diorama spike (starts when SPR-026 merges; 033a Bevy-free, 033b Bevy 0.20), SPR-034 stream hydration and building grammar v0, and SPR-035 materializer scrubber with watched history cache. Target: &ge;60 FPS and &le;250ms scrub latency on Director's ThinkPad P51.
           </p>
           <div style="background: rgba(168, 85, 247, 0.08); border: 1px dashed rgba(168, 85, 247, 0.35); border-radius: 8px; padding: 10px; margin-top: 10px;">
             <div style="font-size: 0.76rem; color: var(--violet); font-weight: 700; text-transform: uppercase;">Director Chat Ruling Snippet:</div>
             <div style="display: flex; gap: 8px; align-items: center; margin-top: 6px; flex-wrap: wrap;">
-              <code style="background: rgba(0,0,0,0.5); padding: 4px 8px; border-radius: 4px; font-size: 0.78rem; color: #ffffff; font-family: var(--font-mono);">D63: Approved. Proceed with Viewer Lane plans (SPR-033 v1.3.0, SPR-034, SPR-035) as recommended.</code>
-              <button class="btn-action" style="padding: 4px 10px; font-size: 0.72rem; background: var(--violet); color: #ffffff; font-weight: 700;" onclick="navigator.clipboard.writeText('D63: Approved. Proceed with Viewer Lane plans (SPR-033 v1.3.0, SPR-034, SPR-035) as recommended.'); alert('Approval snippet copied to clipboard! Reply in chat to rule D63.');">Copy Approval 📋</button>
+              <code style="background: rgba(0,0,0,0.5); padding: 4px 8px; border-radius: 4px; font-size: 0.78rem; color: #ffffff; font-family: var(--font-mono);">D63: Approved. Proceed with Viewer Lane plans (SPR-033 v1.4.2, SPR-034, SPR-035) as recommended.</code>
+              <button class="btn-action" style="padding: 4px 10px; font-size: 0.72rem; background: var(--violet); color: #ffffff; font-weight: 700;" onclick="navigator.clipboard.writeText('D63: Approved. Proceed with Viewer Lane plans (SPR-033 v1.4.2, SPR-034, SPR-035) as recommended.'); alert('Approval snippet copied to clipboard! Reply in chat to rule D63.');">Copy Approval 📋</button>
             </div>
           </div>
           <div style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--violet); margin-top: 10px;">
-            Target: SPR-033..035 · Architect & Red Team Recommend: APPROVE (80%)
+            Target: SPR-033..035 · Architect & Red Team Recommend: APPROVE (75%)
           </div>
         </div>
 
@@ -3635,21 +3706,20 @@
       <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 16px; padding: 24px; margin-bottom: 24px;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
           <div>
-            <span class="phase-tag emerald" style="font-size: 0.75rem;">160,924 TOTAL LINES OF CODE & SPECS</span>
-            <h4 style="color: #ffffff; font-size: 1.25rem; margin-top: 6px;">Polyglot Architecture Breakdown (1,006 Files)</h4>
+            <span class="phase-tag emerald" style="font-size: 0.75rem;">1,360,877 TOTAL LINES (233K CODE/SPECS + 1.13M CAVP VECTORS)</span>
+            <h4 style="color: #ffffff; font-size: 1.25rem; margin-top: 6px;">Polyglot Architecture Breakdown (2,714 Files across 16 Crates)</h4>
           </div>
           <div style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--cyan); background: rgba(0, 240, 255, 0.1); border: 1px solid rgba(0, 240, 255, 0.25); padding: 6px 14px; border-radius: 8px;">
-            576 Commits on Main · 70 PRs Processed
+            787 Commits on Main · 103 PRs Processed (102 Merged)
           </div>
         </div>
 
         <!-- Stacked Color Bar -->
         <div class="lang-breakdown-bar">
-          <div class="lang-segment" style="width: 30.4%; background: #10b981;" title="Rust (.rs): 48,904 lines (30.4%)"></div>
-          <div class="lang-segment" style="width: 20.0%; background: #3b82f6;" title="Python (.py): 32,119 lines (20.0%)"></div>
-          <div class="lang-segment" style="width: 21.1%; background: #00f0ff;" title="Specs & Architecture (.md): 33,880 lines (21.1%)"></div>
-          <div class="lang-segment" style="width: 14.1%; background: #f59e0b;" title="Specs, Schemas & Configs (.toml, .yaml): 22,666 lines (14.1%)"></div>
-          <div class="lang-segment" style="width: 14.5%; background: #a855f7;" title="WebGL Frontends (.html, .js, .css): 23,355 lines (14.5%)"></div>
+          <div class="lang-segment" style="width: 26.4%; background: #10b981;" title="Rust (.rs): 61,463 lines (26.4% of code/specs)"></div>
+          <div class="lang-segment" style="width: 21.6%; background: #3b82f6;" title="Python (.py): 50,389 lines (21.6% of code/specs)"></div>
+          <div class="lang-segment" style="width: 42.4%; background: #00f0ff;" title="Specs & Architecture (.md): 98,684 lines (42.4% of code/specs)"></div>
+          <div class="lang-segment" style="width: 9.6%; background: #a855f7;" title="WebGL Frontends & Tools (.html, .js, .css): 22,500 lines (9.6% of code/specs)"></div>
         </div>
 
         <!-- Language Metric Cards -->
@@ -3657,46 +3727,46 @@
           <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 10px; padding: 14px;">
             <div style="display: flex; justify-content: space-between; font-size: 0.75rem; font-family: var(--font-mono); color: var(--emerald); font-weight: 700;">
               <span>RUST (.rs)</span>
-              <span>30.4%</span>
+              <span>26.4%</span>
             </div>
-            <div style="font-size: 1.45rem; font-weight: 800; font-family: var(--font-mono); color: #ffffff; margin-top: 4px;">48,904</div>
-            <p style="font-size: 0.76rem; color: var(--slate-300); margin-top: 4px;">380 files · Plane A pure deterministic core, zero float ops, single writer.</p>
+            <div style="font-size: 1.45rem; font-weight: 800; font-family: var(--font-mono); color: #ffffff; margin-top: 4px;">61,463</div>
+            <p style="font-size: 0.76rem; color: var(--slate-300); margin-top: 4px;">426 files · 16 crates · Plane A pure deterministic core + Plane B stream & sifter, zero float ops, single writer.</p>
           </div>
 
           <div style="background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 10px; padding: 14px;">
             <div style="display: flex; justify-content: space-between; font-size: 0.75rem; font-family: var(--font-mono); color: #60a5fa; font-weight: 700;">
               <span>PYTHON (.py)</span>
-              <span>20.0%</span>
+              <span>21.6%</span>
             </div>
-            <div style="font-size: 1.45rem; font-weight: 800; font-family: var(--font-mono); color: #ffffff; margin-top: 4px;">32,119</div>
-            <p style="font-size: 0.76rem; color: var(--slate-300); margin-top: 4px;">68 files · Cleanroom math models (ODD-R), AST linters & verify harnesses.</p>
+            <div style="font-size: 1.45rem; font-weight: 800; font-family: var(--font-mono); color: #ffffff; margin-top: 4px;">50,389</div>
+            <p style="font-size: 0.76rem; color: var(--slate-300); margin-top: 4px;">85 files · Cleanroom math models (ODD-R), <code>rehoboam_tools</code> package, AST linters & verify harnesses.</p>
           </div>
 
           <div style="background: rgba(0, 240, 255, 0.08); border: 1px solid rgba(0, 240, 255, 0.25); border-radius: 10px; padding: 14px;">
             <div style="display: flex; justify-content: space-between; font-size: 0.75rem; font-family: var(--font-mono); color: var(--cyan); font-weight: 700;">
               <span>SPECS (.md)</span>
-              <span>21.1%</span>
+              <span>42.4%</span>
             </div>
-            <div style="font-size: 1.45rem; font-weight: 800; font-family: var(--font-mono); color: #ffffff; margin-top: 4px;">33,880</div>
-            <p style="font-size: 0.76rem; color: var(--slate-300); margin-top: 4px;">215 files · NASA-grade CODEX system, 190 indexed docs, ADRs & audits.</p>
+            <div style="font-size: 1.45rem; font-weight: 800; font-family: var(--font-mono); color: #ffffff; margin-top: 4px;">98,684</div>
+            <p style="font-size: 0.76rem; color: var(--slate-300); margin-top: 4px;">546 files · NASA-grade CODEX system, 242 indexed docs in MANIFEST, ADRs, and verification audits.</p>
           </div>
 
           <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 10px; padding: 14px;">
             <div style="display: flex; justify-content: space-between; font-size: 0.75rem; font-family: var(--font-mono); color: var(--amber); font-weight: 700;">
-              <span>SCHEMAS (.toml/.yaml)</span>
-              <span>14.1%</span>
+              <span>SCHEMAS & CAVP</span>
+              <span>1,647 Files</span>
             </div>
-            <div style="font-size: 1.45rem; font-weight: 800; font-family: var(--font-mono); color: #ffffff; margin-top: 4px;">22,666</div>
-            <p style="font-size: 0.76rem; color: var(--slate-300); margin-top: 4px;">324 files · ODD specs, golden hash vectors, manifests & CAVP vectors.</p>
+            <div style="font-size: 1.45rem; font-weight: 800; font-family: var(--font-mono); color: #ffffff; margin-top: 4px;">1,127,841</div>
+            <p style="font-size: 0.76rem; color: var(--slate-300); margin-top: 4px;">ODD specs, golden hash vectors, manifests & NIST CAVP SHA-256 deterministic test vectors.</p>
           </div>
 
           <div style="background: rgba(168, 85, 247, 0.08); border: 1px solid rgba(168, 85, 247, 0.25); border-radius: 10px; padding: 14px;">
             <div style="display: flex; justify-content: space-between; font-size: 0.75rem; font-family: var(--font-mono); color: var(--violet); font-weight: 700;">
-              <span>WEBGL & TOOLS</span>
-              <span>14.5%</span>
+              <span>WEB & TOOLS</span>
+              <span>9.6%</span>
             </div>
-            <div style="font-size: 1.45rem; font-weight: 800; font-family: var(--font-mono); color: #ffffff; margin-top: 4px;">23,355</div>
-            <p style="font-size: 0.76rem; color: var(--slate-300); margin-top: 4px;">19 files · 3D micro-voxel viewer, stream compiler, command dashboard.</p>
+            <div style="font-size: 1.45rem; font-weight: 800; font-family: var(--font-mono); color: #ffffff; margin-top: 4px;">22,500</div>
+            <p style="font-size: 0.76rem; color: var(--slate-300); margin-top: 4px;">10 files · 3D micro-voxel viewer, stream compiler, Red Team command dashboard.</p>
           </div>
         </div>
       </div>
@@ -3760,11 +3830,11 @@
         </div>
       </div>
 
-      <!-- The 14-Crate Monorepo Workspace Grid -->
+      <!-- The 16-Crate Monorepo Workspace Grid -->
       <div class="section-header" style="margin-top: 10px;">
         <div>
-          <h3>📦 The 14-Crate Rust Monorepo Architecture</h3>
-          <p>Every crate has a single plane responsibility, strict ownership isolation, and zero cross-boundary pollution.</p>
+          <h3>📦 The 16-Crate Rust Monorepo Architecture</h3>
+          <p>Every crate has a single plane responsibility, strict ownership isolation, and zero cross-boundary pollution (61,463 LOC across 426 files).</p>
         </div>
       </div>
 
@@ -3786,12 +3856,29 @@
           </div>
         </div>
 
+        <!-- rh-golden -->
+        <div class="crate-card">
+          <div class="crate-header">
+            <div>
+              <div class="crate-name">rh-golden</div>
+              <div style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">22 files · 8,445 LOC</div>
+            </div>
+            <span class="crate-plane-tag plane-tool">Tool Crate</span>
+          </div>
+          <p style="font-size: 0.82rem; color: var(--slate-300); line-height: 1.4;">
+            Multi-year golden ladder verification: automated bitwise cross-machine and multi-threaded hash parity examiner, bisect locator, annals verification, and NIST CAVP SHA-256 vectors.
+          </p>
+          <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--emerald);">
+            VER-G0 Examiner · Bisect Locator · Annals
+          </div>
+        </div>
+
         <!-- rh-snapshot -->
         <div class="crate-card">
           <div class="crate-header">
             <div>
               <div class="crate-name">rh-snapshot</div>
-              <div style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">20 files · 8,057 LOC</div>
+              <div style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">20 files · 8,123 LOC</div>
             </div>
             <span class="crate-plane-tag plane-a">Plane A</span>
           </div>
@@ -3808,7 +3895,7 @@
           <div class="crate-header">
             <div>
               <div class="crate-name">rh-manifest</div>
-              <div style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">14 files · 7,501 LOC</div>
+              <div style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">15 files · 7,543 LOC</div>
             </div>
             <span class="crate-plane-tag plane-tool">Tool Crate</span>
           </div>
@@ -3820,20 +3907,20 @@
           </div>
         </div>
 
-        <!-- rh-golden -->
-        <div class="crate-card">
+        <!-- rh-stream -->
+        <div class="crate-card" style="border: 1px solid rgba(245, 158, 11, 0.35); background: rgba(245, 158, 11, 0.04);">
           <div class="crate-header">
             <div>
-              <div class="crate-name">rh-golden</div>
-              <div style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">12 files · 4,103 LOC</div>
+              <div class="crate-name" style="color: var(--amber);">rh-stream</div>
+              <div style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">12 files · 6,147 LOC</div>
             </div>
-            <span class="crate-plane-tag plane-tool">Tool Crate</span>
+            <span class="crate-plane-tag plane-b">Plane B</span>
           </div>
           <p style="font-size: 0.82rem; color: var(--slate-300); line-height: 1.4;">
-            Multi-year golden ladder verification: automated bitwise cross-machine and multi-threaded hash parity examiner, bisect locator, and CAVP SHA-256 vectors.
+            World Stream live recorder and publisher: Arrow IPC & Parquet columnar event streaming, segment sealing, canonical text line formatting (D43), and live wire protocol v1.
           </p>
-          <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--emerald);">
-            VER-G0 Examiner · Bisect Locator
+          <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--amber);">
+            Live Wire Protocol · Arrow/Parquet Sealer
           </div>
         </div>
 
@@ -3876,7 +3963,7 @@
           <div class="crate-header">
             <div>
               <div class="crate-name">rh-sys-smoke</div>
-              <div style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">17 files · 1,675 LOC</div>
+              <div style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">18 files · 1,712 LOC</div>
             </div>
             <span class="crate-plane-tag plane-a">Plane A</span>
           </div>
@@ -3893,7 +3980,7 @@
           <div class="crate-header">
             <div>
               <div class="crate-name">rh-registry</div>
-              <div style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">4 files · 1,567 LOC</div>
+              <div style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">6 files · 1,611 LOC</div>
             </div>
             <span class="crate-plane-tag plane-a">Plane A</span>
           </div>
@@ -3910,7 +3997,7 @@
           <div class="crate-header">
             <div>
               <div class="crate-name">rh-bench</div>
-              <div style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">10 files · 1,534 LOC</div>
+              <div style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">11 files · 1,594 LOC</div>
             </div>
             <span class="crate-plane-tag plane-tool">Tool Crate</span>
           </div>
@@ -3927,7 +4014,7 @@
           <div class="crate-header">
             <div>
               <div class="crate-name">rh-sys-demography</div>
-              <div style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">5 files · 1,362 LOC</div>
+              <div style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">6 files · 1,410 LOC</div>
             </div>
             <span class="crate-plane-tag plane-a">Plane A</span>
           </div>
@@ -3944,7 +4031,7 @@
           <div class="crate-header">
             <div>
               <div class="crate-name">rh-worldgen</div>
-              <div style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">5 files · 1,333 LOC</div>
+              <div style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">6 files · 1,385 LOC</div>
             </div>
             <span class="crate-plane-tag plane-a">Plane A</span>
           </div>
@@ -3953,6 +4040,40 @@
           </p>
           <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--emerald);">
             Priority-Flood Hydrology · Popsynth v0
+          </div>
+        </div>
+
+        <!-- rh-sifter -->
+        <div class="crate-card" style="border: 1px solid rgba(245, 158, 11, 0.35); background: rgba(245, 158, 11, 0.04);">
+          <div class="crate-header">
+            <div>
+              <div class="crate-name" style="color: var(--amber);">rh-sifter</div>
+              <div style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">4 files · 1,255 LOC</div>
+            </div>
+            <span class="crate-plane-tag plane-b">Plane B</span>
+          </div>
+          <p style="font-size: 0.82rem; color: var(--slate-300); line-height: 1.4;">
+            The Story Sifter engine: two-stage causal DAG query engine, DuckDB Parquet chronicle mining (0.487 ms across 100k events), and <code>life_ends</code> SQL twin.
+          </p>
+          <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--amber);">
+            Two-Stage Causal DAG · DuckDB Mining
+          </div>
+        </div>
+
+        <!-- rh-cli -->
+        <div class="crate-card">
+          <div class="crate-header">
+            <div>
+              <div class="crate-name">rh-cli</div>
+              <div style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">3 files · 680 LOC</div>
+            </div>
+            <span class="crate-plane-tag plane-tool">Tool Crate</span>
+          </div>
+          <p style="font-size: 0.82rem; color: var(--slate-300); line-height: 1.4;">
+            Headless execution and replay harness CLI: runs scenarios (<code>rh-cli run solo</code>, <code>smoke</code>, <code>manor</code>), executes journal replays, and verifies golden ladders.
+          </p>
+          <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--violet);">
+            Zero-UI CLI · Golden Harness
           </div>
         </div>
 
@@ -3970,23 +4091,6 @@
           </p>
           <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--cyan);">
             9 Causal Edges · Cinematic Roles
-          </div>
-        </div>
-
-        <!-- rh-cli -->
-        <div class="crate-card">
-          <div class="crate-header">
-            <div>
-              <div class="crate-name">rh-cli</div>
-              <div style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">1 file · 226 LOC</div>
-            </div>
-            <span class="crate-plane-tag plane-tool">Tool Crate</span>
-          </div>
-          <p style="font-size: 0.82rem; color: var(--slate-300); line-height: 1.4;">
-            Headless execution and replay harness CLI: runs scenarios (<code>rh-cli run solo</code>, <code>smoke</code>, <code>manor</code>), executes journal replays, and verifies golden ladders.
-          </p>
-          <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--violet);">
-            Zero-UI CLI · Golden Harness
           </div>
         </div>
 
@@ -4414,7 +4518,7 @@
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
           <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 10px; padding: 14px;">
             <div style="font-size: 0.75rem; font-family: var(--font-mono); color: var(--emerald); font-weight: 700;">PR TIER (bin/check_all.sh)</div>
-            <div style="font-size: 1.4rem; font-weight: 800; font-family: var(--font-mono); color: #ffffff; margin-top: 4px;">538 / 538</div>
+            <div style="font-size: 1.4rem; font-weight: 800; font-family: var(--font-mono); color: #ffffff; margin-top: 4px;">519 / 519</div>
             <p style="font-size: 0.74rem; color: var(--slate-300); margin-top: 2px;">Rust builds, clippy, nextest, crash kill -9, DuckDB V-DATA-10, Parquet.</p>
           </div>
 
@@ -4517,11 +4621,11 @@
       <!-- Cloud Verification & Adjutant Mission Card -->
       <div class="interactive-card" style="margin-top: 16px; border-color: rgba(0, 240, 255, 0.35); background: linear-gradient(135deg, rgba(0, 240, 255, 0.08) 0%, rgba(16, 22, 34, 0.9) 100%);">
         <div class="card-top">
-          <h4>🛰️ Red Team Cloud Mission: Adjutant Activation (HANDOFF-2026-10-17)</h4>
-          <span class="status-pill active">Active on Genoa VM</span>
+          <h4>🛰️ Red Team Cloud Mission: Adjutant & Batch 09 Telemetry (2026-10-18)</h4>
+          <span class="status-pill active">Genoa VM · Synchronized with Google Architect (PR #102)</span>
         </div>
         <p style="font-size: 0.88rem; color: var(--slate-300);">
-          The Red Team session is active on the Director's reference-class Google Cloud VM <code>adjutant</code> (<code>c3d-standard-16</code>, AMD EPYC Genoa Zen 4, 16 vCPU / 8 physical cores, 64 GB DDR5 RAM) on branch <code>arch/red-team-batch-04</code>.
+          The Red Team session is active on the Director's reference-class Google Cloud VM <code>adjutant</code> (<code>c3d-standard-16</code>, AMD EPYC Genoa Zen 4, 16 vCPU / 8 physical cores, 64 GB DDR5 RAM) on branch <code>arch/red-team-batch-04</code>, fully synchronized with the incoming Google Gemini Architect following PR #102.
         </p>
 
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-top: 14px;">
@@ -4549,7 +4653,7 @@
 
         <div style="margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 0.78rem; font-family: var(--font-mono); color: var(--slate-400);">
           <span>Charter: PHILOSOPHY_AND_BACKLOG.md (5 Laws)</span>
-          <span>Ledger: DISPOSITION_LEDGER.md (38 Items · Batch 07 Real Stream Live)</span>
+          <span>Ledger: DISPOSITION_LEDGER.md (38 Items · Batch 09 Telemetry Live)</span>
           <span style="color: var(--cyan);">HTTP :8088 / WS :8089 REAL STREAM</span>
         </div>
       </div>
@@ -4679,13 +4783,13 @@
       // Update hero text
       const heroDesc = document.getElementById('hero-desc');
       if (mode === 'plain') {
-        heroDesc.innerHTML = "The mathematical engine block is <strong>100% complete and certified at Gate G0</strong>! All 10 Phase 0 sprints merged. The first living person (Ada) in world <code>solo</code> lived, aged, and died with bitwise deterministic parity (SPR-012). We are now live-streaming into the World Stream (SPR-013) and unblocking Wave 4 (mortality queues, event envelope, stream wire).";
+        heroDesc.innerHTML = "The mathematical engine block is <strong>100% complete and certified at Gate G0</strong> across 16 crates! Solo lived and died (SPR-012); World Stream live recorder is active (rh-stream & rh-sifter); Bevy voxel viewer plans ratified (PR #100 / D63); Google Architect handoff complete (PR #102); and Token Discipline subagent governance is in-flight (PR #103).";
         document.getElementById('hero-title').innerText = "Phase 1a: Bloodlines & Walking Skeleton Execution";
-        document.getElementById('hero-badge').innerText = "PHASE 1A ACTIVE // GATE G0 RATIFIED (100% KERNEL COMPLETE)";
+        document.getElementById('hero-badge').innerText = "PHASE 1A ACTIVE // GATE G0 RATIFIED (16 CRATES · 61.5K RUST LOC)";
       } else {
-        heroDesc.innerHTML = "Phase 1a (Bloodlines) active execution. Gate G0 ratified via VER-G0 report (10/10 Phase 0 sprints merged). Walking skeleton B (SPR-012) merged; SPR-013 (World Stream v0, rh-sifter, rungs 1-2) in PR #64; SPR-019 (population synthesis) merged; Wave 4 (SPR-014, SPR-020, SPR-026) and D37 effect language approved by Director.";
+        heroDesc.innerHTML = "Phase 1a (Bloodlines) active execution across 16 crates (61,463 Rust LOC). SPR-014 (lifecycle queues @ 28ab29e), SPR-020 (envelope), SPR-026 (stream wire), and SPR-038a in flight. Bevy voxel viewer plans merged (PR #100 / D63 filed). Formal governance handoff to Google Architect (PR #102); Token Discipline & helper subagents active (PR #103).";
         document.getElementById('hero-title').innerText = "Phase 1a: Kernel Complete & Walking Skeleton Sprints";
-        document.getElementById('hero-badge').innerText = "PHASE 1A ACTIVE // GATE G0 RATIFIED (10/10 P0 MERGED)";
+        document.getElementById('hero-badge').innerText = "PHASE 1A ACTIVE // 16 CRATES · 787 COMMITS · 103 PRS";
       }
 
       // Update all elements with data-plain and data-arch
