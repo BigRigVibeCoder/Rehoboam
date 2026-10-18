@@ -1,8 +1,13 @@
 // GENERATED from specs/systems/M2.demography.odd.toml by lint_odd.py --rust. Do not edit; edit the spec.
 pub const SYSTEM_ID: &str = "M2.demography";
-pub const SPEC_VERSION: &str = "0.2.2";
+pub const SPEC_VERSION: &str = "0.2.3";
 pub const SCHEDULE: &[(Pulse, Phase)] = &[
     (Pulse::Month, Phase::Vital),
+    (Pulse::Day, Phase::Vital),
+];
+pub const DRAINS: &[(&str, Pulse, Phase)] = &[
+    ("ScheduleDeath", Pulse::Day, Phase::Vital),
+    ("Marry", Pulse::Day, Phase::Vital),
 ];
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]

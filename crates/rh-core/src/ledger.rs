@@ -245,11 +245,18 @@ impl Ledger {
 
     /// What a step must preserve of the ledger columns it owns: their row counts, and the
     /// life-course rows as they stood (see [`LifeCourseGuard`]).
-    pub(crate) fn guard<'c>(
+    ///
+    /// `full` is whether the job has work at this instant: a due timer, a non-empty inbox, or a
+    /// binding that is not drain-only. A job without work keeps only its row counts, every
+    /// ledger column's (BCK-002 A-60 part, SPR-014): this is a known narrowing. Its value checks
+    /// (A-2's ids, the life-course fields, DEF-3, DEF-6) are skipped, since an empty drain writes
+    /// nothing; A-60 revisits it with the guard's place in release builds.
+    pub(crate) fn guard(
         &self,
         tables: &WorldTables,
-        owned: impl Iterator<Item = &'c str>,
+        owned: impl Iterator<Item = &'static str>,
         phase: Phase,
+        full: bool,
     ) -> LifeCourseGuard {
         let mut guard = LifeCourseGuard {
             phase,
@@ -257,13 +264,14 @@ impl Ledger {
             ids: None,
             alive_after_compaction: false,
             life_course: Vec::new(),
+            life_course_rows: Vec::new(),
         };
         for column in owned {
             if self.is_person(column) {
                 let len = tables.get(column).map_or(0, Vec::len);
-                guard.person_rows.push((column.to_owned(), len));
+                guard.person_rows.push((column, len));
                 // A-2: only a job that writes person.id pays for keeping its ids.
-                if column == PERSON_ID {
+                if full && column == PERSON_ID {
                     guard.ids = tables.get(column).cloned();
                 }
                 // G-1: compaction ran at the start of Bookkeeping; a death written after it would
@@ -272,8 +280,13 @@ impl Ledger {
                     guard.alive_after_compaction = true;
                 }
             } else if self.is_life_course(column) {
-                let rows = tables.get(column).cloned().unwrap_or_default();
-                guard.life_course.push((column.to_owned(), rows));
+                if full {
+                    let rows = tables.get(column).cloned().unwrap_or_default();
+                    guard.life_course.push((column, rows));
+                } else {
+                    let len = tables.get(column).map_or(0, Vec::len);
+                    guard.life_course_rows.push((column, len));
+                }
             }
         }
         guard
@@ -284,18 +297,23 @@ impl Ledger {
 #[derive(Debug)]
 pub(crate) struct LifeCourseGuard {
     phase: Phase,
-    person_rows: Vec<(String, usize)>,
-    /// `person.id` before the step, kept only for a job that writes it (A-2).
+    person_rows: Vec<(&'static str, usize)>,
+    /// `person.id` before the step, kept only for a job with work that writes it (A-2).
     ids: Option<Column>,
     /// Whether the job writes `person.alive` in `Bookkeeping`, after the compaction (G-1).
     alive_after_compaction: bool,
-    life_course: Vec<(String, Column)>,
+    /// The life-course columns as they stood, for a job with work.
+    life_course: Vec<(&'static str, Column)>,
+    /// The life-course row counts, for a job without work: they must not change.
+    life_course_rows: Vec<(&'static str, usize)>,
 }
 
 impl LifeCourseGuard {
     /// Whether the step owns no ledger column, so there is nothing to check.
     pub(crate) fn is_empty(&self) -> bool {
-        self.person_rows.is_empty() && self.life_course.is_empty()
+        self.person_rows.is_empty()
+            && self.life_course.is_empty()
+            && self.life_course_rows.is_empty()
     }
 
     /// A-2: an existing row's `person.id` never changes in a step; G-1: no death after the
@@ -361,6 +379,15 @@ impl LifeCourseGuard {
                 )));
             }
         }
+        for (column, before) in &self.life_course_rows {
+            let after = tables.get(column).map_or(0, Vec::len);
+            if after != *before {
+                return Err(refuse(format!(
+                    "{column} went from {before} to {after} rows in a step with no work (an \
+                     empty drain): such a step writes no ledger row (BCK-002 A-60 part)"
+                )));
+            }
+        }
         let kinds_after = tables
             .get(LIFE_COURSE_EXIT_KIND)
             .map(Vec::as_slice)
@@ -369,7 +396,7 @@ impl LifeCourseGuard {
         let kinds_before = self
             .life_course
             .iter()
-            .find(|(c, _)| c == LIFE_COURSE_EXIT_KIND)
+            .find(|(c, _)| *c == LIFE_COURSE_EXIT_KIND)
             .map_or(kinds_after, |(_, rows)| rows.as_slice());
         for (column, before) in &self.life_course {
             let after = tables.get(column).map(Vec::as_slice).unwrap_or_default();
@@ -440,7 +467,7 @@ impl LifeCourseGuard {
         let Some(before) = self
             .life_course
             .iter()
-            .find(|(c, _)| c == LIFE_COURSE_PERSON)
+            .find(|(c, _)| *c == LIFE_COURSE_PERSON)
             .map(|(_, rows)| rows.len())
         else {
             return Ok(());

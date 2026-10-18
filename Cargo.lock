@@ -863,6 +863,13 @@ dependencies = [
 [[package]]
 name = "rh-contracts"
 version = "0.0.0"
+dependencies = [
+ "rh-core",
+ "rh-events",
+ "rh-ids",
+ "rh-registry",
+ "rh-sys-demography",
+]
 
 [[package]]
 name = "rh-core"

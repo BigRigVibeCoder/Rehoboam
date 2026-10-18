@@ -486,6 +486,8 @@ def engine_rows(st: State) -> TableRows:
         + _u32(t["kind"])
         + _i64(t["payload"])
         + _u8(1 if t["seq"] in ag["tombstones"] else 0)
+        # EVO-001 R15 (SPR-014 T-02): the cause tail, u8 1 || u64 id, only with a cause
+        + (_u8(1) + _u64(t["cause"]) if t.get("cause") is not None else b"")
         for t in ag["entries"]
     ]
     commands = [
@@ -692,6 +694,39 @@ def lines_engine() -> list[str]:
     return out
 
 
+# The synthetic state with causes on two timers (SPR-014 T-02; 05.1 §2 rule 2): the first timer's
+# cause is event 18, the third's event 0 (the first id: a cause is present even when its id is 0).
+# Only rh-core/agenda.timers and the plane hash differ from the state above; a timer without a
+# cause is encoded as before.
+SYNTHETIC_STATE_CAUSE: State = {
+    **SYNTHETIC_STATE,
+    "agenda": {
+        **SYNTHETIC_STATE["agenda"],
+        "entries": [
+            {**e, "cause": c}
+            for e, c in zip(SYNTHETIC_STATE["agenda"]["entries"], [18, None, 0], strict=True)
+        ],
+    },
+}
+
+
+def lines_engine_cause() -> list[str]:
+    """``engine_cause_table`` (the timers, with cause tails) and ``engine_cause`` (the hash)."""
+    _, h = state_hash(SYNTHETIC_WORLD, SYNTHETIC_STATE_CAUSE)
+    rows = engine_rows(SYNTHETIC_STATE_CAUSE)["rh-core/agenda.timers"]
+    chunks, root = table_digest("rh-core/agenda.timers", rows)
+    line = " ".join(
+        [
+            "engine_cause_table",
+            "rh-core/agenda.timers",
+            str(len(rows)),
+            f"{root:016x}",
+            *(f"{c:016x}" for c in chunks),
+        ]
+    )
+    return [line, f"engine_cause {h:016x}"]
+
+
 # --- The vectors -------------------------------------------------------------------------------
 
 
@@ -792,9 +827,19 @@ def render() -> str:
         "#   engine_table <name> <rows> <root> <chunks..>  the synthetic engine state's tables",
         "#   engine <plane hash>   its state_hash: the synthetic world columns and engine tables,",
         "#   rh-core/events.held excepted (a carried table: in a keyframe, outside the hash)",
+        "#   engine_cause_table, engine_cause: two timers with a cause (SPR-014 T-02)",
     ]
     return (
-        "\n".join([*header, *lines_xxh3(), *lines_tables(), *lines_planes(), *lines_engine()])
+        "\n".join(
+            [
+                *header,
+                *lines_xxh3(),
+                *lines_tables(),
+                *lines_planes(),
+                *lines_engine(),
+                *lines_engine_cause(),
+            ]
+        )
         + "\n"
     )
 

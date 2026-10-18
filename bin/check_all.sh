@@ -627,6 +627,10 @@ FORBIDDEN_API_CONTROLS="hash_map:hash-collections:HashMap hash_set:hash-collecti
   env_rename:env:std::env env_var:env:std::env env_current_dir:env:std::env env_current_exe:env:std::env
   env_temp_dir:env:std::env env_home_dir:env:std::env env_set_current_dir:env:std::env
   env_split_paths:env:std::env env_join_paths:env:std::env
+  build_env_home:build-env:env!( build_env_option:build-env:option_env!( build_env_concat:build-env:env!(
+  build_env_manifest:build-env:env![ build_env_rename_core:build-env:core::env
+  build_env_rename_option:build-env:std::option_env build_env_rename_group:build-env:core::option_env
+  build_env_rename_reexport:build-env:some_crate::env
   fs_renamed_std:file-io:fs::r fs_os_symlink:file-io:fs::s raw_ident_fs:file-io:std::fs
   std_rename:std-rename:std~as std_rename_root:std-rename:std~as std_rename_self:std-rename:std~as
   extern_crate_std:std-rename:extern~crate~std~as
@@ -1075,6 +1079,8 @@ golden_vitals_run() {
     --require-parallel "$PARALLEL_FLOOR" --vitals --out "$GOLDEN/smoke_yearly_tN.ladder")" || { echo "$out"; return 1; }
   echo "$out" | grep -v '^vitals: system '
   grep -q '^vitals: tip .* | pace .* ticks/s | serial .* | state ' <<<"$out" || { echo "no vitals line"; return 1; }
+  # SPR-014 T-03: the ledger-less smoke world drops nothing over 1,000 years (dropped{} is empty).
+  grep -q '^vitals: dropped nothing' <<<"$out" || { echo "the smoke world dropped commands or timers"; return 1; }
 }
 
 # The debug workspace run leaves out the test binaries a by-name gate runs (review 2a): each is run
@@ -1088,7 +1094,8 @@ BY_NAME_TESTS="rh-snapshot::hash rh-snapshot::golden rh-snapshot::journal rh-sna
   rh-core::time_properties rh-core::system_id_golden rh-core::engine_contract
   rh-core::agenda rh-core::agenda_events rh-core::invariants rh-core rh-events
   rh-sys-smoke::smoke rh-sys-demography::schedule_golden rh-sys-demography::draws_golden rh-worldgen::genesis
-  rh-worldgen::keyframe rh-worldgen::m2_system rh-golden::golden
+  rh-worldgen::keyframe rh-worldgen::m2_system rh-worldgen::death_path rh-snapshot::lifecycle
+  rh-contracts::drift rh-contracts::consumer rh-golden::golden
   rh-golden::solo rh-golden::stream rh-stream::canonical rh-stream::writer rh-stream::parquet_props
   rh-cli::kill rh-golden::tail rh-cli::tail_live rh-sifter::sift rh-golden::sift rh-golden::replay rh-golden::rungs"
 workspace_tests() {
@@ -1327,7 +1334,7 @@ run "lint_odd observes positive control: a kind observed twice must FAIL (EVO-00
 run "lint_odd observes positive control: a system observing its own kind must FAIL (EVO-002; T-00a MIN-8)" "fail:[[observes]] X_FIXTURE_FORMED: a system does not observe its own kind" odd_observes_control own &&
 run "lint_odd observes positive control: an observer bound only before its emitter's phase must FAIL (EVO-002; T-00a MIN-8)" "fail:[[observes]] DEATH: M3.agriculture binds no phase at or after one M2.demography binds" odd_observes_control phase &&
 run "lint_odd observes positive control: an entry that is not a table must FAIL (EVO-002; T-00a MIN-8)" "fail:an [[observes]] entry must be a table" odd_observes_control table &&
-run "System specs, next version: the M2 F1 draft supersedes the frozen rung-0 slice and preserves it (lint_odd --next; SPR-015)" "pass:self-check (next of M2.demography): 46 planted changes rejected (3 of them by the amendments lock), 45 amendments recorded and locked, the clean next version kept" "$PY" -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml &&
+run "System specs, next version: the M2 F1 draft supersedes the frozen rung-0 slice and preserves it (lint_odd --next; SPR-015)" "pass:self-check (next of M2.demography): 46 planted changes rejected (3 of them by the amendments lock), 46 amendments recorded and locked, the clean next version kept" "$PY" -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml &&
 run "lint_odd next positive control: a next version that changes a frozen algorithm step must FAIL (SPR-015)" "fail:frozen [algorithm.mortality_rung0] changed" odd_next_control algorithm &&
 run "lint_odd next positive control: a new RNG purpose before a frozen one must FAIL (SPR-015)" "fail:frozen RNG purpose death_time must stay at position 0" odd_next_control rng &&
 run "lint_odd next positive control: a Registry overlay that moves a frozen parameter bound must FAIL (SPR-015)" "fail:replacement changes or drops parameter tfr bounds" odd_next_control bound &&
@@ -1398,6 +1405,18 @@ run "V-DET-09 at opt-level 3: rh-sample golden vectors under --release (SPR-003 
 run "V-DET-09 positive control: one altered sampler golden vector must FAIL (SPR-003)" "fail:golden vector differs" env RH_SAMPLE_GOLDEN="$PWD/tests/lint_fixtures/golden/altered_samplers_v1.txt" cargo nextest run -p rh-sample --locked --test golden --no-capture &&
 run "rh-core gates by name: V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes (SPR-005)" "pass:V-DET-01: 600 monthly states equal at 1, 2, 4 and 8 threads" cargo nextest run -p rh-core -p rh-registry --locked --test determinism --test registration --test real_specs --test phase_table --test time_properties --test system_id_golden --test engine_contract --no-capture &&
 run "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants and crash replay (SPR-006)" "pass:V-DET-12: golden event log of 196 events checked" cargo nextest run -p rh-core -p rh-events --locked --test agenda --test agenda_events --test invariants --lib --no-capture &&
+run "SPR-014 V-DET-21 delivery: a command reaches only its owner's draining binding, within the instant or at its next run, in key order, equal at 1, 2, 4 and 8 threads (T-01)" "pass:V-DET-21 delivery: " cargo nextest run -p rh-core --locked --test agenda_events --no-capture v_det_21_delivery &&
+run "SPR-014 V-DET-21 slots: every EventRef an owner sees is its sender's merged id; integers in event slots and out-of-type fields refused by name (T-02)" "pass:V-DET-21 slots: " cargo nextest run -p rh-core --locked --test agenda_events --no-capture lifecycle_queues::slots &&
+run "SPR-014 keyframes and the drop counter: queued event slots, timer causes and inserted rows round-trip; a planted drop changes no state_hash (T-02, T-03, T-05)" "pass:T-02 keyframes: queued EventRef fields and timer causes round-trip in 9 worlds" cargo nextest run -p rh-snapshot --locked --test lifecycle --no-capture &&
+run "SPR-014 V-INV-15: the dead-person drop at take, the owner's drops, the dead timer, key = any; queue-no-stale-command and the non-idempotent death as controls (T-03)" "pass:V-INV-15: dead_key, dead and the dead timer counted" cargo nextest run -p rh-core --locked --test agenda_events --no-capture lifecycle_queues::stale &&
+run "SPR-014 V-INV-04 on stub systems: dropped rate and mode reads give their typed neutrals, sends to an absent owner discarded and counted, identity reads refused (T-04)" "pass:V-INV-04 stubs: q16_16 and enum neutrals served" cargo nextest run -p rh-core --locked --test agenda_events --no-capture lifecycle_queues::owners &&
+run "SPR-014 V-INV-04 on the real specs: {M2}, {M2, M7}, {M2, T1} refused by name, {M2, M7, T1} (T-04; REV-P1a NEW-4, NEW-6)" "pass:V-INV-04 real specs: " cargo nextest run -p rh-registry --locked --test real_specs --no-capture v_inv_04 &&
+run "SPR-014 DRAINS: a skeleton's drain that differs from its spec, or a spec drain the code leaves out, is refused by name under rule spec (T-01; NIT-10)" "pass:DRAINS: a drain that differs" cargo nextest run -p rh-registry --locked --test real_specs --no-capture a_drain &&
+run "SPR-014 the ledger row insert: sorted, aligned, defaults, read the same instant, duplicates refused, over 48 random worlds (T-05)" "pass:row insert: " cargo nextest run -p rh-core --locked --test agenda_events --no-capture lifecycle_queues::insert &&
+run "SPR-014 V-INV-03 subset: commanded deaths from two test-only senders take M2's single death path; same-slot deaths; the sender's re-sample (T-05)" "pass:V-INV-03: commanded deaths take the single death path" cargo nextest run -p rh-worldgen --locked --test death_path --no-capture &&
+run "SPR-014 rh-contracts v0: every M2 accessor matches the spec; a reader beside the real M2 reads through the crate (T-06)" "pass:rh-contracts drift: 19 M2 accessors match the spec" cargo nextest run -p rh-contracts --locked --test drift --test consumer --no-capture &&
+run "SPR-014 rh-contracts positive control: a spec with person.sex's values reordered must FAIL naming the column (T-06)" "fail:DRIFT in person.sex" env RH_CONTRACTS_M2_SPEC="$PWD/tests/lint_fixtures/contracts/M2_sex_reordered.odd.toml" cargo nextest run -p rh-contracts --locked --test drift --no-capture &&
+run "SPR-014 A-50: a draw of the wrong entity kind is refused by name (T-07)" "pass:A-50: a draw of the wrong entity kind is refused by name" cargo nextest run -p rh-core --locked --test engine_contract --no-capture a_draw &&
 run "rh-sys-smoke gates by name: registration against the smoke specs, coverage, re-sampling, small-scale V-DET-01/02 (SPR-008 T-01)" "pass:SMOKE: 6 yearly states" cargo nextest run -p rh-sys-smoke --locked --test smoke --no-capture &&
 run "T-05 M2 schedule in fixed point: bit-equal to the exact reference, K = 1 at the standard's e0, Table 19, e0 within 0.06 years, the q(15) band (SPR-012)" "pass:T-05: " cargo nextest run -p rh-sys-demography --locked --test schedule_golden --no-capture &&
 run "T-05 positive control: one altered schedule vector must FAIL (SPR-012)" "fail:K at e0 bits 1966080" env RH_M2_SCHEDULE_GOLDEN="$PWD/tests/lint_fixtures/golden/altered_m2_schedule_v1.txt" cargo nextest run -p rh-sys-demography --locked --test schedule_golden --no-capture &&
@@ -1588,6 +1607,9 @@ run "lint_templates positive control: a prologue template with an unknown id mus
 run "lint_templates positive control: a control character in a template text must FAIL (REV-SPR-029 R27)" "fail:text carries a control character U+0007" annals_lint_control control_char &&
 part golden &&
 run "Required tools present (golden part)" pass require_tools golden &&
+# SPR-014 mutant controls in part golden: each rebuilds its crate with a mutant feature (D1 about 6 s; part core's 12-minute target, Architect ruling 2026-10-17)
+run "SPR-014 V-DET-21 positive control: an engine that hands an owner's inbox to every job (EVO-001 option D1) must FAIL (T-01)" "fail:delivered to a non-draining job" cargo nextest run -p rh-core --locked --features mutant-deliver-every-job --test agenda_events --no-capture v_det_21_delivery &&
+run "SPR-014 R15 positive control: a timer encoder that writes u8 0 for an absent cause must FAIL the hash golden at agenda.timers (T-02)" "fail:root: engine_table rh-core/agenda.timers" cargo nextest run -p rh-snapshot --locked --features mutant-cause-u8-zero --test golden --no-capture &&
 # SPR-030 CRN pairing in part golden: pure Python, about 28 s (REV-SPR-030 R27: part core passed 12 minutes on PR #79's CI, 12:13).
 # The PR tier takes the first VALID seed of 1 to 4 (seed 1 today); the nightly tier searches until two are VALID (BCK-002 A-62, the review's E4).
 run "Golden vectors: CRN pairing v0, the V-DET-17 worked computation on twin_vales, the PR tier (the first VALID seed of 1 to 4), with its five controls on the same run A (SPR-030; REV-SPR-030 R3, R4, R10; BCK-002 A-62)" "pass:CRN PAIRING: PASS (tier pr," "$PY" -I specs/determinism/selftest_crn_pairing.py --tier pr --controls &&

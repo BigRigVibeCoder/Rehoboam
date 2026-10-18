@@ -1,12 +1,18 @@
 // GENERATED from specs/systems/M7.dynasty.odd.toml by lint_odd.py --rust. Do not edit; edit the spec.
 pub const SYSTEM_ID: &str = "M7.dynasty";
-pub const SPEC_VERSION: &str = "0.3.2";
+pub const SPEC_VERSION: &str = "0.3.4";
 pub const SCHEDULE: &[(Pulse, Phase)] = &[
     (Pulse::Day, Phase::Polity),
     (Pulse::Month, Phase::Polity),
     (Pulse::Day, Phase::Vital),
     (Pulse::Day, Phase::Agenda),
     (Pulse::Year, Phase::Polity),
+];
+pub const DRAINS: &[(&str, Pulse, Phase)] = &[
+    ("PressClaim", Pulse::Day, Phase::Agenda),
+    ("PetitionSeat", Pulse::Day, Phase::Agenda),
+    ("RenounceClaim", Pulse::Day, Phase::Agenda),
+    ("Resign", Pulse::Day, Phase::Agenda),
 ];
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
