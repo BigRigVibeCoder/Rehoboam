@@ -30,7 +30,7 @@ Day-to-day work runs through `CODEX/`: roles (`CODEX/80_AGENTS/`), sprints and b
 - **Licences: personal-use mode** (ADR-0021 as amended, D19, 2026-10-16). Rehoboam is a private experiment that is never distributed, so any licence may be used. Two limits remain: no licence whose terms forbid the use itself, and no copying of unlicensed code. The repository stays private. `bin/check_all.sh` keeps a licence ledger (`artifacts/licence_ledger.txt`) that never fails a build; crates come from crates.io only, with no wildcard versions.
 
 ## Checks to run after any change
-All of them, fail-fast, with a report: `bin/check_all.sh` (CI runs its two parts, `--part core` and `--part golden`, as parallel jobs; no flag runs both). It uses `python/.venv` (create it with `uv sync --frozen --project python`; `PYTHON` overrides) and needs uv, cargo-nextest, cargo-deny, valgrind and iai-callgrind-runner (RUN-001). Each gate also runs on a planted violation that must FAIL (`tests/lint_fixtures/`). Individually:
+All of them, fail-fast, with a report: `bin/check_all.sh` (CI runs its three parts, `--part core`, `--part golden` and `--part stream`, as parallel jobs; no flag runs all three). It uses `python/.venv` (create it with `uv sync --frozen --project python`; `PYTHON` overrides) and needs uv, cargo-nextest, cargo-deny, valgrind and iai-callgrind-runner (RUN-001). Each gate also runs on a planted violation that must FAIL (`tests/lint_fixtures/`). Individually:
 ```bash
 # Rust: workspace in crates/, toolchain pinned in rust-toolchain.toml
 cargo fmt --all --check

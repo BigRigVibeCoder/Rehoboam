@@ -1,13 +1,14 @@
 """ci.yml runs every part of bin/check_all.sh (VER-SPR-009-TEST GAP-19; BCK-002 A-41).
 
-The PR tier is two CI jobs, one per part of the chain. Nothing else ties the workflow to the
-parts: with the matrix cut to `[core]`, or both jobs running `--part core`, the golden part (the
-golden runs, the perf gates, the vitals, the allocation budget) would leave CI with every test
-green. This test reads `.github/workflows/ci.yml` and the parts `bin/check_all.sh` declares, and
-proves the `check-all` job's matrix is exactly those parts and that its step passes the matrix
-value to `--part`. The controls plant both mistakes.
+The PR tier is three CI jobs, one per part of the chain (BCK-002 A-63). Nothing else ties the
+workflow to the parts: with the matrix cut to `[core]` or `[core, golden]`, or every job running
+`--part core`, the golden part (the golden runs, the perf gates, the vitals, the allocation budget)
+or the stream part (the stream, serve, tail, sift, replay, rungs and twin gates) would leave CI
+with every test green. This test reads `.github/workflows/ci.yml` and the parts `bin/check_all.sh`
+declares, and proves the `check-all` job's matrix is exactly those parts and that its step passes
+the matrix value to `--part`. The controls plant both mistakes.
 
-Refs: VER-SPR-009-TEST GAP-19; SPR-009 review 2b.
+Refs: VER-SPR-009-TEST GAP-19; SPR-009 review 2b; BCK-002 A-63.
 """
 
 import copy
@@ -64,9 +65,9 @@ def problems(flow: dict[str, Any], parts: list[str]) -> list[str]:
     return found
 
 
-def test_check_all_declares_two_parts() -> None:
-    """The chain's parts, as test_check_all_inventory.py pins them."""
-    assert declared_parts() == ["core", "golden"]
+def test_check_all_declares_three_parts() -> None:
+    """The chain's parts, as test_check_all_inventory.py pins them (BCK-002 A-63)."""
+    assert declared_parts() == ["core", "golden", "stream"]
 
 
 def test_the_workflow_runs_every_part_once() -> None:
@@ -75,9 +76,11 @@ def test_the_workflow_runs_every_part_once() -> None:
 
 
 def test_a_matrix_without_the_golden_part_fails() -> None:
-    """Control: `part: [core]` would drop the golden part from CI."""
+    """Control: `part: [core]` would drop the golden part from CI, `[core, golden]` the stream."""
     flow = copy.deepcopy(workflow())
     flow["jobs"]["check-all"]["strategy"]["matrix"]["part"] = ["core"]
+    assert problems(flow, declared_parts()) != []
+    flow["jobs"]["check-all"]["strategy"]["matrix"]["part"] = ["core", "golden"]
     assert problems(flow, declared_parts()) != []
     flow["jobs"]["check-all"]["strategy"]["matrix"]["part"] = ["core", "core"]
     assert problems(flow, declared_parts()) != []
