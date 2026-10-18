@@ -13,13 +13,15 @@ parameter of the Registry (neither system has defaults yet).
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import sys
 import tomllib
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from typing import Any
 
+import pytest
 import yaml  # type: ignore[import-untyped]  # PyYAML ships no stubs (as test_ci_workflow.py)
 
 REPO = Path(__file__).resolve().parents[2]
@@ -98,6 +100,37 @@ def test_tiers_follow_the_rulings() -> None:
     # VALID, up to seed 12 (BCK-002 A-62, the review's E4)
     assert crn.PR_SEEDS == (1, 2, 3, 4)
     assert (crn.NIGHTLY_VALID, crn.NIGHTLY_CAP) == (2, 12)
+
+
+@pytest.mark.parametrize(
+    ("tier", "valid", "tried", "passes"),
+    [
+        ("nightly", {1, 6}, [1, 2, 3, 4, 5, 6], True),  # today's genesis: stops at its second VALID
+        ("nightly", {1}, list(range(1, 13)), False),  # one VALID seed of 1 to 12: the tier FAILS
+        ("nightly", {12, 13}, list(range(1, 13)), False),  # the cap: seed 13 is never tried
+        ("pr", {1, 6}, [1], True),  # the PR tier stops at its first VALID seed
+        ("pr", {3}, [1, 2, 3], True),
+        ("pr", {5}, [1, 2, 3, 4], False),  # none of 1 to 4: the tier FAILS
+    ],
+)
+def test_crn_tiers_search_seeds(
+    monkeypatch: pytest.MonkeyPatch, tier: str, valid: set[int], tried: list[int], passes: bool
+) -> None:
+    """The tiers' seed search (the A-62 review's E4) on a stubbed pair: where it stops, fails."""
+    crn = _load("selftest_crn_pairing", CRN)
+    verdict = SimpleNamespace(failures=lambda label: [])
+
+    def run_pair(seed: int, m: object) -> object:
+        crn.SKIPPED[seed] = []
+        return SimpleNamespace(verdict=verdict) if seed in valid else None
+
+    monkeypatch.setattr(crn, "run_pair", run_pair)
+    monkeypatch.setattr(crn, "render_seed", lambda seed, pair: [f"world twin_vales {seed}"])
+    args = argparse.Namespace(write=False, seeds=None, tier=tier, controls=False)
+    _, found = crn.search(args, None)
+    assert found.seeds == tried
+    assert found.valid == len(valid & set(tried))
+    assert (not found.failures) == passes
 
 
 def test_crn_calendar_mirrors_twin_vales() -> None:
