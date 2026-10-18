@@ -29,7 +29,7 @@ mod support;
 use std::sync::{Arc, Barrier, mpsc};
 use std::time::Duration;
 
-use rh_stream::live::{LiveEdge, Policy, SealEntry, Start};
+use rh_stream::live::{LiveEdge, Policy, SealEntry, Start, TAIL};
 use rh_stream::record::Body;
 use rh_stream::seal::NoHook;
 use rh_stream::writer::{LiveConfig, StreamWriter, WriterConfig};
@@ -281,6 +281,50 @@ fn a_read_never_splits_a_line_and_honours_its_byte_cap() {
         );
     }
     assert_eq!(edge.read(20, 100).unwrap().count, 0, "the tip: nothing yet");
+}
+
+/// C1 (the SPR-026 review): an append copies at most `TAIL` pointers, whatever the backlog. Under
+/// (b) with no seal landing, 100 years of 150 one-line appends each leave one chunk per completed
+/// year, and the open year's appends in blocks of `TAIL` plus a tail; every seq still reads back.
+#[test]
+fn an_append_copies_a_bounded_tail_whatever_the_unsealed_backlog() {
+    let edge = LiveEdge::new(Policy::YearEnd, Start::default());
+    let (years, per_year) = (100i64, 150u64);
+    let mut seq = 0u64;
+    for year in 0..=years {
+        for _ in 0..per_year {
+            let mut bytes = line(seq, year).into_bytes();
+            bytes.push(b'\n');
+            let ends = vec![u32::try_from(bytes.len()).unwrap()];
+            edge.append(year, seq, bytes, ends, year);
+            seq += 1;
+            let snap = edge.snapshot();
+            let open = usize::try_from(per_year).unwrap().div_ceil(TAIL);
+            assert!(
+                snap.chunk_count() <= usize::try_from(year).unwrap() + open + TAIL,
+                "year {year}: {} chunks",
+                snap.chunk_count()
+            );
+        }
+        if year < years {
+            edge.year_completes(year);
+            // The completed year is one chunk: the open year starts with none.
+            assert_eq!(edge.snapshot().chunk_count(), usize::try_from(year + 1).unwrap());
+        }
+    }
+    let snap = edge.snapshot();
+    assert_eq!(snap.w0, 0, "no seal landed: the whole backlog is in the window");
+    for s in (0..seq).step_by(7).chain([seq - 1]) {
+        let got = String::from_utf8(snap.window_line(s).unwrap().to_vec()).unwrap();
+        assert_eq!(got.split(' ').nth(2), Some(s.to_string().as_str()), "seq {s}");
+    }
+    let all = edge.read(0, usize::MAX).unwrap();
+    assert_eq!(all.count, seq, "one read crosses every chunk, block and the tail");
+    println!(
+        "C1: {seq} appends over {} years unsealed, {} chunks in the window, each append copying at most {TAIL} pointers",
+        years + 1,
+        snap.chunk_count()
+    );
 }
 
 fn config(root: &std::path::Path) -> WriterConfig {

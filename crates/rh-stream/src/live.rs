@@ -23,6 +23,13 @@
 //! seal's lateness. [`Policy::Sync`] (option (a)) drops a year as soon as its (synchronous) seal
 //! lands: one sim-year.
 //!
+//! **Appends stay small (the SPR-026 review's C1).** The window is three chunk lists: one chunk
+//! per completed year, the open year's merged blocks, and its newest appends (at most
+//! [`TAIL`] of them). An append copies the tail's pointers alone, and every [`TAIL`] appends
+//! merge it into one block; a year's completion merges its blocks and tail into one chunk. Under
+//! (b) at full speed the window is the whole unsealed backlog, so an append that copied the whole
+//! list made a run quadratic in the host's appends.
+//!
 //! **Reading.** [`LiveEdge::read`] answers `read(from, max)` from one snapshot: [`Behind`] when
 //! `from < w0` (with that snapshot's `s`, `last_year` and `w0`), else whole lines from `from`, at
 //! most `max` bytes, copied from that snapshot's chunks: a seal and a drop that complete between the
@@ -91,6 +98,28 @@ pub struct Chunk {
 }
 
 impl Chunk {
+    /// One chunk holding `parts`' lines, in order (they are contiguous in seq, of one year).
+    /// `None` when its offsets would not fit a `u32`: the parts then stay as they are.
+    fn merged(parts: &[Arc<Chunk>]) -> Option<Self> {
+        let first = parts.first()?;
+        let len: usize = parts.iter().map(|c| c.bytes.len()).sum();
+        let lines: usize = parts.iter().map(|c| c.ends.len()).sum();
+        u32::try_from(len).ok()?;
+        let mut bytes = Vec::with_capacity(len);
+        let mut ends = Vec::with_capacity(lines);
+        for c in parts {
+            let base = u32::try_from(bytes.len()).ok()?;
+            ends.extend(c.ends.iter().map(|&e| base + e));
+            bytes.extend_from_slice(&c.bytes);
+        }
+        Some(Self {
+            year: first.year,
+            first_seq: first.first_seq,
+            bytes,
+            ends,
+        })
+    }
+
     fn count(&self) -> u64 {
         u64::try_from(self.ends.len()).unwrap_or(u64::MAX)
     }
@@ -141,7 +170,12 @@ pub struct Snapshot {
     pub end: Option<End>,
     /// A sifter's position on channel A (channel C only).
     pub upstream: Option<Upstream>,
+    /// One chunk per completed year in the window (or its parts, when they could not merge).
     chunks: Arc<Vec<Arc<Chunk>>>,
+    /// The open year's merged blocks of [`TAIL`] appends.
+    open: Arc<Vec<Arc<Chunk>>>,
+    /// The open year's newest appends, at most [`TAIL`].
+    tail: Arc<Vec<Arc<Chunk>>>,
     policy: Policy,
     /// The sim-year being written.
     open_year: i64,
@@ -175,17 +209,63 @@ pub struct Behind {
     pub w0: u64,
 }
 
+/// The most appends the open year's tail holds before they merge into one block (C1).
+pub const TAIL: usize = 64;
+
 impl Snapshot {
-    /// The window's bytes as allocated (lines and their offsets): `LiveEdge::bytes()`.
+    /// The window's chunks, in seq order: the completed years, the open year's blocks, its tail.
+    fn parts(&self) -> [&[Arc<Chunk>]; 3] {
+        [&self.chunks, &self.open, &self.tail]
+    }
+
+    fn chunk(&self, mut i: usize) -> Option<&Arc<Chunk>> {
+        for part in self.parts() {
+            if i < part.len() {
+                return part.get(i);
+            }
+            i -= part.len();
+        }
+        None
+    }
+
+    /// The index of the first chunk that does not end at or before `seq`.
+    fn chunk_past(&self, seq: u64) -> usize {
+        let mut base = 0;
+        for part in self.parts() {
+            let at = part.partition_point(|c| c.first_seq + c.count() <= seq);
+            if at < part.len() {
+                return base + at;
+            }
+            base += part.len();
+        }
+        base
+    }
+
+    /// The window's bytes as allocated (lines and their offsets): `LiveEdge::window_bytes()`.
     #[must_use]
     pub fn bytes(&self) -> usize {
-        self.chunks.iter().map(|c| c.allocated()).sum()
+        self.parts()
+            .iter()
+            .flat_map(|p| p.iter())
+            .map(|c| c.allocated())
+            .sum()
+    }
+
+    /// The window's chunks now (the completed years, the open year's blocks and its tail).
+    #[must_use]
+    pub fn chunk_count(&self) -> usize {
+        self.parts().iter().map(|p| p.len()).sum()
     }
 
     /// The distinct sim-years with a record in the window.
     #[must_use]
     pub fn window_years(&self) -> usize {
-        let mut years: Vec<i64> = self.chunks.iter().map(|c| c.year).collect();
+        let mut years: Vec<i64> = self
+            .parts()
+            .iter()
+            .flat_map(|p| p.iter())
+            .map(|c| c.year)
+            .collect();
         years.dedup();
         years.len()
     }
@@ -201,10 +281,7 @@ impl Snapshot {
     }
 
     fn locate(&self, seq: u64) -> Option<(&Chunk, usize)> {
-        let at = self
-            .chunks
-            .partition_point(|c| c.first_seq + c.count() <= seq);
-        let chunk = self.chunks.get(at)?;
+        let chunk = self.chunk(self.chunk_past(seq))?;
         let k = usize::try_from(seq.checked_sub(chunk.first_seq)?).ok()?;
         (k < chunk.ends.len()).then_some((chunk.as_ref(), k))
     }
@@ -228,10 +305,8 @@ impl Snapshot {
             body: Vec::new(),
         };
         let mut seq = from;
-        let mut i = self
-            .chunks
-            .partition_point(|c| c.first_seq + c.count() <= seq);
-        while let Some(chunk) = self.chunks.get(i) {
+        let mut i = self.chunk_past(seq);
+        while let Some(chunk) = self.chunk(i) {
             // Chunks are contiguous from w0, so `seq` is inside this one.
             let Some(k0) = seq
                 .checked_sub(chunk.first_seq)
@@ -335,6 +410,8 @@ impl LiveEdge {
             end: None,
             upstream: None,
             chunks: Arc::new(Vec::new()),
+            open: Arc::new(Vec::new()),
+            tail: Arc::new(Vec::new()),
             policy,
             open_year: start.year,
             completed: start.year.checked_sub(1).filter(|&y| y >= 0),
@@ -438,9 +515,19 @@ impl LiveEdge {
                 return None;
             }
             let mut next = cur.clone();
-            let mut chunks = (*cur.chunks).clone();
-            chunks.push(Arc::clone(&chunk));
-            next.chunks = Arc::new(chunks);
+            // C1: copy at most TAIL pointers; a full tail merges into one block of the open year.
+            let mut tail = Vec::with_capacity(TAIL);
+            tail.extend(cur.tail.iter().cloned());
+            tail.push(Arc::clone(&chunk));
+            if tail.len() >= TAIL {
+                if let Some(block) = Chunk::merged(&tail) {
+                    let mut open = (*cur.open).clone();
+                    open.push(Arc::new(block));
+                    next.open = Arc::new(open);
+                    tail.clear();
+                }
+            }
+            next.tail = Arc::new(tail);
             next.next_seq = first_seq + chunk.count();
             next.tip_tick = Some(last_tick);
             Some(next)
@@ -455,6 +542,18 @@ impl LiveEdge {
                 return None;
             }
             let mut next = cur.clone();
+            // C1: the year's blocks and tail become one chunk of the completed years.
+            let parts: Vec<Arc<Chunk>> = cur.open.iter().chain(cur.tail.iter()).cloned().collect();
+            if !parts.is_empty() {
+                let mut chunks = (*cur.chunks).clone();
+                match Chunk::merged(&parts) {
+                    Some(one) => chunks.push(Arc::new(one)),
+                    None => chunks.extend(parts),
+                }
+                next.chunks = Arc::new(chunks);
+                next.open = Arc::new(Vec::new());
+                next.tail = Arc::new(Vec::new());
+            }
             next.completed = Some(year);
             next.open_year = year + 1;
             let mut firsts = (*cur.year_first).clone();
