@@ -8,8 +8,8 @@ agents: [all]
 tags: [roadmap, project-management]
 related: [PRJ-001, BCK-001, BCK-002, SPR-011, VER-G0]
 created: 2026-10-16
-updated: 2026-10-17
-version: 0.5.9
+updated: 2026-10-18
+version: 0.5.10
 ---
 
 # PRJ-002 — P1a "Bloodlines": sprint plan
@@ -51,6 +51,7 @@ Goal (ADR-0035): a dynasty lives, dies and inherits deterministically, and the t
 | SPR-030 | P1.14 | Determinism and performance at scale: allocations to budget (A-32), benches 1–3, the dynastic fixture world's goldens, CRN pairing (V-DET-17), the G1a performance run | SPR-019, SPR-022, SPR-025 | C1 with C3 (new golden worlds) | dynastic fixture and 10k dynastic manifests (drafting: `twin_vales.yaml`, `kingdom_10k.yaml`, `specs/worldgen/fixture_worlds.md`, `specs/determinism/crn_pairing_v0.md`); `08` §9 (exists) | P1 |
 | SPR-031 | P1.18 | **Moved to P1b (D33).** `S5.daily_life` F1: virtual telemetry, `rh-cli where` / `who`, `DECISION_TRACE`; exact lags (A-28) | SPR-018, SPR-024 | C3 (lags) with C2 | `S5.daily_life` (draft); its reads of `person.residence` (S3), `person.occupation` (M4), `region.conditions` (M6) have no owner in P1a | P3: in P1b (D33; ruling M-4) |
 | SPR-032 | P1.8 | **Moved to P1b (D33).** M1 Regions F1: route modes and costs, settlement growth | SPR-018 | C3 | `M1.regions` F1 (missing) | P3: in P1b (D33; ruling M-5) |
+| SPR-038 | P1.14 (prep; BCK-002 A-60) | Per-instant engine cost: owned columns moved by index; compaction, `Ledger::check`, the invariants and the lagged snapshot only after a change; no `format!` or allocation on a quiet instant; the ledger write guards' O(rows) value checks in debug and test builds only, the state invariants yearly in release unless a run asks for every change (D60); SPR-014's known narrowing removed (a drain-only binding with an empty inbox must do nothing); `StepCtx::inserted()` for S3's newborn selector; the `instant` bench of the per-instant cost against ledger and life-course rows. Behaviour-neutral: no baseline moves | SPR-014, SPR-020, SPR-015 merged; before SPR-018 and SPR-021 recommended; before SPR-030's G1a run | C2 with `[perf-baseline]`; about 3.25–3.5 agent-days; outside the one-C3 slot | No system spec; `05.1` §2 rule 2, §4.2 and §9 sentences by the Architect in the PR; `docs/08` §9 line. Plan: `SPR-038_PerInstantCost.md` (PLANNING; D60) | P1 |
 
 **Out of P1a:** P1.4 and P1.5a (M3, M4: P1b in `docs/11`, although the old §2 listed "household food for `solo`" here; SPR-011 ruling 2, D31); P1.8 and P1.18 (P1b, D33: SPR-032 and SPR-031 keep their rows above); P1.11 (P1b); P1.16 (P1b); channel A's kind-7 `RESIDENCE_INTERVAL` record and `rh-cli tail --digest region` (S3 F1, P1b: D57 item 2; BCK-002 A-61).
 
@@ -101,6 +102,12 @@ flowchart LR
   S018 --> S031[SPR-031<br/>P1.18 S5 F1: P1b, D33]
   S024 --> S031
   S018 --> S032[SPR-032<br/>P1.8 M1 F1: P1b, D33]
+  S014 --> S038[SPR-038<br/>A-60 per-instant cost, C2]
+  S015 --> S038
+  S020 --> S038
+  S038 -.recommended before.-> S018
+  S038 -.recommended before.-> S021
+  S038 --> S030
   S027 --> G1a([G1a])
   S028 --> G1a
   S029 --> G1a
@@ -128,6 +135,8 @@ Three development lanes. The director set 3–4 active agent sessions as the nor
 | 8 | SPR-030 (prep: A-32, benches) | SPR-025 | SPR-029 | Annals need successions and the envelope; A-32 is hash-neutral (C1) and can start before the goldens |
 | 9 | SPR-030 (goldens, G1a runs) | SPR-028 | — | The harness and the scale run read everything the systems produce, so they come last |
 | P1b | SPR-031, SPR-032 (D33) | — | — | Not on the G1a path (rulings M-4, M-5) |
+
+**SPR-038** (BCK-002 A-60, C2, no baseline move) runs after wave 5 in any lane with a free session and merges in a gap between C3 merges; recommended before SPR-018 and SPR-021, required before SPR-030's G1a performance run (D60). Its number follows SPR-033 to SPR-037, which PRJ-003's viewer lane holds.
 
 ## 5. What each sprint gives Gate G1a
 
@@ -206,6 +215,7 @@ Approved with the plan at G0 (D30, 2026-10-16) and binding. The director decided
 | A-04 sealed held-out bands | Before P1b tuning; not P1a |
 | A-19, A-23, A-25, A-26 | Not P1a (A-23 only if a hand-written manifest hits it) |
 | Bench 4 baseline (G0 ruling) | SPR-018, the first sprint that builds a raster |
+| A-60 per-instant engine cost | SPR-014 (part, `1bd05a6`); the rest SPR-038, which also takes A-32's single-thread quiet-instant allocations (A-32 keeps the worker pool and multi-thread buffers, SPR-030) |
 
 ## 9. Load on the director
 
