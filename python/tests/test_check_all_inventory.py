@@ -83,6 +83,10 @@ REQUIRED_GATES = (
     "Doctest count gate positive control: one typed-ID case missing must FAIL",
     "Doctest count gate: every expected compile-fail case and twin ran (SPR-002 T-01; DEF-2)",
     "Document index builds (gen_manifest --check)",
+    "Effect emit parity positive control: one case's program altered on the Rust side must "
+    "FAIL (SPR-017 T-08)",
+    "Effect emit parity: effect_ref --emit and rh-cli effect eval print the same line for "
+    "every golden case (SPR-017 T-08)",
     "Effect enums: the Registry's keyed tables in the Rust loader's order equal tomllib's "
     "(check_key_order; SPR-017 T-06)",
     "Effect programs positive control: a Registry whose seniority has no order must FAIL "
@@ -354,6 +358,9 @@ REQUIRED_GATES = (
     "V-WC-04 manifest parity: Rust loader agrees with manifest_v0.py (SPR-004)",
     "V-WC-04 parity positive control: drifted Registry must FAIL",
     "V-WC-04 parity positive control: message-only drift must FAIL (GAP-3)",
+    "V-WC-10 differential fuzz: effect_ref.py and the Rust evaluator agree on 16 SplitMix64 "
+    "seeds, with every code, invariant, relation, builtin, aggregate and kind covered "
+    "(bin/effect_fuzz.py; SPR-017 T-08)",
     "V-WC-10 effect language: the Rust evaluator reproduces every golden case in debug "
     "(rh-manifest effect_golden; SPR-017 T-05)",
     "V-WC-10 effect language: the Rust evaluator reproduces every golden case in release "
@@ -425,6 +432,8 @@ REQUIRED_GATES = (
     "method table (D47; SPR-027 T-01)",
     "control_v1 positive control: control.pace on the stream method table must FAIL (wire_v1 "
     "§4.5; SPR-027 T-01)",
+    "effect_fuzz positive control: a reference copy whose fixed-point products round half up "
+    "must FAIL with MISMATCH (SPR-017 T-08)",
     "effect_ref positive control: one altered expected value must FAIL (SPR-017)",
     "exp_ln_v0 positive control: a stale golden file must FAIL (SPR-016)",
     "fixture worlds positive control: dormancy_degrees read as 1 must FAIL the named-at-start "

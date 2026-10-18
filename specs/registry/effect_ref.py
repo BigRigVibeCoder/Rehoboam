@@ -13,6 +13,10 @@ Usage:  python -I specs/registry/effect_ref.py            (report every case)
         python -I specs/registry/effect_ref.py --check    (exit 1 on any mismatch)
         python -I specs/registry/effect_ref.py --case ID  (one case, verbose)
         python -I specs/registry/effect_ref.py --golden PATH   (another golden file)
+        python -I specs/registry/effect_ref.py --emit     (each case's result and diagnostics, one
+                                                           line each; cases need no `expect`; a
+                                                           world's `draw_seed` gives the draws it
+                                                           does not list: SPR-017 T-08's fuzz)
 
 Refs: 05.5 §2.1, §3.2; 05.1 §2, §6; ADR-0006; ADR-0010; SPR-017 (PRJ-002); V-WC-10.
 """
@@ -355,6 +359,7 @@ class World:
     neutral_reads: int = 0
     drawn: set[tuple[str, str, int, int]] = field(default_factory=set)
     children_index: dict[int, list[int]] | None = None
+    draw_seed: int | None = None  # T-08: draws for keys the world does not list (seeded_draw)
 
     def children(self, ident: int) -> list[int]:
         """The children-by-parent index over the life-course log (the host's derived index)."""
@@ -542,6 +547,7 @@ def load_world(reg: Registry, raw: dict[str, Any]) -> World:
         params,
         draws,
         enum_defaults=reg.enum_defaults,
+        draw_seed=int(raw["draw_seed"]) & MASK64 if "draw_seed" in raw else None,
     )
 
 
@@ -1169,9 +1175,12 @@ class Call(Node):
         if key in ev.world.drawn:  # minor 3: the run-time layer of the reuse rule
             raise InvariantError(f"E_RNG_REUSE: {key} drawn twice in one evaluation")
         ev.world.drawn.add(key)
-        if key not in ev.world.draws:
+        if key in ev.world.draws:
+            u = ev.world.draws[key]
+        elif ev.world.draw_seed is not None:
+            u = seeded_draw(ev.world.draw_seed, *key)
+        else:
             raise KeyError(f"the golden world lists no draw for {key}")
-        u = ev.world.draws[key]
         if self.name == "draw":
             return u >> 1
         p = self.args[3].eval(ev)
@@ -1215,6 +1224,29 @@ def canon(node: object) -> str:
         else:
             out.append(repr(item))
     return "".join(out)
+
+
+MASK64 = (1 << 64) - 1
+
+
+def splitmix64(z: int) -> int:
+    """SplitMix64's step and finaliser."""
+    z = (z + 0x9E3779B97F4A7C15) & MASK64
+    z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & MASK64
+    z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & MASK64
+    return z ^ (z >> 31)
+
+
+def seeded_draw(seed: int, purpose: str, kind: str, ident: int, k: int) -> int:
+    """A world's ``draw_seed`` draw (T-08; the fold of rh-manifest's ``seeded_draw``).
+
+    SplitMix64 over the seed, then each byte of ``purpose/kind/``, the id and ``k`` as 64-bit words.
+    """
+    h = splitmix64(seed)
+    for b in f"{purpose}/{kind}/".encode():
+        h = splitmix64(h ^ b)
+    h = splitmix64(h ^ (ident & MASK64))
+    return splitmix64(h ^ (k & MASK64))
 
 
 def draw_hits(u: int, p: Fx) -> bool:
@@ -2605,15 +2637,36 @@ def report_case(golden: Golden, case: dict[str, Any], verbose: bool) -> int:
     return 0 if ok else 1
 
 
+def emit_all(golden: Golden) -> None:
+    """``--emit`` (T-08): one line per case.
+
+    ``id result`` and, for a case that evaluated, the four diagnostics as ``name=value``;
+    ``crash:<kind>`` for a case the reference cannot run. Cases need not carry ``expect``.
+    """
+    for case in golden.cases:
+        ident = str(case["id"])
+        try:
+            got, diags = run_case(golden, case)
+        except Exception as error:  # a crash is a result of the fuzz, never a traceback
+            print(f"{ident} crash:{type(error).__name__}")
+            continue
+        tail = "".join(f" {name}={diags[name]}" for name in DIAGNOSTICS) if diags else ""
+        print(f"{ident} {got}{tail}")
+
+
 def main(argv: list[str]) -> int:
     """Command line."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--check", action="store_true", help="exit 1 on any mismatch")
+    parser.add_argument("--emit", action="store_true", help="print each case's result (T-08)")
     parser.add_argument("--case", help="run one case by id, verbosely")
     parser.add_argument("--golden", type=Path, default=GOLDEN, help="the golden file")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
     golden = load_golden(args.golden)
+    if args.emit:
+        emit_all(golden)
+        return 0
     failures = check_all(golden, args.verbose or args.case is not None, args.case)
     total = len(golden.cases) if args.case is None else 1
     if failures:

@@ -834,6 +834,38 @@ key_order_control() {
   "$PY" -I bin/check_key_order.py --rust-output "$planted"
 }
 
+# SPR-017 T-08: effect_ref.py --emit and rh-cli effect eval print the same line for every case of a
+# golden-format file (the reference reads the golden file; the Rust side reads $1, the file itself or
+# a planted copy).
+effect_emit_parity() {
+  local ref rs file="${1:-specs/registry/effect_language_golden_v0.toml}"
+  ref="$("$PY" -I specs/registry/effect_ref.py --emit)" || return 1
+  rs="$("$RH_CLI" effect eval "$file")" || return 1
+  if [ "$ref" != "$rs" ]; then
+    diff <(printf '%s\n' "$ref") <(printf '%s\n' "$rs") | head -20
+    echo "EMIT PARITY: FAIL"
+    return 1
+  fi
+  echo "EMIT PARITY: $(printf '%s\n' "$ref" | wc -l | tr -d ' ') cases"
+}
+effect_emit_parity_control() {
+  local planted="$PWD/target/rendered-fixtures/emit_parity_lit_true.toml"
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed "0,/^text = 'true'\$/s//text = 'false'/" specs/registry/effect_language_golden_v0.toml > "$planted" || return 1
+  if cmp -s "$planted" specs/registry/effect_language_golden_v0.toml; then echo "control not planted: no text = 'true' case"; return 1; fi
+  effect_emit_parity "$planted"
+}
+# SPR-017 T-08: the fuzz's control runs it against a reference copy whose fixed-point products round
+# half up; it must report MISMATCH.
+effect_fuzz_control() {
+  local planted="$PWD/target/rendered-fixtures/effect_ref_half_up.py"
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed 's/^        return fx_from_fraction(a.ty, fx_value(a) \* fx_value(b))$/        return Fx(a.ty, sat((fx_value(a) * fx_value(b) * (1 << FRAC_BITS[a.ty]) + Fraction(1, 2)).__floor__(), *q_range(a.ty)))/' \
+    specs/registry/effect_ref.py > "$planted" || return 1
+  if cmp -s "$planted" specs/registry/effect_ref.py; then echo "control not planted: the fixed-point product line was not found"; return 1; fi
+  "$PY" -I bin/effect_fuzz.py --seeds 1-16 --rust-bin "$RH_CLI_RELEASE" --out target/fuzz_control --ref "$planted"
+}
+
 # SPR-009 T-02a: the instruction-count gate (V-PERF-04) and its controls. The gate measures benches 7
 # and 8 under callgrind (bin/perf_gate.py) and compares them with the committed baseline; a second
 # run must give identical counts; a changed baseline must equal the tool's output (ruling 3).
@@ -1351,6 +1383,8 @@ run "Golden cases: effect language v0 reference reproduces effect_language_golde
 run "effect_ref positive control: one altered expected value must FAIL (SPR-017)" "fail:FAIL lit_true" effect_golden_control &&
 run "V-WC-10 effect language: the Rust evaluator reproduces every golden case in debug (rh-manifest effect_golden; SPR-017 T-05)" "pass:EFFECT LANGUAGE v0.5.1 (rust): PASS (580 cases)" cargo nextest run -p rh-manifest --locked --test effect_golden --no-capture &&
 run "V-WC-10 positive control: the golden file with one expected value altered must FAIL the Rust test (SPR-017 T-05)" "fail:FAIL lit_true" effect_golden_rust_control &&
+run "Effect emit parity: effect_ref --emit and rh-cli effect eval print the same line for every golden case (SPR-017 T-08)" "pass:EMIT PARITY: 580 cases" effect_emit_parity &&
+run "Effect emit parity positive control: one case's program altered on the Rust side must FAIL (SPR-017 T-08)" "fail:EMIT PARITY: FAIL" effect_emit_parity_control &&
 run "Authored numbers: rh-manifest's exact-decimal vectors are the decimal reference's (gen_decimal_vectors --check; SPR-011 T-04)" pass "$PY" -I bin/gen_decimal_vectors.py --check &&
 run "gen_decimal_vectors positive control: one altered vector must FAIL (SPR-011 T-04)" "fail:STALE:" "$PY" -I bin/gen_decimal_vectors.py --check --output tests/lint_fixtures/golden/stale_decimal_vectors.txt &&
 run "Fixed-point exp and ln v0: constants, convergence, faithful rounding, refusals, golden vectors (exp_ln_v0 --check; 05.1 §6 item 4 v1.10; SPR-016)" "pass:OK:" "$PY" -I specs/numerics/exp_ln_v0.py --check &&
@@ -1482,6 +1516,8 @@ run "V-PERF-11 positive control: a system that zero-fills a buffer in its tick (
 run "Rust: build rh-cli in release for the golden runs (SPR-008 T-02)" pass cargo build --release --locked --quiet -p rh-cli &&
 run "V-WC-10 effect language: the Rust evaluator reproduces every golden case in release (SPR-017 T-05)" "pass:EFFECT LANGUAGE v0.5.1 (rust): PASS (580 cases)" cargo nextest run -p rh-manifest --locked --release --test effect_golden --no-capture &&
 run "V-WC-10 effect language: twelve planted mutants each fail their sentinel cases with the predicted wrong value, and Mutant::None passes (SPR-017 T-05)" "pass:mutant PrefixLast: killed" cargo nextest run -p rh-manifest --locked --release --features mutant-effect --test effect_mutants --no-capture &&
+run "V-WC-10 differential fuzz: effect_ref.py and the Rust evaluator agree on 16 SplitMix64 seeds, with every code, invariant, relation, builtin, aggregate and kind covered (bin/effect_fuzz.py; SPR-017 T-08)" "pass:EFFECT FUZZ: PASS" "$PY" -I bin/effect_fuzz.py --seeds 1-16 --rust-bin "$RH_CLI_RELEASE" --out target/fuzz --assert-coverage &&
+run "effect_fuzz positive control: a reference copy whose fixed-point products round half up must FAIL with MISMATCH (SPR-017 T-08)" "fail:MISMATCH seed" effect_fuzz_control &&
 run "Golden run: smoke, 1,000 sim-years, yearly ladder, 1 thread, parallel levels at least 5% (SPR-008 T-02, DEF-2)" "pass:smoke: 1000 yearly rungs to year 1000 at 1 thread(s)" "$RH_CLI_RELEASE" run smoke --years 1000 --threads 1 --ladder yearly --require-parallel "$PARALLEL_FLOOR" --out "$GOLDEN/smoke_yearly_t1.ladder" &&
 run "Golden run: smoke, 1,000 sim-years, yearly ladder, N threads, parallel levels at least 5%, with the T-03 vitals observer attached (SPR-008 T-02, DEF-2; SPR-009 T-03)" "pass:smoke: 1000 yearly rungs to year 1000 at $GOLDEN_THREADS thread(s)" golden_vitals_run &&
 run "Golden ladders: 1 thread = N threads, byte for byte (rh-cli ladder compare; V-DET-01)" "pass:LADDERS EQUAL: 1000 rungs" "$RH_CLI_RELEASE" ladder compare "$GOLDEN/smoke_yearly_t1.ladder" "$GOLDEN/smoke_yearly_tN.ladder" &&
