@@ -6,10 +6,10 @@ status: APPROVED
 owner: architect
 agents: [coder, tester, architect]
 tags: [roadmap, project-management, stream, observability]
-related: [PRJ-001, PRJ-002, ADR-0030, ADR-0031, ADR-0035, ADR-0036, SPR-026, SPR-027, SPR-033]
+related: [PRJ-001, PRJ-002, ADR-0030, ADR-0031, ADR-0035, ADR-0036, SPR-015, SPR-018, SPR-020, SPR-026, SPR-027, SPR-033, SPR-034, SPR-035]
 created: 2026-10-17
 updated: 2026-10-18
-version: 1.3.0
+version: 1.4.0
 ---
 
 # PRJ-003 — Bevy Native Voxel Viewer (`rh-view`): Project Plan
@@ -98,11 +98,11 @@ The work runs in a dedicated tool lane that does not contend with the core simul
 
 | Sprint | Phase | Title | Scope & Deliverables | Class | Prerequisite |
 |---|---|---|---|---|---|
-| **SPR-033** | V.1 | **Bevy 0.20 scaffold & binary greedy mesher** | The `viewer/` workspace and `rh-view`; a Bevy 0.20 app; the binary greedy chunk mesher; a procedural demo diorama; an orbital camera; the isolation gate (V-R3D-14) | C1 (tool) | D51 (ratified); starts when SPR-026 merges (D62) |
-| **SPR-034** | V.1 | **Stream ingestion & plane-B procedural hydration** | The IF-0 reader through `rh-protocol` and the sealed-segment reader; a deterministic building grammar (Tudor houses, stone towers, church, roads) hydrated from the settlement seed; the hydration determinism gate (V-R3D-13) | C1 (tool) | SPR-033, SPR-026 (`rh-protocol`) |
-| **SPR-035** | V.1 | **Materializer hookup & timeline scrubber** | SPR-027's materializer; a timeline scrubber that jumps to keyframes and replays forward; the watched-history cache (D62); rewind equal to forward play (V-R3D-13) | C1 (tool) | SPR-034, SPR-027 |
+| **SPR-033** | V.1 | **Bevy 0.20 scaffold, binary greedy mesher & the first real world** | The `viewer/` workspace: `rh-view-core` (Bevy-free, integer: chunks, the mesher, terrain, digests, the IF-0 client) and `rh-view` (the Bevy 0.20 app). The binary greedy chunk mesher. `hamlet`'s real terrain, regions, settlement seats and routes from worldgen-lite's exact reference, checked against its golden (no procedural demo diorama). A live HUD over `A.sock`, local or tunnelled over SSH from `adjutant`. Orbital, fly and first-person walking cameras. 0.35 m voxels with the measured level-of-detail fallback. The isolation gate (V-R3D-14) and the viewer's CI job | C1 (tool) | D51 (ratified); starts when SPR-026 merges (D62); Bevy 0.20.0 enters the viewer's lock no earlier than 2026-10-22 (two weeks after its release) |
+| **SPR-034** | V.1 | **Stream ingestion & plane-B procedural hydration** | The IF-0 reader through `rh-protocol`, with catch-up from the sealed segments (`rh-stream`), local or over SSH; the view state folded from the stream and checked against every `STEP_DIGEST`; a deterministic building grammar for E1 (cruck and box-framed dwellings, a stone church, earth roads) hydrated from the settlement seed and the residents per settlement (channel A carries no household record: SPR-034 F1); the hydration determinism gate (V-R3D-13) across runs, threads, builds and rewind by re-reading | C1 (tool) | SPR-033, SPR-026 (`rh-protocol`). Content only, not a precondition: SPR-015 (births), SPR-018 and SPR-020 (residence and event places) |
+| **SPR-035** | V.1 | **Materializer hookup & timeline scrubber** | SPR-027's materializer, run as the run's own `rh-cli materialize` (locally, or on `adjutant` over SSH) and digest-checked by the viewer; a timeline scrubber (live, history and play modes; keyframe-snapped previews into unwatched history, the exact tick on release); the watched-history cache (D62: view-state checkpoints and deltas, hydrated content by its inputs; RAM, with `/dev/shm` opt-in); rewind equal to forward play (V-R3D-13); the scrub latency reported against world size (V-VIEW-05) | C1 (tool) | SPR-034, SPR-027 |
 | **SPR-036** | V.1–V.2 | **Narrative camera director & sifter binding** | Channel C sift matches drive the camera (R3D-7); cinematic framing on drama nodes (coronations, deaths, battles); smoke and fire particles | C1 (tool) | SPR-035, SPR-020 (the event envelope) |
-| **SPR-037** | V.3 | **Avatar embodiment ("Being Gandalf") & WebGPU** | WASD and mouse inputs become `PlayerAction` over `control.sock`; a first-person street-level walk; a WebGPU build of `rh-view` | C1 (tool) | SPR-036, P2.7 (`control.sock`) |
+| **SPR-037** | V.3 | **Avatar embodiment ("Being Gandalf") & WebGPU** | WASD and mouse inputs become `PlayerAction` over `control.sock`; the embodied avatar's street-level walk (the spectator's first-person camera is SPR-033's, D62); a WebGPU build of `rh-view` | C1 (tool) | SPR-036, P2.7 (`control.sock`) |
 
 V.2 (people moving, fields, mills, famine) follows P1b's systems and is planned when they land.
 
@@ -128,17 +128,22 @@ Each sprint passes these before merging. The `docs/09` IDs are the gates; the Re
 
 ```mermaid
 flowchart TD
-  D51([D51 / ADR-0036, approved 2026-10-17]) --> S033[SPR-033: Bevy 0.20 scaffold & greedy mesher]
-  S026a[SPR-026: wire_v1, rh-protocol] -.->|D62: start when it merges| S033
+  D51([D51 / ADR-0036, approved 2026-10-17]) --> S033[SPR-033: Bevy 0.20 scaffold, mesher, hamlet's real terrain]
+  S026[SPR-026: wire_v1, rh-protocol, IF-0] -.->|D62: start when it merges| S033
   S033 --> S034[SPR-034: stream ingestion & plane-B hydration]
-  S026[SPR-026: rh-protocol, IF-0] -.-> S034
+  S026 -.-> S034
+  S015[SPR-015: births] -.->|content only| S034
+  S018[SPR-018: worldgen-lite, residence, event places] -.->|content only| S034
+  S020[SPR-020: event envelope, Event.place] -.->|content only| S034
   S034 --> S035[SPR-035: materializer hookup & timeline scrubber]
-  S027 -.-> S035
-  S020[SPR-020: event envelope] -.-> S036[SPR-036: narrative camera director]
+  S027[SPR-027: the materializer] -.-> S035
+  S020 -.-> S036[SPR-036: narrative camera director]
   S035 --> S036
   P27[P2.7: control.sock] -.-> S037[SPR-037: Gandalf avatar & WebGPU]
   S036 --> S037
 ```
+
+Dotted edges come from the engine lanes. An edge marked "content only" is not a precondition: SPR-034 builds and gates without that sprint, and shows what it adds once it is on `main`.
 
 ---
 
@@ -161,3 +166,14 @@ This plan was submitted to the Architect with the following affirmations:
 8. The schedule follows the director: SPR-033 starts after SPR-027 lands. (Superseded by D62, item 10.)
 9. (v1.2.1, 2026-10-17; the Architect's rulings at the wave-5 plans, D-7 and W40.) The path list of §2 invariant 3 gains `rh-golden`, where SPR-027's materializer lives on SPR-013's replay path; §5 notes that this widens the viewer's CI trigger.
 10. (v1.3.0, 2026-10-18; D62, the director's priorities.) The viewer lane is priority 2, behind the engine core, and loses every contention to it. SPR-033 starts when SPR-026 merges; SPR-035 waits for SPR-027. FPS and scrub latency stay reported targets, measured on the director's P51. New in §3: the 0.35 m default voxel size with a level-of-detail fallback, the SSH tunnel to `adjutant`, the watched-history cache (`/dev/shm` allowed for it), and the first-person free camera in V.1. V-VIEW-03 and V-VIEW-05 are restated in §5.
+11. (v1.4.0, 2026-10-18; the viewer sprint plans SPR-033 v1.3.0, SPR-034 and SPR-035, for the director as D63.)
+    - **§4, SPR-033:** shows `hamlet`'s real terrain, regions, seats and routes from worldgen-lite's exact reference, checked against its golden, instead of a procedural demo diorama. It adds the live HUD, the fly and walking cameras beside the orbital one, and the level-of-detail fallback. Bevy 0.20.0 enters its lock no earlier than 2026-10-22, with the viewer's own toolchain at rustc 1.97.1.
+    - **§4, SPR-034:** its grammar reads residents per settlement, not households, because channel A carries no household record. Its "Tudor houses" become E1's cruck and box-framed dwellings.
+    - **§4, SPR-035:** materializes through the run's own `rh-cli`, locally or on `adjutant` over SSH.
+    - **§4, SPR-037:** its walk is the embodied avatar's; the spectator's first-person camera is SPR-033's.
+    - **§6:** content-only edges from SPR-015, SPR-018 and SPR-020 to SPR-034, and SPR-027 named.
+    - **Open for the Architect, not edited here** (the plans' findings):
+      - §3's 64×64×32 chunk, which binary greedy meshing cannot hold (62³: SPR-033 F2);
+      - §5's V-VIEW-03 scene (SPR-033 F3) and the CI trigger split (SPR-033 F7);
+      - §2's path list gaining `rh-ids` (SPR-034 F3);
+      - §3's materializer row: the run's own `rh-cli` by default (SPR-035 F1).
