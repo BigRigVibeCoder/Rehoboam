@@ -2,7 +2,7 @@
 id: SPR-029
 title: "Family annals v0 in python/: real annals over real sealed runs, with the provenance sidecar (V-NAR-05) and no model (V-NAR-07); the run's inputs exported by rh-cli with the genesis cross-checked against the run, a port of the reference renderer, the multi-segment chronicle digest, the G1a reading package (P2.8a)"
 type: how-to
-status: PLANNING
+status: APPROVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, stream]
