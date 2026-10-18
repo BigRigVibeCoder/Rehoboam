@@ -31,10 +31,13 @@ reports its metadata). Rules:
                       group, a glob), in src/ and build.rs: the environment and the host's
                       directories are inputs outside the history tuple (SPR-011 A-4). The one
                       exception is std::env::consts (the target's ARCH, OS and FAMILY, fixed at
-                      compile time by the build). Out of scope: the env! and option_env! macros,
-                      which read the build's environment at compile time into the engine build,
-                      a term of the history tuple, not a run-time input. tests/ may read the
-                      overrides of their golden files.
+                      compile time by the build). The env! and option_env! macros are the rule
+                      below. tests/ may read the overrides of their golden files.
+    build-env         env! and option_env! in src/ and build.rs (BCK-002 A-50; SPR-014 T-07):
+                      the build's environment read at compile time (HOME, PATH, CARGO_MANIFEST_DIR)
+                      makes the engine build depend on the machine that built it. Only a plain
+                      string literal naming a CARGO_PKG_* variable is allowed (the package's own
+                      name and version); any other argument, a concat! included, is refused.
     process           the module std::process, in src/ and build.rs: Command, and exit, abort and
                       id too (A-44; DEF-1). tests/ may name temporary files by process id.
     network           a socket, in src/ and build.rs: std::net, std::os::unix::net, `net::<Type>`
@@ -221,6 +224,7 @@ NETWORK_FILES = MappingProxyType({"rh-cli": frozenset({"src/serve.rs"})})
 NETWORK_REEXPORT_RULE = "network-reexport"
 PROCESS_RULE = "process"
 ENV_RULE = "env"
+BUILD_ENV_RULE = "build-env"
 STD_RENAME_RULE = "std-rename"
 # MIN-2: `r#ident` is `ident`; stripped before any rule matches (a raw string, r#"..."#, is a
 # literal the lexer has already blanked).
@@ -233,7 +237,15 @@ BANNED_MODULES = (
     (("std", "env"), ENV_RULE),
     (("std", "net"), NETWORK_RULE),
     (("std", "os", "unix", "net"), NETWORK_RULE),
+    # The review's K2 (A-50): the build-environment macros, which `use` can rename past the
+    # build-env pattern (`use core::env as e; e!("HOME")`).
+    (("core", "env"), BUILD_ENV_RULE),
+    (("core", "option_env"), BUILD_ENV_RULE),
+    (("std", "option_env"), BUILD_ENV_RULE),
 )
+# The review's K2: a renamed path ending in one of these names is a renamed build-environment macro
+# whatever crate it comes through (a re-export), so `use … as` of it is refused under build-env.
+BUILD_ENV_NAMES = frozenset({"env", "option_env"})
 # DEF-5: the one path into a banned module that is allowed: the target's constants.
 ALLOWED_PATHS = frozenset({("std", "env", "consts")})
 USE_TOKEN = re.compile(r"::|[{},*;]|\w+")
@@ -305,6 +317,8 @@ SOURCE_INCLUDE_RULE = "source-include"
 DATA_INCLUDE_RULE = "data-include"
 INCLUDE_MACRO = re.compile(r"\binclude\s*!\s*(?P<open>[(\[{])")
 DATA_INCLUDE_MACRO = re.compile(r"\binclude_(?:str|bytes)\s*!\s*(?P<open>[(\[{])")
+BUILD_ENV_MACRO = re.compile(r"\b(?:option_)?env\s*!\s*(?P<open>[(\[{])")
+PACKAGE_ENV = re.compile(r"CARGO_PKG_[A-Z_]+")
 CLOSING = {"(": ")", "[": "]", "{": "}"}
 
 
@@ -394,6 +408,16 @@ RULES: tuple[Rule, ...] = (
         "split_paths, join_paths) reads the host's environment or directories, an input outside "
         "the history tuple; only std::env::consts is allowed (DET-1; BCK-002 A-44; SPR-011 A-4; "
         "DEF-5)",
+    ),
+    Rule(
+        BUILD_ENV_RULE,
+        # BCK-002 A-50 (SPR-014 T-07): only `env!("CARGO_PKG_...")` and its option_env! twin, the
+        # argument one plain literal ("..." or r"..."); a concat! or another name is refused.
+        # Strings are blanked before rules match, so the literal is read from the source after the
+        # match (_allow_package_env), as include!'s is.
+        _rx(r"\b(?:option_)?env\s*!\s*[(\[{]"),
+        "env!/option_env! reads the build machine's environment into the engine build (HOME, "
+        "PATH, CARGO_MANIFEST_DIR): only a literal CARGO_PKG_* name is allowed (BCK-002 A-50)",
     ),
     Rule(
         STD_RENAME_RULE,
@@ -733,6 +757,15 @@ def find_use_modules(code: str, path: str) -> list[Finding]:
                 continue
             why = next(r.why for r in RULES if r.name == rule)
             found.append(Finding(rule, path, line + 1, column, "::".join(module), why))
+        flagged = {f.rule for f in found if f.line == line + 1}
+        renamed_macro = next(
+            (p for p in renamed if p and p[-1] in BUILD_ENV_NAMES and p != ("std", "env")), None
+        )
+        if renamed_macro is not None and BUILD_ENV_RULE not in flagged:
+            why = next(r.why for r in RULES if r.name == BUILD_ENV_RULE)
+            found.append(
+                Finding(BUILD_ENV_RULE, path, line + 1, column, "::".join(renamed_macro), why)
+            )
     return found
 
 
@@ -772,7 +805,7 @@ def _applies(finding: Finding, scan: "FloatScan") -> bool:
     # File I/O and std::process are refused where the float rule's scope says engine code (src/,
     # build.rs; and the float zone's src/): tests may read their golden files and name temporary
     # directories by process id. File I/O is allowed in FILE_IO_CRATES.
-    rules = (FILE_IO_RULE, PROCESS_RULE, ENV_RULE, STD_RENAME_RULE, NETWORK_RULE)
+    rules = (FILE_IO_RULE, PROCESS_RULE, ENV_RULE, BUILD_ENV_RULE, STD_RENAME_RULE, NETWORK_RULE)
     if finding.rule in rules and scan.scope == "none":
         return False
     return not (finding.rule == FILE_IO_RULE and scan.file_io)
@@ -940,6 +973,20 @@ def _line_column(code: str, offset: int) -> tuple[int, int]:
     return code.count("\n", 0, offset) + 1, offset - line_start + 1
 
 
+def _allow_package_env(lexed: Lexed, source: str, findings: list[Finding]) -> list[Finding]:
+    """Drop the build-env findings whose argument is one literal naming a CARGO_PKG_* variable.
+
+    An env!/option_env! with any other argument (another name, a concat!, a second argument) keeps
+    its finding (BCK-002 A-50).
+    """
+    allowed = {
+        _line_column(lexed.code, call.start)
+        for call in find_includes(source, lexed.code, BUILD_ENV_MACRO)
+        if call.literal is not None and PACKAGE_ENV.fullmatch(call.literal)
+    }
+    return [f for f in findings if f.rule != BUILD_ENV_RULE or (f.line, f.column) not in allowed]
+
+
 def _follow_includes(
     lexed: Lexed, source: str, findings: list[Finding], file: Path | None, repo: Path
 ) -> tuple[list[Finding], list[Path]]:
@@ -1016,6 +1063,7 @@ def scan_source(
         findings += find_float_dep(lexed.code, name, dep_floats)
     # Includes resolve from the file as it was reached, not from its symlink target (MIN-3).
     reached = path if isinstance(path, Path) else None
+    findings = _allow_package_env(lexed, source, findings)
     findings, targets = _follow_includes(lexed, source, findings, reached, report.repo)
     if floats == "zone":
         findings += find_float_api(lexed.code, name)

@@ -5,6 +5,9 @@ pub const SCHEDULE: &[(Pulse, Phase)] = &[
     (Pulse::Day, Phase::Environment),
     (Pulse::Day, Phase::Activity),
 ];
+pub const DRAINS: &[(&str, Pulse, Phase)] = &[
+    ("Audit", Pulse::Day, Phase::Activity),
+];
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RngPurpose {
@@ -22,3 +25,8 @@ impl RngPurpose {
 }
 pub struct Params {
 }
+pub const ROLE_TARGET: rh_core::RoleId = rh_core::RoleId(1);
+/// The role constants by Registry name: registration compares each code with the Registry's.
+pub const ROLES: &[(&str, rh_core::RoleId)] = &[
+    ("target", ROLE_TARGET),
+];

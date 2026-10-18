@@ -44,6 +44,7 @@
 "scales.restart" = "sha256:5391c7e413a94c1bbdc099d016f462410a34b4f3b468b640d87e9583bca4002f"
 "scales.spatial" = "sha256:bf0581a95dcb8023d7d9a0988b95293791cc50ab0fbc05b266b61c2096ca0ea3"
 "scales.temporal" = "sha256:fd253e304e99a3427aeab940f4158c4d6f6f30083a3b9631d848013cec2075f7"
+"schedule.Day/Vital.steps.lifecycle" = "sha256:8fd9a79f11fb53c69205670879508ac983bc3f3c82634d5f9061973127c34683"
 "submodels.apply_death.earns_its_place_by" = "sha256:353319dd6b3996ea23f11676e3b81a181a5c677ba704dc26653636379f827fc1"
 "submodels.apply_death.summary" = "sha256:7cd57899987e6988bba2f04dd6bb9be0e8e33cb3236d76ad56e499424556b6c5"
 "submodels.mortality.summary" = "sha256:92fe1ab2251e271df570442aa7d1c616445a3da5b1f1c8ecaa06c4ef3cba14bd"

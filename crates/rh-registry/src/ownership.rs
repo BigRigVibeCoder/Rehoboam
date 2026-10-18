@@ -18,7 +18,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use rh_core::ownership::SpecEntry;
+use rh_core::ownership::{SpecApply, SpecEntry, SpecReadUse};
 use serde::Deserialize;
 
 // The single-writer and plane rules live in rh-core, which this crate depends on (SPR-005,
@@ -37,6 +37,82 @@ pub struct OwnedColumn {
     /// The column's storage type, one of [`COLUMN_TYPES`].
     #[serde(rename = "type")]
     pub ty: String,
+    /// An enum column's code names, by position (EVO-001).
+    #[serde(default)]
+    pub values: Option<Vec<String>>,
+    /// The column's declared default, if any (`05.1` §2 rule 2: the ledger row insert).
+    #[serde(default, deserialize_with = "literal")]
+    pub default: Option<Literal>,
+}
+
+/// A TOML scalar from a spec (a `neutral` or a `default`), kept exactly as written: a float is
+/// kept as its decimal text and turned into fixed-point bits without any float arithmetic
+/// ([`Literal::typed`]), so this plane-A crate stays float-free.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Literal {
+    /// `true` or `false`.
+    Bool(bool),
+    /// An integer.
+    Int(i64),
+    /// A string: an enum code's name.
+    Text(String),
+    /// A float literal, as the shortest decimal text that reads back to it.
+    Decimal(String),
+}
+
+fn literal<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Literal>, D::Error> {
+    let v: Option<toml::Value> = Option::deserialize(d)?;
+    Ok(v.and_then(|v| match v {
+        toml::Value::Boolean(b) => Some(Literal::Bool(b)),
+        toml::Value::Integer(i) => Some(Literal::Int(i)),
+        toml::Value::String(s) => Some(Literal::Text(s)),
+        f @ toml::Value::Float(_) => Some(Literal::Decimal(f.to_string())),
+        _ => None,
+    }))
+}
+
+impl Literal {
+    /// The literal as a value of a column of type `ty` (with its enum `values`), as the column
+    /// stores it: an enum code, 0 or 1, an integer, or a fixed-point value's raw bits (the exact
+    /// decimal rounded half to even, ruling 9). `None` when it does not fit the type.
+    #[must_use]
+    pub fn typed(&self, ty: &str, values: Option<&[String]>) -> Option<i64> {
+        match (self, ty) {
+            (Self::Bool(b), "bool") => Some(i64::from(*b)),
+            (Self::Text(s), "enum") => values?
+                .iter()
+                .position(|v| v == s)
+                .and_then(|i| i64::try_from(i).ok()),
+            (Self::Int(i), "q8_8") => i.checked_mul(1 << 8),
+            (Self::Int(i), "q16_16") => i.checked_mul(1 << 16),
+            (Self::Int(i), _) if ty != "bool" && ty != "enum" => Some(*i),
+            (Self::Decimal(d), "q8_8") => decimal_bits(d, 8),
+            (Self::Decimal(d), "q16_16") => decimal_bits(d, 16),
+            _ => None,
+        }
+    }
+}
+
+/// The decimal `text` (`[-]digits[.digits]`) times `2^frac_bits`, rounded half to even, in
+/// integer arithmetic.
+fn decimal_bits(text: &str, frac_bits: u32) -> Option<i64> {
+    let (negative, body) = text
+        .strip_prefix('-')
+        .map_or((false, text), |rest| (true, rest));
+    let (int, frac) = body.split_once('.').unwrap_or((body, ""));
+    if int.is_empty() || !int.bytes().chain(frac.bytes()).all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let digits: i128 = format!("{int}{frac}").parse().ok()?;
+    let scale = 10_i128.checked_pow(u32::try_from(frac.len()).ok()?)?;
+    let n = digits.checked_mul(1_i128 << frac_bits)?;
+    let (q, r) = (n / scale, n % scale);
+    let q = if 2 * r > scale || (2 * r == scale && q % 2 == 1) {
+        q + 1
+    } else {
+        q
+    };
+    i64::try_from(if negative { -q } else { q }).ok()
 }
 
 /// The planes a column may live in (ADR-0024).
@@ -68,6 +144,12 @@ pub struct DeclaredRead {
     /// `lagged`; `05.1` §2 rule 4). Registration compares it with the code's lag (SPR-005 G-a).
     #[serde(default)]
     pub lag: String,
+    /// `identity`, `rate` or `mode` (EVO-001 R4, R12).
+    #[serde(default, rename = "use")]
+    pub usage: String,
+    /// A rate or mode read's neutral, as written (EVO-001 R12).
+    #[serde(default, deserialize_with = "literal")]
+    pub neutral: Option<Literal>,
 }
 
 /// One `[[schedule]]` binding (SPR-005 G-a).
@@ -75,6 +157,9 @@ pub struct DeclaredRead {
 struct DeclaredBinding {
     pulse: String,
     phase: String,
+    /// The entry's steps, as written (the review's K6: a drain-only binding has one, the drain).
+    #[serde(default)]
+    steps: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -86,6 +171,31 @@ struct SpecHeader {
 #[derive(Debug, Deserialize)]
 struct DeclaredRng {
     purpose: String,
+    #[serde(default)]
+    key: Vec<String>,
+}
+
+/// One `[[applies]]` entry (EVO-001): the command a system owns, its typed payload, the binding
+/// that drains it, its key rule and key field, and whether it carries a sampled outcome.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct DeclaredApply {
+    /// The command.
+    pub command: String,
+    /// `"{ name: Type, ... }"`.
+    #[serde(default)]
+    pub payload: Option<String>,
+    /// `"<Pulse>/<Phase>"`.
+    #[serde(default)]
+    pub drained_by: Option<String>,
+    /// `living` or `any`.
+    #[serde(default)]
+    pub key: Option<String>,
+    /// A `PersonId` payload field, or `person`.
+    #[serde(default)]
+    pub key_field: Option<String>,
+    /// Whether it carries a sampled outcome.
+    #[serde(default)]
+    pub outcome: Option<bool>,
 }
 
 /// One lifecycle command submission, from `[[commands]]` (SPR-006).
@@ -95,12 +205,37 @@ pub struct DeclaredCommand {
     pub target: String,
     /// The command's Registry name.
     pub command: String,
+    /// The sender's timer kind, for an outcome-carrying command (EVO-001 R9).
+    #[serde(default)]
+    pub timer: Option<String>,
+    /// The purpose that timer is drawn under.
+    #[serde(default)]
+    pub purpose: Option<String>,
 }
 
-/// One emitted event kind, from `[[emits]]` (SPR-006).
+/// One emitted event kind, from `[[emits]]` (SPR-006), with its envelope declaration (SPR-020
+/// T-03; envelope v0 §2): `lint_odd.py` checks the declaration's values against the Registry.
 #[derive(Debug, Deserialize)]
 struct DeclaredEmit {
     kind: String,
+    #[serde(default)]
+    roles: Vec<String>,
+    #[serde(default)]
+    motives: Vec<String>,
+    #[serde(default)]
+    snapshots: Vec<DeclaredSnapshot>,
+}
+
+/// One `[[emits]] snapshots` entry (envelope v0 §4).
+#[derive(Debug, Deserialize)]
+struct DeclaredSnapshot {
+    attr: String,
+    of: String,
+    #[serde(default)]
+    partner: Option<String>,
+    from: String,
+    #[serde(default, rename = "type")]
+    ty: Option<String>,
 }
 
 /// `[initialization]`: only the manifest sections genesis initialises from (SPR-012 T-06).
@@ -124,6 +259,8 @@ struct SpecFile {
     #[serde(default)]
     commands: Vec<DeclaredCommand>,
     #[serde(default)]
+    applies: Vec<DeclaredApply>,
+    #[serde(default)]
     emits: Vec<DeclaredEmit>,
     #[serde(default)]
     initialization: DeclaredInitialization,
@@ -146,10 +283,19 @@ pub struct SystemSpec {
     /// Its `[[schedule]]` bindings as `(pulse, phase)` names, in spec order. Registration compares
     /// them with the code's bindings (SPR-005 G-a).
     pub schedule: Vec<(String, String)>,
+    /// Each `[[schedule]]` entry's `steps`, parallel to [`SystemSpec::schedule`] (the review's
+    /// K6: what ties a code's drain-only binding to its spec).
+    pub schedule_steps: Vec<Vec<String>>,
     /// The lifecycle commands it submits (`[[commands]]`), in spec order (SPR-006).
     pub commands: Vec<DeclaredCommand>,
+    /// The lifecycle commands it owns (`[[applies]]`), in spec order (EVO-001; SPR-014).
+    pub applies: Vec<DeclaredApply>,
+    /// `(purpose, first key name)` of every `[[rng]]` entry (BCK-002 A-50).
+    pub rng_keys: Vec<(String, String)>,
     /// The event kinds it emits (`[[emits]] kind`), in spec order (SPR-006).
     pub emits: Vec<String>,
+    /// Each kind's envelope declaration (SPR-020 T-03).
+    pub envelope: BTreeMap<String, rh_core::ownership::EmitDecl>,
     /// The manifest sections `[initialization] from_manifest` names, in spec order: genesis
     /// writes the system's columns from those sections only (SPR-011 ruling 10; SPR-012 T-06).
     pub from_manifest: Vec<String>,
@@ -168,10 +314,44 @@ impl SystemSpec {
             id: f.system.id,
             owns: f.owns,
             reads: f.reads,
+            rng_keys: f
+                .rng
+                .iter()
+                .map(|r| {
+                    (
+                        r.purpose.clone(),
+                        r.key.first().cloned().unwrap_or_default(),
+                    )
+                })
+                .collect(),
             rng: f.rng.into_iter().map(|r| r.purpose).collect(),
+            schedule_steps: f.schedule.iter().map(|b| b.steps.clone()).collect(),
             schedule: f.schedule.into_iter().map(|b| (b.pulse, b.phase)).collect(),
             commands: f.commands,
-            emits: f.emits.into_iter().map(|e| e.kind).collect(),
+            applies: f.applies,
+            emits: f.emits.iter().map(|e| e.kind.clone()).collect(),
+            envelope: f
+                .emits
+                .into_iter()
+                .map(|e| {
+                    let decl = rh_core::ownership::EmitDecl {
+                        roles: e.roles,
+                        motives: e.motives,
+                        snapshots: e
+                            .snapshots
+                            .into_iter()
+                            .map(|x| rh_core::ownership::SnapshotDecl {
+                                attr: x.attr,
+                                of: x.of,
+                                partner: x.partner,
+                                from: x.from,
+                                ty: x.ty,
+                            })
+                            .collect(),
+                    };
+                    (e.kind, decl)
+                })
+                .collect(),
             from_manifest: f.initialization.from_manifest,
         })
     }
@@ -226,8 +406,97 @@ impl SystemSpec {
                 .collect(),
             emits: self.emits.clone(),
             from_manifest: self.from_manifest.clone(),
+            envelope: self.envelope.clone(),
+            applies: self.applies.iter().map(spec_apply).collect(),
+            read_uses: Vec::new(),
+            outcome_timers: self
+                .commands
+                .iter()
+                .filter_map(|c| Some((c.command.clone(), c.timer.clone()?, c.purpose.clone()?)))
+                .collect(),
+            rng_keys: self.rng_keys.clone(),
+            defaults: self
+                .owns
+                .iter()
+                .filter_map(|o| {
+                    let v = o.default.as_ref()?.typed(&o.ty, o.values.as_deref())?;
+                    Some((o.column.clone(), v))
+                })
+                .collect(),
         }
     }
+
+    /// [`SystemSpec::entry`], with each read's `use` and its neutral typed as the column
+    /// (`columns`: every spec's `[[owns]]` by column; EVO-001 R12).
+    #[must_use]
+    pub fn entry_with(&self, columns: &BTreeMap<String, OwnedColumn>) -> SpecEntry {
+        let mut entry = self.entry();
+        entry.read_uses = self
+            .reads
+            .iter()
+            .map(|r| SpecReadUse {
+                column: r.column.clone(),
+                usage: r.usage.clone(),
+                neutral: r
+                    .neutral
+                    .as_ref()
+                    .and_then(|n| match columns.get(&r.column) {
+                        Some(o) => n.typed(&o.ty, o.values.as_deref()),
+                        // An owner with no spec yet (M6's era state): the literal is typed by itself;
+                        // a zero is zero in every type, and anything else is left untyped (a
+                        // non-zero integer might be a q8_8 or q16_16 value; the review's K11).
+                        None => match n {
+                            Literal::Bool(b) => Some(i64::from(*b)),
+                            Literal::Int(0) => Some(0),
+                            Literal::Decimal(d)
+                                if d.bytes().filter(u8::is_ascii_digit).all(|b| b == b'0') =>
+                            {
+                                Some(0)
+                            }
+                            _ => None,
+                        },
+                    }),
+            })
+            .collect();
+        entry
+    }
+}
+
+/// One `[[applies]]` entry as registration takes it.
+fn spec_apply(a: &DeclaredApply) -> SpecApply {
+    let drained_by = a
+        .drained_by
+        .as_deref()
+        .and_then(|d| d.split_once('/'))
+        .map(|(p, f)| (p.to_owned(), f.to_owned()))
+        .unwrap_or_default();
+    SpecApply {
+        command: a.command.clone(),
+        drained_by,
+        key: a.key.clone().unwrap_or_else(|| "any".to_owned()),
+        key_field: a.key_field.clone().unwrap_or_else(|| "person".to_owned()),
+        payload: a.payload.as_deref().and_then(payload_types),
+        outcome: a.outcome.unwrap_or(false),
+        payload_malformed: a
+            .payload
+            .as_ref()
+            .filter(|t| payload_types(t).is_none())
+            .cloned(),
+    }
+}
+
+/// The `(name, type)` fields of a typed payload `"{ name: Type, ... }"`, or `None` when it is not
+/// typed (`lint_odd.py` refuses that on a frozen spec).
+fn payload_types(text: &str) -> Option<Vec<(String, String)>> {
+    let inner = text.trim().strip_prefix('{')?.strip_suffix('}')?;
+    inner
+        .split(',')
+        .filter(|f| !f.trim().is_empty())
+        .map(|f| {
+            let (name, ty) = f.split_once(':')?;
+            Some((name.trim().to_owned(), ty.trim().to_owned()))
+        })
+        .collect()
 }
 
 /// Whether a spec file name is a system spec: `*.odd.toml`, not a `_`-prefixed template.
@@ -270,6 +539,62 @@ pub fn parse_registry_system_ids(name: &str, text: &str) -> Result<BTreeSet<Stri
         Some(toml::Value::Table(systems)) => Ok(systems.keys().cloned().collect()),
         _ => Err(format!("{name}: no [systems] table")),
     }
+}
+
+/// The Registry's envelope vocabulary (`[event_roles]`, `[motive_edges]`, `[attributes]`) as
+/// registration and `emit` read it (SPR-020 T-01; envelope v0 §8): the compiled table the host
+/// hands to [`Ownership::spec_table_with`]. The typed loader (`rh-manifest`'s `Registry`) refuses
+/// a malformed section first; this parser reads only what plane A needs.
+///
+/// # Errors
+/// The text is not TOML, a section is missing or not a list of strings, or an attribute has no
+/// known `type` (or an enum no `values`).
+pub fn parse_registry_table(
+    name: &str,
+    text: &str,
+) -> Result<rh_core::ownership::RegistryTable, String> {
+    use rh_core::ownership::{AttributeDomain, RegistryTable};
+    let table: toml::Table = toml::from_str(text).map_err(|e| format!("{name}: {e}"))?;
+    let ids = |section: &str| -> Result<Vec<String>, String> {
+        table
+            .get(section)
+            .and_then(|v| v.get("ids"))
+            .and_then(toml::Value::as_array)
+            .ok_or_else(|| format!("{name}: no [{section}] ids"))?
+            .iter()
+            .map(|v| {
+                v.as_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| format!("{name}: [{section}] holds a non-string id"))
+            })
+            .collect()
+    };
+    let mut attributes = BTreeMap::new();
+    if let Some(toml::Value::Table(attrs)) = table.get("attributes") {
+        for (attr, def) in attrs {
+            let ty = def.get("type").and_then(toml::Value::as_str);
+            let domain = match ty {
+                Some("q8_8") => AttributeDomain::Q8_8,
+                Some("bool") => AttributeDomain::Bool,
+                Some("int") => AttributeDomain::Int,
+                Some("enum") => AttributeDomain::Enum(
+                    def.get("values")
+                        .and_then(toml::Value::as_array)
+                        .map(Vec::len)
+                        .ok_or_else(|| {
+                            format!("{name}: attributes.{attr}: an enum without values")
+                        })?,
+                ),
+                other => return Err(format!("{name}: attributes.{attr}: type {other:?}")),
+            };
+            attributes.insert(attr.clone(), domain);
+        }
+    }
+    Ok(RegistryTable {
+        event_roles: ids("event_roles")?,
+        motives: ids("motive_edges")?,
+        attributes,
+    })
 }
 
 /// The access a system declares: what it reads and what it writes. A stub of `rh-core`'s
@@ -403,13 +728,34 @@ impl Ownership {
     /// The table as data for `rh-core`'s registration (`rh_core::register::register`).
     #[must_use]
     pub fn spec_table(&self) -> rh_core::ownership::SpecTable {
+        self.spec_table_with(rh_core::ownership::RegistryTable::default())
+    }
+
+    /// The spec table with the Registry's envelope vocabulary ([`parse_registry_table`]), which
+    /// registration compares the skeletons' role constants with and `emit` checks drafts against
+    /// (SPR-020 T-01, T-03).
+    #[must_use]
+    pub fn spec_table_with(
+        &self,
+        registry: rh_core::ownership::RegistryTable,
+    ) -> rh_core::ownership::SpecTable {
+        let columns: BTreeMap<String, OwnedColumn> = self
+            .specs
+            .values()
+            .flat_map(|s| s.owns.iter().map(|o| (o.column.clone(), o.clone())))
+            .collect();
         rh_core::ownership::SpecTable {
             owners: self.owners.clone(),
             specs: self
                 .specs
                 .iter()
-                .map(|(id, s)| (id.clone(), s.entry()))
+                .map(|(id, s)| (id.clone(), s.entry_with(&columns)))
                 .collect(),
+            enum_codes: columns
+                .iter()
+                .filter_map(|(c, o)| Some((c.clone(), o.values.as_ref()?.len())))
+                .collect(),
+            registry,
         }
     }
 

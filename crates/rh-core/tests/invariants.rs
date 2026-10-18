@@ -626,6 +626,7 @@ fn schedule_one(
                 entity: rh_ids::EntityRef::WORLD,
                 kind: 0,
                 payload: 0,
+                cause: rh_events::EventRef::None,
             },
         )?;
     }

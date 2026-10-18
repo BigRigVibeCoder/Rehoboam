@@ -28,7 +28,7 @@ use rh_core::{Phase, Pulse};
 use rh_events::Event;
 use rh_registry::ownership::Ownership;
 use rh_sys_smoke::{CALENDAR, OVERLAY, SPECS_DIR, material, synthetic_inputs};
-use spec_files::{load_specs, registry_system_ids};
+use spec_files::{load_specs, registry_system_ids, registry_table};
 
 mod spec_files;
 
@@ -39,7 +39,8 @@ fn repo() -> PathBuf {
 fn specs() -> SpecTable {
     let ids = registry_system_ids(&repo().join(OVERLAY)).expect("overlay");
     let specs = load_specs(&repo().join(SPECS_DIR)).expect("specs");
-    Ownership::build(&specs, &ids).spec_table()
+    let table = registry_table(&repo().join("specs/manifest/registry_v0.toml")).expect("registry");
+    Ownership::build(&specs, &ids).spec_table_with(table)
 }
 
 fn engine(seed: u64, threads: usize) -> Engine {
@@ -152,7 +153,14 @@ fn a_run_exercises_timers_commands_events_and_invariants() {
     );
     assert!(caused <= deaths);
     for e in r.events.iter().filter(|e| e.kind == "CENSUS_NOTE") {
-        assert_eq!(e.causes, [rh_ids::EventId::from_raw(e.id.to_raw() - 1)]);
+        let edges: Vec<_> = e.causes.iter().map(|c| (c.cause, c.kind)).collect();
+        assert_eq!(
+            edges,
+            [(
+                rh_ids::EventId::from_raw(e.id.to_raw() - 1),
+                rh_events::EdgeKind::Triggered
+            )]
+        );
     }
     // Death ticks fall between pulse boundaries: timers fire at their own minute.
     let off_day = r

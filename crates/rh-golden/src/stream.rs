@@ -81,12 +81,37 @@ pub enum Stall {
         /// The tick.
         tick: i64,
     },
+    /// During a new run directory's creation, after step `step` (`create:<n>`; BCK-002 A-58):
+    /// 1 the directory, 2 the writer's lock, 3 the journal, 4 the ladder, 5 `run.toml`.
+    Create {
+        /// The step.
+        step: u8,
+    },
+    /// Both at once (`seal:<year>:<n>+mid:<tick>`; SPR-026 T-05): the seal thread blocks inside
+    /// a seal while the host thread blocks mid-year, so a kill there is mid-year with a seal in
+    /// flight (a live edge's run only, where the seal is off the host thread).
+    SealAndMid {
+        /// The sim-year of the stalled seal.
+        year: i64,
+        /// Its file index.
+        index: usize,
+        /// The host thread's tick.
+        tick: i64,
+    },
 }
 
 impl Stall {
-    /// Parses `seal:<year>:<n>`, `sealed:<year>` or `mid:<tick>`.
+    /// Parses `seal:<year>:<n>`, `sealed:<year>`, `mid:<tick>` or `seal:<year>:<n>+mid:<tick>`.
     #[must_use]
     pub fn parse(s: &str) -> Option<Self> {
+        if let Some((seal, mid)) = s.split_once('+') {
+            return match (Self::parse(seal)?, Self::parse(mid)?) {
+                (Self::Seal { year, index }, Self::Mid { tick }) => {
+                    Some(Self::SealAndMid { year, index, tick })
+                }
+                _ => None,
+            };
+        }
         let parts: Vec<&str> = s.split(':').collect();
         match parts.as_slice() {
             ["seal", y, n] => Some(Self::Seal {
@@ -95,6 +120,9 @@ impl Stall {
             }),
             ["sealed", y] => Some(Self::Sealed {
                 year: y.parse().ok()?,
+            }),
+            ["create", n] => Some(Self::Create {
+                step: n.parse().ok()?,
             }),
             ["mid", t] => Some(Self::Mid {
                 tick: t.parse().ok()?,
@@ -105,6 +133,7 @@ impl Stall {
 }
 
 /// The seal hook of a run: nothing, or a stall.
+#[derive(Clone, Copy, Debug)]
 pub struct Hook(pub Option<Stall>);
 
 impl Hook {
@@ -112,7 +141,7 @@ impl Hook {
         clippy::infinite_loop,
         reason = "a test hook: it blocks until the test kills the process"
     )]
-    fn stall(what: &str) -> ! {
+    pub(crate) fn stall(what: &str) -> ! {
         println!("STALL {what}");
         let _ = std::io::stdout().flush();
         loop {
@@ -123,7 +152,11 @@ impl Hook {
 
 impl SealHook for Hook {
     fn file_written(&mut self, channel: Channel, year: i64, index: usize, name: &str) {
-        if channel == Channel::A && self.0 == Some(Stall::Seal { year, index }) {
+        let at = match self.0 {
+            Some(Stall::SealAndMid { year, index, .. }) => Some(Stall::Seal { year, index }),
+            other => other,
+        };
+        if channel == Channel::A && at == Some(Stall::Seal { year, index }) {
             Self::stall(&format!("seal y{year:06} file {index} {name}"));
         }
     }
@@ -133,6 +166,24 @@ impl SealHook for Hook {
             Self::stall(&format!("sealed y{year:06}"));
         }
     }
+}
+
+/// Whether `path` is a live host's socket or lock beside a timeline's channels
+/// (`stream/t<id>/{A,C}.{sock,lock}`; SPR-026, `wire_v1.md` §1): the host's files, which no
+/// stream reader reads and no comparison of streams compares.
+#[must_use]
+pub fn is_host_file(path: &Path) -> bool {
+    let in_timeline = path
+        .parent()
+        .and_then(Path::file_name)
+        .and_then(|s| s.to_str())
+        .and_then(|s| s.strip_prefix('t'))
+        .is_some_and(|d| d.len() == 10 && d.bytes().all(|b| b.is_ascii_digit()));
+    let name = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or_default();
+    in_timeline && ["A.sock", "A.lock", "C.sock", "C.lock"].contains(&name)
 }
 
 /// The writer's lock file of a run directory: a run holds it exclusively for its whole length,
@@ -245,7 +296,8 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), Error> {
         .map_err(fail)
 }
 
-/// The dictionaries of a Registry (R6): `[verbs]` sorted by name and `[act_classes].ids`.
+/// The dictionaries of a Registry (R6): `[verbs]` sorted by name, `[act_classes].ids`, and the
+/// typed envelope sections `[event_roles]`, `[motive_edges]` and `[attributes]` by `attr_id`.
 ///
 /// # Errors
 /// [`Error`] if a verb names an act class the Registry does not list, or there are too many.
@@ -275,27 +327,13 @@ pub fn dictionaries(registry: &rh_manifest::Registry) -> Result<Dictionaries, Er
             })
         })
         .collect::<Result<Vec<_>, Error>>()?;
-    let ids = |section: &str| -> Result<Vec<String>, Error> {
-        registry
-            .sections
-            .get(section)
-            .and_then(|v| v.get("ids"))
-            .and_then(toml::Value::as_array)
-            .ok_or_else(|| Error(format!("the Registry has no [{section}] ids")))?
-            .iter()
-            .map(|v| {
-                v.as_str()
-                    .map(str::to_owned)
-                    .ok_or_else(|| Error(format!("[{section}]: an id that is not a string")))
-            })
-            .collect()
-    };
     Ok(Dictionaries {
         registry_version: registry.registry_version.clone(),
         verbs,
         act_classes: classes.clone(),
-        event_roles: ids("event_roles")?,
-        motive_edges: ids("motive_edges")?,
+        // The typed sections (envelope_v0.md §8; SPR-020 T-01, T-06).
+        event_roles: registry.event_roles.ids.clone(),
+        motive_edges: registry.motive_edges.ids.clone(),
         // `[attributes]` sorted by name: the map's order (envelope_v0.md §2).
         attributes: registry
             .attributes
@@ -525,7 +563,11 @@ impl StreamHost {
         }
         let t = at.minutes();
         for e in engine.drain_events() {
-            let body = event_body(&e, &self.dictionaries).map_err(|e| stream_error(&e))?;
+            if !self.writer.admissions_mut().admits(&e) {
+                continue;
+            }
+            let body = event_body(&e, &self.dictionaries, self.writer.admissions())
+                .map_err(|e| stream_error(&e))?;
             self.pending.push((e.tick, body));
         }
         while let Some(row) = self
@@ -585,7 +627,7 @@ impl StreamHost {
         self.writer
             .push(t, batch, &mut self.hook)
             .map_err(|e| stream_error(&e))?;
-        if let Some(Stall::Mid { tick }) = self.hook.0
+        if let Some(Stall::Mid { tick } | Stall::SealAndMid { tick, .. }) = self.hook.0
             && t >= tick
         {
             Hook::stall(&format!(
@@ -595,6 +637,34 @@ impl StreamHost {
             ));
         }
         Ok(())
+    }
+
+    /// Feeds a live edge from now on (SPR-026): the writer's [`StreamWriter::attach_live`], with
+    /// the run's stall hook moved to the seal thread under option (b).
+    ///
+    /// # Errors
+    /// [`Error`] from the writer.
+    pub fn attach_live(
+        &mut self,
+        policy: rh_stream::live::Policy,
+        clock: Option<std::sync::Arc<dyn rh_stream::writer::SealClock>>,
+        stall: Option<Stall>,
+    ) -> Result<rh_stream::live::LiveEdge, Error> {
+        self.writer
+            .attach_live(rh_stream::writer::LiveConfig {
+                policy,
+                clock,
+                hook: Box::new(Hook(stall)),
+            })
+            .map_err(|e| stream_error(&e))
+    }
+
+    /// Runs `f` once every closed year is sealed (the keyframe file; SPR-026).
+    ///
+    /// # Errors
+    /// [`Error`] from `f`, when it runs now.
+    pub fn after_seal(&mut self, f: rh_stream::writer::AfterSeal) -> Result<(), Error> {
+        self.writer.after_seal(f).map_err(|e| stream_error(&e))
     }
 
     /// Seals the open year and reports.
