@@ -8,7 +8,7 @@ agents: [coder, tester]
 tags: [sprint, stream]
 related: [BCK-002, PRJ-002, PRJ-003, REV-SPR-026, SPR-013, SPR-015, SPR-018, SPR-020, SPR-026, SPR-030, SPR-033, SPR-035, ADR-0024, ADR-0025, ADR-0030, ADR-0031, ADR-0035, ADR-0036]
 created: 2026-10-17
-updated: 2026-10-17
+updated: 2026-10-18
 version: 0.2.2
 ---
 
