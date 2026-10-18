@@ -94,6 +94,12 @@ convention = "google"
 [tool.ruff.lint.mccabe]
 max-complexity = 10
 
+[tool.ruff.lint.isort]
+# The repository's packages are first-party from any working directory. With --config, ruff resolves
+# its default `src` against the working directory, so without this line python/rehoboam_* would be
+# third-party from the repository root and first-party from python/ (PY-PKG review P2).
+known-first-party = ["rehoboam_*"]
+
 [tool.ruff.lint.per-file-ignores]
 # Tests compare against literal expectations by design.
 "python/tests/**" = ["PLR2004"]

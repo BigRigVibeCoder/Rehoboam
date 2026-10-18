@@ -9,13 +9,18 @@ is how SPR-027 T-05, SPR-028 T-02 and SPR-029 T-02 run their packages.
 The editable install puts all of python/ on sys.path, so a package directory that is not declared
 still imports locally and is missing only from a built wheel. These tests pin the declared list to
 the directories, both ways, and the rest of the layout (each with a planted control):
+- module-name is a list of strings (the parametrised tests read an empty list otherwise, so a
+  malformed list fails that one test and does not abort collection);
 - every python/rehoboam_*/ directory, and every directory of python/ holding an __init__.py, is
   declared; every declared package exists, with an __init__.py and a py.typed (PEP 561: mypy
   needs it for a file checked on its own that imports the package); the list is alphabetical,
-  so a sprint adding a package changes one line; no module sits directly in python/;
+  so a sprint adding a package changes one line; no module sits directly in python/; a
+  python/rehoboam_*/ directory holding only __pycache__ (what a branch switch leaves behind) is
+  reported as stale, never as undeclared;
 - each declared package imports under `python -I -c` from this checkout, from the repository root
   and from elsewhere, and each `__main__` module runs under `python -I -m <module> --help`;
-- ruff and mypy --strict cover every module of every declared package;
+- ruff and mypy include every module of every declared package in their file lists, and no mypy
+  override relaxes --strict for one (inline suppressions are not looked for);
 - rehoboam_tools.__version__ equals the distribution's version;
 - the build backend is pinned exactly, to the uv release CI installs, so uv builds with its
   bundled backend and downloads nothing.
@@ -36,9 +41,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import rehoboam_tools
 import yaml  # type: ignore[import-untyped]  # PyYAML ships no stubs; adding types-PyYAML would change the lock
 from mypy.main import process_options
+
+import rehoboam_tools
 
 REPO = Path(__file__).resolve().parents[2]
 PYTHON_DIR = REPO / "python"
@@ -50,6 +56,8 @@ PACKAGE_NAME = re.compile(r"rehoboam_[a-z][a-z0-9_]*")
 # Every regular package carries these (PEP 561's marker included).
 MARKERS = ("__init__.py", "py.typed")
 TOP_LEVEL_SUFFIXES = (".py", ".pyi")
+BYTECODE_CACHE = "__pycache__"
+UNDECLARED = "is not declared"
 BACKEND = "uv_build"
 EXACT_PIN = re.compile(r"uv_build==(?P<version>\d+\.\d+\.\d+)")
 SETUP_UV = "astral-sh/setup-uv@"
@@ -63,26 +71,55 @@ def pyproject() -> dict[str, Any]:
 
 
 def backend_settings() -> dict[str, Any]:
-    """The [tool.uv.build-backend] table."""
-    settings = pyproject()["tool"]["uv"]["build-backend"]
-    assert isinstance(settings, dict)
-    return settings
+    """The [tool.uv.build-backend] table, or an empty one."""
+    settings = pyproject().get("tool", {}).get("uv", {}).get("build-backend", {})
+    return settings if isinstance(settings, dict) else {}
 
 
 def declared() -> list[str]:
-    """The packages [tool.uv.build-backend] module-name declares, in the file's order."""
-    names = backend_settings()["module-name"]
-    assert isinstance(names, list), "module-name must be a list, one package per line"
-    return [str(n) for n in names]
+    """The packages [tool.uv.build-backend] module-name declares, in the file's order.
+
+    Empty if module-name is not a list of strings: the parametrised tests call this at collection,
+    where a failed assertion would abort the whole session, so the strict check is a test of its
+    own (test_module_name_is_a_list_of_strings).
+    """
+    names = backend_settings().get("module-name")
+    if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
+        return []
+    return list(names)
+
+
+def holds_only_bytecode(directory: Path) -> bool:
+    """Whether directory holds a __pycache__ and no file outside one, at any depth.
+
+    A branch switch that removes a package's sources leaves such a directory behind: __pycache__
+    is untracked, so the switch does not delete it.
+    """
+    entries = list(directory.rglob("*"))
+    return any(p.name == BYTECODE_CACHE and p.is_dir() for p in entries) and all(
+        p.is_dir() or BYTECODE_CACHE in p.relative_to(directory).parts for p in entries
+    )
+
+
+def stale_directories(root: Path) -> set[str]:
+    """The rehoboam_*/ directories of root that hold only bytecode caches."""
+    return {
+        p.name
+        for p in root.iterdir()
+        if p.is_dir() and p.name.startswith(PREFIX) and holds_only_bytecode(p)
+    }
 
 
 def package_directories(root: Path) -> set[str]:
-    """Directories of root that are packages: named rehoboam_*, or holding an __init__.py."""
+    """Directories of root that are packages: named rehoboam_*, or holding an __init__.py.
+
+    A stale directory (stale_directories) is not one.
+    """
     return {
         p.name
         for p in root.iterdir()
         if p.is_dir() and (p.name.startswith(PREFIX) or (p / "__init__.py").is_file())
-    }
+    } - stale_directories(root)
 
 
 def list_problems(names: Sequence[str]) -> list[str]:
@@ -98,13 +135,19 @@ def list_problems(names: Sequence[str]) -> list[str]:
 def layout_problems(root: Path, names: Sequence[str]) -> list[str]:
     """Why root (python/) and the declared names do not match; empty if they do."""
     on_disk = package_directories(root)
+    stale = stale_directories(root)
     found = list_problems(names)
     found.extend(
-        f"{root.name}/{n}/ is not declared in [tool.uv.build-backend] module-name"
+        f"{root.name}/{n}/ is a stale directory (only {BYTECODE_CACHE}): delete it"
+        for n in sorted(stale)
+    )
+    found.extend(
+        f"{root.name}/{n}/ {UNDECLARED} in [tool.uv.build-backend] module-name"
         for n in sorted(on_disk - set(names))
     )
     found.extend(
-        f"{n} is declared but {root.name}/{n}/ does not exist" for n in sorted(set(names) - on_disk)
+        f"{n} is declared but {root.name}/{n}/ does not exist"
+        for n in sorted(set(names) - on_disk - stale)
     )
     found.extend(
         f"{root.name}/{n}/ has no {marker}"
@@ -145,6 +188,13 @@ def test_the_backend_reads_flat_packages_from_python_itself() -> None:
     settings = backend_settings()
     assert settings.get("module-root") == ""
     assert "namespace" not in settings
+
+
+def test_module_name_is_a_list_of_strings() -> None:
+    """module-name is a list of package names, one per line; the other tests read [] otherwise."""
+    names = backend_settings().get("module-name")
+    assert isinstance(names, list), f"module-name must be a list, one package per line: {names!r}"
+    assert [n for n in names if not isinstance(n, str)] == []
 
 
 def test_the_declared_packages_equal_the_package_directories() -> None:
@@ -200,6 +250,14 @@ def _bad_name(root: Path) -> list[str]:
     return ["rehoboam_Calib", "rehoboam_a"]
 
 
+def _stale(root: Path) -> list[str]:
+    """What a branch switch leaves of an undeclared package with a subpackage: caches only."""
+    for cache in (root / "rehoboam_old", root / "rehoboam_old" / "sub"):
+        (cache / BYTECODE_CACHE).mkdir(parents=True)
+        (cache / BYTECODE_CACHE / "__init__.cpython-312.pyc").write_bytes(b"")
+    return ["rehoboam_a"]
+
+
 @pytest.mark.parametrize(
     ("plant", "expected"),
     [
@@ -211,17 +269,23 @@ def _bad_name(root: Path) -> list[str]:
         (_top_level_module, "python/util.py is a top-level module"),
         (_unsorted, "module-name is not alphabetical"),
         (_bad_name, "'rehoboam_Calib' is not a rehoboam_<name> package name"),
+        (_stale, "python/rehoboam_old/ is a stale directory (only __pycache__): delete it"),
     ],
 )
 def test_layout_control(tmp_path: Path, plant: Callable[[Path], list[str]], expected: str) -> None:
-    """Positive controls: each planted mistake is reported, and the clean layout is not."""
+    """Positive controls: each planted mistake is reported, and the clean layout is not.
+
+    No planted mistake is also reported as an undeclared package, unless that is the mistake.
+    """
     root = tmp_path / "python"
     root.mkdir()
     _package(root, "rehoboam_a")
-    (root / "tests").mkdir()
+    (root / "tests" / BYTECODE_CACHE).mkdir(parents=True)
     assert layout_problems(root, ["rehoboam_a"]) == []
     problems = layout_problems(root, plant(root))
     assert any(expected in p for p in problems), problems
+    if UNDECLARED not in expected:
+        assert [p for p in problems if UNDECLARED in p] == [], problems
 
 
 # --- Importable under python -I, from this checkout --------------------------------------------
@@ -277,8 +341,11 @@ def test_the_version_constant_equals_the_distribution_version() -> None:
 # --- Lint and type coverage --------------------------------------------------------------------
 
 
-def test_ruff_checks_every_module_of_every_declared_package() -> None:
-    """`ruff check .` with the repository's configuration includes each package's modules."""
+def test_ruff_file_list_includes_every_module_of_every_declared_package() -> None:
+    """`ruff check .` with the repository's configuration includes each package's modules.
+
+    Only the file list: a per-file ignore or an inline suppression is not looked for.
+    """
     args = ["check", "--config", "python/pyproject.toml", "--no-cache", "--show-files", "."]
     done = run_python("-I", "-m", "ruff", *args, cwd=REPO)
     assert done.returncode == 0, done.stderr
@@ -289,10 +356,14 @@ def test_ruff_checks_every_module_of_every_declared_package() -> None:
         assert [m for m in modules if m not in shown] == []
 
 
-def test_mypy_checks_every_module_of_every_declared_package_strictly(
+def test_mypy_file_list_includes_every_module_of_every_declared_package(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The source list mypy builds from python/pyproject.toml holds each package, strictly typed."""
+    """The source list mypy builds from python/pyproject.toml includes each package's modules.
+
+    No [[tool.mypy.overrides]] entry relaxes --strict for one; an inline suppression is not looked
+    for.
+    """
     monkeypatch.chdir(REPO)
     sources, options = process_options(["--config-file", "python/pyproject.toml"])
     checked = {s.module: REPO / s.path for s in sources if s.path is not None}
