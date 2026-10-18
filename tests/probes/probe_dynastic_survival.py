@@ -94,9 +94,7 @@ def part2_vocation_sweep(manor_world: object) -> None:
         p300 = proj.at(p, 300)
         least = min(p, key=lambda pt: pt.members)
         per_h = least.members / w.houses
-        warning = (
-            " [!] CRITICAL EXTINCTION RISK" if per_h < MIN_PER_HOUSE_SAFE else " [OK]"
-        )
+        warning = " [!] CRITICAL EXTINCTION RISK" if per_h < MIN_PER_HOUSE_SAFE else " [OK]"
         y300_h = p300.members / w.houses
         v_pct = v * PERCENT_MULT
         msg = (
@@ -121,9 +119,7 @@ def _print_house_stats(
     crit_tag = " [!] CRITICAL EXTINCTION RISK" if is_critical else ""
 
     print(f"  {name}:")
-    print(
-        f"    Living Bloodline Members: Min={min(living)}, Mean={mean_l:.1f}, Max={max(living)}"
-    )
+    print(f"    Living Bloodline Members: Min={min(living)}, Mean={mean_l:.1f}, Max={max(living)}")
     print(
         f"    Available Fertile Women:  Min={min(fertile)}, Mean={mean_f:.1f}, Max={max(fertile)}"
     )
@@ -161,33 +157,21 @@ def part3_seed_variation() -> None:
         a_liv = [p for p in g.persons.values() if p.alive and p.house == ash_id]
         t_liv = [p for p in g.persons.values() if p.alive and p.house == thorne_id]
 
-        a_wives = [
-            g.persons[p.spouse] for p in a_liv if p.spouse and g.persons[p.spouse].alive
-        ]
-        t_wives = [
-            g.persons[p.spouse] for p in t_liv if p.spouse and g.persons[p.spouse].alive
-        ]
+        a_wives = [g.persons[p.spouse] for p in a_liv if p.spouse and g.persons[p.spouse].alive]
+        t_wives = [g.persons[p.spouse] for p in t_liv if p.spouse and g.persons[p.spouse].alive]
 
         a_fertile = [
             p
             for p in a_liv
             if p.sex == synth.SEX_FEMALE
             and FERTILE_AGE_MIN <= -p.birth // g.cal.year < FERTILE_AGE_MAX
-        ] + [
-            p
-            for p in a_wives
-            if FERTILE_AGE_MIN <= -p.birth // g.cal.year < FERTILE_AGE_MAX
-        ]
+        ] + [p for p in a_wives if FERTILE_AGE_MIN <= -p.birth // g.cal.year < FERTILE_AGE_MAX]
         t_fertile = [
             p
             for p in t_liv
             if p.sex == synth.SEX_FEMALE
             and FERTILE_AGE_MIN <= -p.birth // g.cal.year < FERTILE_AGE_MAX
-        ] + [
-            p
-            for p in t_wives
-            if FERTILE_AGE_MIN <= -p.birth // g.cal.year < FERTILE_AGE_MAX
-        ]
+        ] + [p for p in t_wives if FERTILE_AGE_MIN <= -p.birth // g.cal.year < FERTILE_AGE_MAX]
 
         ash_living.append(len(a_liv))
         thorne_living.append(len(t_liv))
@@ -204,9 +188,7 @@ def part3_seed_variation() -> None:
     both_zero_pct = (both_zero / SEEDS_COUNT) * PERCENT_MULT
 
     print(f"  Seeds Successfully Tested: {len(ash_living)}")
-    _print_house_stats(
-        "House Ashcombe (3-gen backfill)", ash_living, ash_fertile, ash_zero
-    )
+    _print_house_stats("House Ashcombe (3-gen backfill)", ash_living, ash_fertile, ash_zero)
     _print_house_stats(
         "House Thorne (2-gen backfill)",
         thorne_living,

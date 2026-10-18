@@ -127,9 +127,7 @@ def _step_artillery_event(
     raw_evt1 = read_ws_frame(sock)
     evt1 = json.loads(raw_evt1)
     print(f"  Received:     {evt1.get('type')} from {evt1.get('battery')}")
-    print(
-        f"  Target:       {evt1.get('target_castle')} (payload: {evt1.get('payload')})"
-    )
+    print(f"  Target:       {evt1.get('target_castle')} (payload: {evt1.get('payload')})")
 
     raw_evt2 = read_ws_frame(sock)
     t_elapsed = (time.perf_counter() - t_start) * MS_PER_SECOND
@@ -137,9 +135,7 @@ def _step_artillery_event(
     destroyed = evt2.get("voxels_destroyed")
     new_integrity = evt2.get("citadel_integrity_pct")
     print(f"  Received:     {evt2.get('type')}")
-    print(
-        f"  Impact:       {destroyed} voxels destroyed -> State: {evt2.get('structural_state')}"
-    )
+    print(f"  Impact:       {destroyed} voxels destroyed -> State: {evt2.get('structural_state')}")
     print(f"  New Wall:     {new_integrity}% integrity")
     print(f"  Event Roundtrip Latency: {t_elapsed:.1f} ms")
 
@@ -165,9 +161,7 @@ def _verify_invariants(
     print("  3. Bidirectional Control: [PASS] (Masked upstream command executed)")
     print("  4. Event Stream Delivery: [PASS] (Physics and voxel breach broadcast)")
     print("  5. Degradation Invariant: [PASS] (Integrity mutated deterministically)")
-    print(
-        "\n[CONCLUSION] 127.0.0.1:8089 is LIVE and READY for Plane C 3D Voxel Viewer."
-    )
+    print("\n[CONCLUSION] 127.0.0.1:8089 is LIVE and READY for Plane C 3D Voxel Viewer.")
 
 
 def test_live_stream() -> None:
