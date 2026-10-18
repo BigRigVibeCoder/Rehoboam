@@ -34,3 +34,19 @@ mutant-deliver-every-job = []
 # per-instant cache test (`rh-snapshot`'s `tests/per_instant_cache.rs`, run with
 # `--features rh-core/mutant-compact-keeps-version`) must FAIL. No build of a world enables it.
 mutant-compact-keeps-version = []
+# SPR-038 T-03, the reference of the differential test (S12, T4): `Engine::set_gating(Gating::Off)`
+# runs every check, compaction and lagged copy at every instant. Not cfg(test): rh-core/tests and
+# rh-snapshot/tests need it. `rh-cli run` and bin/regen_baseline.sh refuse a build with it (A-52).
+reference-gating-off = []
+# SPR-038 T-03's planted engines, each of which a named gate must FAIL. No build of a world enables
+# them. The put-back ignores person.alive's written flag (a dead row survives the instant):
+mutant-unmarked-put-back = []
+# The guard's pre-image is taken after the step (the entry-field refusal goes unseen):
+mutant-late-pre-image = []
+# A lagged column is never copied again after its first copy (the differential test's lagged reader):
+mutant-stale-lagged-snapshot = []
+
+# SPR-038 T-03: the differential test against Gating::Off needs the reference feature.
+[[test]]
+name = "per_instant"
+required-features = ["reference-gating-off"]

@@ -50,19 +50,29 @@ pub type Column = Vec<i64>;
 /// is built, after which no column is added, so its moves are O(1) and allocate nothing. A column
 /// moved out to a step is absent until it is put back, exactly as when the tables were a map:
 /// [`get`](Self::get), [`names`](Self::names) and [`columns`](Self::columns) do not see it.
-
+///
+/// **Write marks** (SPR-038 T-03): each slot also carries the stamp of the last write to it, from
+/// a counter of the tables: every [`insert`](Self::insert), every put-back of a column its step
+/// wrote, and every core write (compaction, the row insert). Every path that puts rows into a slot
+/// says whether it wrote them, so no write goes unmarked. The engine runs a check, the compaction or
+/// a lagged copy only when a column it covers carries a mark newer than its last run. Marks are
+/// bookkeeping like versions: never in a hash, an equality or any output.
 #[derive(Debug)]
 pub struct WorldTables {
     slots: Vec<Slot>,
     next_version: u64,
+    /// The last write mark given (0: none yet).
+    stamp: u64,
     identity: u64,
 }
 
-/// One column's slot: its name, its version, and its rows unless they are moved out.
+/// One column's slot: its name, its version, its write mark, and its rows unless they are moved
+/// out.
 #[derive(Clone, Debug)]
 struct Slot {
     name: String,
     version: u64,
+    mark: u64,
     rows: Option<Column>,
 }
 
@@ -83,6 +93,7 @@ impl Default for WorldTables {
         Self {
             slots: Vec::new(),
             next_version: 0,
+            stamp: 0,
             identity: fresh_identity(),
         }
     }
@@ -95,6 +106,7 @@ impl Clone for WorldTables {
         Self {
             slots: self.slots.clone(),
             next_version: self.next_version,
+            stamp: self.stamp,
             identity: fresh_identity(),
         }
     }
@@ -140,14 +152,21 @@ impl WorldTables {
         version
     }
 
+    fn fresh_mark(&mut self) -> u64 {
+        self.stamp += 1;
+        self.stamp
+    }
+
     /// Adds or replaces a column (world construction, and the return of a system's written
     /// columns after its step). The column gets a new version.
     pub fn insert(&mut self, column: &str, rows: Column) {
         let version = self.fresh_version();
+        let mark = self.fresh_mark();
         match self.find(column) {
             Ok(i) => {
                 let slot = &mut self.slots[i];
                 slot.version = version;
+                slot.mark = mark;
                 slot.rows = Some(rows);
             }
             Err(i) => self.slots.insert(
@@ -155,6 +174,7 @@ impl WorldTables {
                 Slot {
                     name: column.to_owned(),
                     version,
+                    mark,
                     rows: Some(rows),
                 },
             ),
@@ -213,23 +233,41 @@ impl WorldTables {
     }
 
     /// Puts a column back into slot `id`, with a new version (every put-back takes one: SPR-038
-    /// stage A). O(1); allocates nothing.
-    pub(crate) fn put_at(&mut self, id: ColumnId, rows: Column) {
+    /// stage A) and, when `written`, a new write mark (T-03). O(1); allocates nothing.
+    pub(crate) fn put_at(&mut self, id: ColumnId, rows: Column, written: bool) {
         let version = self.fresh_version();
+        let mark = if written {
+            Some(self.fresh_mark())
+        } else {
+            None
+        };
         if let Some(slot) = self.slots.get_mut(id.0) {
             slot.version = version;
+            slot.mark = mark.unwrap_or(slot.mark);
             slot.rows = Some(rows);
         }
     }
 
-    /// Puts a column back into slot `id` keeping the version it had: only the planted engine of
-    /// `mutant-compact-keeps-version` does this (SPR-038 S11), and the per-instant cache test
-    /// must then FAIL.
+    /// Puts a written column back into slot `id` keeping the version it had: only the planted
+    /// engine of `mutant-compact-keeps-version` does this (SPR-038 S11), and the per-instant cache
+    /// test must then FAIL.
     #[cfg(feature = "mutant-compact-keeps-version")]
     pub(crate) fn put_at_keeping_version(&mut self, id: ColumnId, rows: Column) {
+        let mark = self.fresh_mark();
         if let Some(slot) = self.slots.get_mut(id.0) {
+            slot.mark = mark;
             slot.rows = Some(rows);
         }
+    }
+
+    /// The write mark of slot `id` (0 for none; see the type documentation).
+    pub(crate) fn mark_at(&self, id: ColumnId) -> u64 {
+        self.slots.get(id.0).map_or(0, |s| s.mark)
+    }
+
+    /// The newest write mark of any slot.
+    pub(crate) const fn stamp(&self) -> u64 {
+        self.stamp
     }
 
     /// Copies `rows` into slot `id`, reusing the slot's allocation (the engine's start-of-instant
@@ -255,6 +293,16 @@ pub(crate) struct OwnedColumn {
     pub(crate) name: &'static str,
     pub(crate) id: ColumnId,
     pub(crate) rows: Column,
+    /// Its row count when it was moved out.
+    pub(crate) rows_before: usize,
+    /// Whether the step took it with [`SystemView::write`] (T-03): the put-back marks it.
+    pub(crate) written: bool,
+    /// Whether the ledger guard keeps its pre-image (`person.id`, every `life_course.*`).
+    pub(crate) guarded: bool,
+    /// Its rows as they stood before the step, copied at the step's first `write()` of a guarded
+    /// column (SPR-038 S12): every write is value-checked, and a job that writes no guarded column
+    /// copies nothing.
+    pub(crate) pre: Option<Column>,
 }
 
 /// What one system's `step` sees: its owned columns (mutable) and the rest (read-only).
@@ -370,7 +418,9 @@ impl<'a> SystemView<'a> {
             .ok())
     }
 
-    /// Mutable access to a column the system owns.
+    /// Mutable access to a column the system owns. Taking it marks the column written: the core
+    /// then compacts, checks and copies after it as after any write (SPR-038 T-03), so a step
+    /// takes it only to write.
     ///
     /// # Errors
     /// [`SimError::UnownedWrite`] for any column the system does not declare as a write.
@@ -378,7 +428,17 @@ impl<'a> SystemView<'a> {
         self.owned
             .iter_mut()
             .find(|o| o.name == column)
-            .map(|o| &mut o.rows)
+            .map(|o| {
+                if !o.written {
+                    o.written = true;
+                    // The pre-image is taken before the step can change a row (S12); the planted
+                    // engine of `mutant-late-pre-image` takes it after the step instead.
+                    if o.guarded && !cfg!(feature = "mutant-late-pre-image") {
+                        o.pre = Some(o.rows.clone());
+                    }
+                }
+                &mut o.rows
+            })
             .ok_or_else(|| SimError::UnownedWrite {
                 system: self.system,
                 column: column.to_owned(),

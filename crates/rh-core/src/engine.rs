@@ -30,6 +30,15 @@
 //!    first violation is fatal. After every step that owns a ledger column, the core checks it
 //!    kept the ledger's row count and the life-course log's append-only rule.
 //!
+//! **The write set and the gates** (SPR-038 T-03; `05.1` §9). Taking a column with
+//! `SystemView::write` sets its written flag, and the put-back marks a written column; the core's
+//! own writes (compaction, the row insert) and every `WorldTables::insert` mark too. The
+//! compaction, the ledger invariants, the systems' `invariants()` and each lagged column's
+//! start-of-instant copy run only when a column they cover carries a mark newer than their last
+//! run: exact, since each is a pure function of the tables. The agenda's, the event log's and the
+//! queues' invariants run at every `Bookkeeping`. [`Gating::Off`], in a `reference-gating-off`
+//! build only, runs them all at every chance: the reference of the differential test.
+//!
 //! **Material inputs** (ADR-0025 item 3). [`Engine::submit_input`] queues an input with its
 //! dependency scope (a set of entities) for an instant at or after the next one; an earlier one is
 //! refused ([`InputError::PastInput`]: acting in the past forks, which is the Timeline Manager's
@@ -78,7 +87,7 @@ use crate::agenda::{Agenda, Timer, TimerEntry};
 use crate::command::KeyRule;
 use crate::command::{CommandQueues, QueuedCommand};
 use crate::crash::{CrashArtifact, DIAGNOSTIC_RECORDS, Provenance, Record};
-use crate::ledger::{Ledger, LifeCourseGuard};
+use crate::ledger::{Guarded, Ledger, guarded_column};
 use crate::observe::{Boundary, JobRef, JobWork, Notice, Observer, Pass};
 use crate::phase::Phase;
 use crate::register::{Entry, Registered};
@@ -200,7 +209,17 @@ pub struct Engine {
     snapshot: WorldTables,
     /// Each system's written columns with their slots, in write order, resolved once in
     /// [`Engine::new`] (SPR-038 T-02).
-    writes: Vec<Vec<(&'static str, ColumnId)>>,
+    writes: Vec<Vec<WriteSlot>>,
+    /// Each system's ledger guard buffer: what its last job kept of its ledger columns (SPR-038
+    /// T-03). Never state.
+    guarded: Vec<Vec<Guarded>>,
+    /// The gating of the checks, the compaction and the lagged copies (SPR-038 T-03): `Exact`
+    /// except in a `reference-gating-off` build that sets `Off`.
+    gating: Gating,
+    /// The write mark each gated pass last ran at (T-03). Never state.
+    seen: Seen,
+    /// What the gated passes ran (an observation, like [`DispatchStats`]; never state).
+    checks: CheckStats,
     /// Each system's own `person.*` writes, in name order: what a row it inserts must name.
     own_person: Vec<Vec<&'static str>>,
     /// Each system's owned-column buffer, lent to its jobs and returned, so moving columns
@@ -288,6 +307,61 @@ struct Job {
     work: Work,
 }
 
+/// One column a system writes, as the engine resolved it in [`Engine::new`] (SPR-038 T-02, T-03).
+#[derive(Clone, Copy, Debug)]
+struct WriteSlot {
+    name: &'static str,
+    id: ColumnId,
+    /// A ledger column (`person.*` or `life_course.*` of a world with a ledger): the guard keeps
+    /// its row count.
+    ledger: bool,
+    /// One whose pre-image the guard keeps when the step writes it.
+    guarded: bool,
+}
+
+/// The write mark at which each gated pass last ran (SPR-038 T-03): a pass runs again only when
+/// a column it covers carries a newer mark. Construction marks every column, so each runs at the
+/// first chance.
+#[derive(Clone, Debug, Default)]
+struct Seen {
+    compaction: u64,
+    ledger: u64,
+    invariants: u64,
+    /// One per lagged column, in `Engine::lagged` order.
+    lagged: Vec<u64>,
+}
+
+/// How the engine gates the core's checks, the ledger compaction and the lagged copies (SPR-038
+/// T-03, S12).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Gating {
+    /// Each runs only after a column it covers was written, inserted or compacted since it last
+    /// ran: exact, since each is a pure function of the tables (`05.1` §9).
+    #[default]
+    Exact,
+    /// Each runs at every chance: the reference the differential test compares `Exact` with. Set
+    /// only through [`Engine::set_gating`], in a build with the `reference-gating-off` feature,
+    /// which `rh-cli run` refuses (BCK-002 A-52).
+    Off,
+}
+
+/// What the gated passes ran since the engine was built or restored (SPR-038 T-03): an
+/// observation of the engine, like [`DispatchStats`], never part of the state, a keyframe or a
+/// hash. Each test case asserts its path through it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CheckStats {
+    /// Compaction passes run (each scans `person.alive`).
+    pub compactions: u64,
+    /// Ledger rows the compactions removed.
+    pub compacted_rows: u64,
+    /// Runs of the core's ledger invariants.
+    pub ledger_checks: u64,
+    /// Runs of the systems' `invariants()` (each runs every system's).
+    pub invariant_runs: u64,
+    /// Start-of-instant copies of a lagged column.
+    pub snapshot_copies: u64,
+}
+
 /// The columns one system owns, moved out of the tables for its step, in write order.
 type Owned = Vec<OwnedColumn>;
 
@@ -302,7 +376,6 @@ struct Scratch {
     inputs: Vec<JobInput>,
     outcomes: Vec<JobOutcome>,
     outboxes: Vec<Outbox>,
-    guards: Vec<Option<LifeCourseGuard>>,
     /// The dead rows' positions at compaction.
     dead: Vec<usize>,
 }
@@ -382,50 +455,19 @@ impl Engine {
             bound.extend(e.bindings.iter().map(|b| b.pulse));
             by_system_id.insert(e.system_id, i);
         }
-        let mut snapshot = WorldTables::new();
-        let present: Vec<&'static str> = registered
-            .lagged_reads()
-            .into_iter()
-            .filter(|c| tables.get(c).is_some())
-            .collect();
-        for &c in &present {
-            snapshot.insert(c, tables.get(c).cloned().unwrap_or_default());
-        }
-        let lagged = present
-            .iter()
-            .filter_map(|c| Some((tables.id(c)?, snapshot.id(c)?)))
-            .collect();
-        let writes: Vec<Vec<(&'static str, ColumnId)>> = registered
-            .entries
-            .iter()
-            .map(|e| {
-                e.access
-                    .writes
-                    .iter()
-                    .filter_map(|w| Some((w.column, tables.id(w.column)?)))
-                    .collect()
-            })
-            .collect();
         let (ledger, ledger_error) = match Ledger::of(&tables) {
             Ok(ledger) => (ledger, None),
             Err(e) => (None, Some(e)),
         };
+        let (lagged, snapshot) = lagged_slots(&registered, &tables);
+        let (writes, own_person) = write_slots(&registered, &tables, ledger.as_ref());
         let poisoned = unsupported_lag(&registered.entries).or(ledger_error);
-        let own_person = registered
-            .entries
-            .iter()
-            .map(|e| {
-                let own: BTreeSet<&'static str> = e
-                    .access
-                    .writes
-                    .iter()
-                    .map(|w| w.column)
-                    .filter(|c| ledger.as_ref().is_some_and(|l| l.is_person(c)))
-                    .collect();
-                own.into_iter().collect()
-            })
-            .collect();
         let owned = registered.entries.iter().map(|_| Vec::new()).collect();
+        let guarded = registered.entries.iter().map(|_| Vec::new()).collect();
+        let seen = Seen {
+            lagged: vec![0; lagged.len()],
+            ..Seen::default()
+        };
         Self {
             calendar,
             world_seed,
@@ -438,6 +480,10 @@ impl Engine {
             lagged,
             snapshot,
             writes,
+            guarded,
+            gating: Gating::Exact,
+            seen,
+            checks: CheckStats::default(),
             own_person,
             owned,
             scratch: Scratch::default(),
@@ -743,6 +789,25 @@ impl Engine {
         self.dispatch
     }
 
+    /// What the gated passes ran so far (SPR-038 T-03).
+    #[must_use]
+    pub const fn check_stats(&self) -> CheckStats {
+        self.checks
+    }
+
+    /// Sets the gating (SPR-038 S12): `Gating::Off` runs every check, compaction and lagged copy
+    /// at every chance, the reference of the differential test. Only a `reference-gating-off`
+    /// build has it, and `rh-cli run` refuses such a build (BCK-002 A-52).
+    #[cfg(feature = "reference-gating-off")]
+    pub fn set_gating(&mut self, gating: Gating) {
+        self.gating = gating;
+    }
+
+    /// Whether a pass that last ran at mark `seen` must run again for a column marked `mark`.
+    fn due(&self, mark: u64, seen: u64) -> bool {
+        self.gating == Gating::Off || mark > seen
+    }
+
     /// The last diagnostic records, oldest first.
     #[must_use]
     pub fn diagnostics(&self) -> Vec<String> {
@@ -951,10 +1016,21 @@ impl Engine {
         for (on, p) in fired.iter_mut().zip(Pulse::ALL) {
             *on = self.bound_pulses.contains(&p) && self.calendar.is_boundary(p, t);
         }
-        for &(from, to) in &self.lagged {
+        // A lagged column is copied only when it was written since its last copy (T-03); the
+        // planted engine of `mutant-stale-lagged-snapshot` never copies it again.
+        for (k, &(from, to)) in self.lagged.iter().enumerate() {
+            let mark = self.tables.mark_at(from);
+            let stale = cfg!(feature = "mutant-stale-lagged-snapshot")
+                && self.gating == Gating::Exact
+                && self.seen.lagged[k] > 0;
+            if !self.due(mark, self.seen.lagged[k]) || stale {
+                continue;
+            }
             if let Some(rows) = self.tables.get_at(from) {
                 self.snapshot.copy_at(to, rows);
+                self.checks.snapshot_copies += 1;
             }
+            self.seen.lagged[k] = self.tables.stamp();
         }
         let mut tally = Tally::default();
         // The snapshot is lent to the levels while the engine runs them; it comes back whatever
@@ -992,10 +1068,17 @@ impl Engine {
             }
             // SPR-011 ruling 5: the dead of this instant leave every person.* column before any
             // Bookkeeping system, invariant or hash sees the tables.
+            // Gated (T-03): only after person.alive was written or a row inserted since the last
+            // compaction; without either the table has no dead row and compaction changes nothing.
             if phase == Phase::Bookkeeping
                 && let Some(ledger) = &self.ledger
+                && (self.gating == Gating::Off
+                    || self.tables.mark_at(ledger.alive_slot()) > self.seen.compaction)
             {
-                ledger.compact(&mut self.tables, &mut self.scratch.dead)?;
+                let removed = ledger.compact(&mut self.tables, &mut self.scratch.dead)?;
+                self.checks.compactions += 1;
+                self.checks.compacted_rows += u64::try_from(removed).unwrap_or(u64::MAX);
+                self.seen.compaction = self.tables.stamp();
             }
             let mut due: BTreeMap<usize, Vec<TimerEntry>> = BTreeMap::new();
             for (key, timer) in self.agenda.pop_due(t, phase) {
@@ -1162,7 +1245,11 @@ impl Engine {
     }
 
     /// The core's invariants, then each system's in id order; the first violation is an error.
-    fn check_invariants(&self, t: SimTime) -> Result<(), SimError> {
+    /// The ledger's and the systems' run only after a column they cover was written, inserted or
+    /// compacted since they last ran (SPR-038 T-03; `05.1` §9): each is a pure function of the
+    /// tables, so a table unchanged since a passing run passes again. The agenda's, the event
+    /// log's and the queues' run at every `Bookkeeping`.
+    fn check_invariants(&mut self, t: SimTime) -> Result<(), SimError> {
         let violated = |name: &'static str, detail: String| SimError::Invariant {
             system: CORE,
             name,
@@ -1188,19 +1275,34 @@ impl Engine {
                 format!("an event carries tick {tick}, after the current instant {t}"),
             ));
         }
+        let stamp = self.tables.stamp();
         if let Some(ledger) = &self.ledger {
-            ledger.check(&self.tables)?;
+            let mark = ledger
+                .slots()
+                .iter()
+                .map(|&id| self.tables.mark_at(id))
+                .max()
+                .unwrap_or(0);
+            if self.due(mark, self.seen.ledger) {
+                ledger.check(&self.tables)?;
+                self.checks.ledger_checks += 1;
+                self.seen.ledger = stamp;
+            }
         }
         self.check_queue_age(t)?;
-        for e in &self.registered.entries {
-            let results = guard(e.id, || Ok(e.model.invariants(&self.tables)))?;
-            if let Some(r) = results.into_iter().find(|r| !r.holds) {
-                return Err(SimError::Invariant {
-                    system: e.id,
-                    name: r.name,
-                    detail: r.detail,
-                });
+        if self.due(stamp, self.seen.invariants) {
+            for e in &self.registered.entries {
+                let results = guard(e.id, || Ok(e.model.invariants(&self.tables)))?;
+                if let Some(r) = results.into_iter().find(|r| !r.holds) {
+                    return Err(SimError::Invariant {
+                        system: e.id,
+                        name: r.name,
+                        detail: r.detail,
+                    });
+                }
             }
+            self.checks.invariant_runs += 1;
+            self.seen.invariants = stamp;
         }
         Ok(())
     }
@@ -1307,9 +1409,17 @@ impl Engine {
         for (job, inbox) in jobs.iter().zip(inboxes.drain(..)) {
             let mut owned = std::mem::take(&mut self.owned[job.index]);
             owned.clear();
-            for &(name, id) in &self.writes[job.index] {
-                if let Some(rows) = self.tables.take_at(id) {
-                    owned.push(OwnedColumn { name, id, rows });
+            for w in &self.writes[job.index] {
+                if let Some(rows) = self.tables.take_at(w.id) {
+                    owned.push(OwnedColumn {
+                        name: w.name,
+                        id: w.id,
+                        rows_before: rows.len(),
+                        rows,
+                        written: false,
+                        guarded: w.guarded,
+                        pre: None,
+                    });
                 }
             }
             let taken = std::mem::take(&mut self.taken[job.index]);
@@ -1331,8 +1441,6 @@ impl Engine {
         self.check_owned_columns(jobs)?;
         let mut inboxes = std::mem::take(&mut self.inboxes);
         self.fill_inboxes(jobs, &mut inboxes);
-        let mut guards = std::mem::take(&mut self.scratch.guards);
-        self.ledger_guards(jobs, &inboxes, phase, &mut guards);
         let mut inputs = std::mem::take(&mut self.scratch.inputs);
         self.job_inputs(jobs, &mut inboxes, &mut inputs);
         self.inboxes = inboxes;
@@ -1390,8 +1498,16 @@ impl Engine {
                 let ended =
                     observer.map_or(Ok(()), |o| observe(o, &notice(Boundary::JobEnd(job_ref))));
                 let result = result.and(ended);
+                let mut owned = view.into_owned();
+                // The planted engine of `mutant-late-pre-image` takes the pre-image after the step,
+                // so a changed entry field goes unseen.
+                if cfg!(feature = "mutant-late-pre-image") {
+                    for o in owned.iter_mut().filter(|o| o.written && o.guarded) {
+                        o.pre = Some(o.rows.clone());
+                    }
+                }
                 JobOutcome {
-                    owned: view.into_owned(),
+                    owned,
                     result,
                     untaken,
                     out,
@@ -1404,17 +1520,8 @@ impl Engine {
         let mut outboxes = std::mem::take(&mut self.scratch.outboxes);
         let first_error = self.put_back(jobs, &mut outcomes, &mut outboxes);
         self.scratch.outcomes = outcomes;
-        let result = self.after_level(
-            (t, phase),
-            jobs,
-            &mut guards,
-            &mut outboxes,
-            tally,
-            first_error,
-        );
-        guards.clear();
+        let result = self.after_level((t, phase), jobs, &mut outboxes, tally, first_error);
         outboxes.clear();
-        self.scratch.guards = guards;
         self.scratch.outboxes = outboxes;
         result
     }
@@ -1432,8 +1539,25 @@ impl Engine {
         outboxes.clear();
         for (job, o) in jobs.iter().zip(outcomes.drain(..)) {
             let mut owned = o.owned;
+            let guarded = &mut self.guarded[job.index];
+            guarded.clear();
             for c in owned.drain(..) {
-                self.tables.put_at(c.id, c.rows);
+                if self.writes[job.index]
+                    .iter()
+                    .any(|w| w.id == c.id && w.ledger)
+                {
+                    guarded.push(Guarded {
+                        name: c.name,
+                        rows_before: c.rows_before,
+                        written: c.written,
+                        pre: c.pre,
+                    });
+                }
+                // The write set (T-03): a written column is marked at its put-back. The planted
+                // engine of `mutant-unmarked-put-back` ignores person.alive's flag.
+                let unmarked = cfg!(feature = "mutant-unmarked-put-back")
+                    && c.name == crate::ledger::PERSON_ALIVE;
+                self.tables.put_at(c.id, c.rows, c.written && !unmarked);
             }
             self.owned[job.index] = owned;
             self.commands
@@ -1453,7 +1577,6 @@ impl Engine {
         &mut self,
         (t, phase): (SimTime, Phase),
         jobs: &[Job],
-        guards: &mut [Option<LifeCourseGuard>],
         outboxes: &mut Vec<Outbox>,
         tally: &mut Tally,
         first_error: Option<SimError>,
@@ -1461,11 +1584,14 @@ impl Engine {
         if let Some(e) = first_error {
             return Err(e);
         }
-        // `guards` is empty without a ledger: the zip pairs nothing (DEF-4).
-        for (job, g) in jobs.iter().zip(guards.iter()) {
-            g.as_ref().map_or(Ok(()), |g| {
-                g.check(self.registered.entries[job.index].id, &self.tables)
-            })?;
+        // A job that owns no ledger column, or any job in a world without a ledger, kept nothing
+        // and is not checked (DEF-4).
+        for job in jobs {
+            let guarded = &self.guarded[job.index];
+            if !guarded.is_empty() {
+                let system = self.registered.entries[job.index].id;
+                Ledger::check_step(system, phase, guarded, &self.tables)?;
+            }
         }
         // After every owned column is back in the tables, so a failing observer loses none (DEF-1).
         self.notify(t, Some(phase), Boundary::LevelMerge)?;
@@ -1473,34 +1599,6 @@ impl Engine {
             self.merge(t, phase, job.index, out, tally)?;
         }
         Ok(())
-    }
-
-    /// What each job must preserve of the ledger columns it owns (SPR-011 ruling 5): `None` for a
-    /// job that owns none, or in a world without a ledger.
-    /// A world without a ledger pays nothing: no guard and no allocation (DEF-4, V-PERF-11).
-    fn ledger_guards(
-        &self,
-        jobs: &[Job],
-        inboxes: &[Vec<QueuedCommand>],
-        phase: Phase,
-        out: &mut Vec<Option<LifeCourseGuard>>,
-    ) {
-        out.clear();
-        let Some(ledger) = self.ledger.as_ref() else {
-            return;
-        };
-        out.extend(jobs.iter().zip(inboxes).map(|(job, inbox)| {
-            let e = &self.registered.entries[job.index];
-            // Work: a due timer, a non-empty inbox, or a binding that is not drain-only
-            // (A-60 part); a job without work is guarded by its row counts only.
-            let full = match &job.work {
-                Work::Timers(_) => true,
-                Work::Step(b) => !inbox.is_empty() || !e.access.drain_only.contains(b),
-            };
-            let writes = e.access.writes.iter().map(|w| w.column);
-            let g = ledger.guard(&self.tables, writes, phase, full);
-            (!g.is_empty()).then_some(g)
-        }));
     }
 
     /// Every column the level's jobs own exists (materialised in `new`). Checked for all before any
@@ -1511,8 +1609,8 @@ impl Engine {
             let present = |column: &str| {
                 self.writes[job.index]
                     .iter()
-                    .find(|(name, _)| *name == column)
-                    .is_some_and(|&(_, id)| self.tables.get_at(id).is_some())
+                    .find(|w| w.name == column)
+                    .is_some_and(|w| self.tables.get_at(w.id).is_some())
             };
             if let Some(w) = e.access.writes.iter().find(|w| !present(w.column)) {
                 return Err(SimError::MissingColumn {
@@ -1663,12 +1761,78 @@ impl Engine {
                     .unwrap_or(0);
                 if let Some(mut rows) = self.tables.take_at(id) {
                     rows.insert(at.min(rows.len()), value);
-                    self.tables.put_at(id, rows);
+                    self.tables.put_at(id, rows, true);
                 }
             }
         }
         Ok(())
     }
+}
+
+/// Each lagged column present in the world, with its slot in the tables and in a snapshot of
+/// them that holds their current copies (SPR-038 T-02).
+fn lagged_slots(
+    registered: &Registered,
+    tables: &WorldTables,
+) -> (Vec<(ColumnId, ColumnId)>, WorldTables) {
+    let mut snapshot = WorldTables::new();
+    let present: Vec<&'static str> = registered
+        .lagged_reads()
+        .into_iter()
+        .filter(|c| tables.get(c).is_some())
+        .collect();
+    for &c in &present {
+        snapshot.insert(c, tables.get(c).cloned().unwrap_or_default());
+    }
+    let lagged = present
+        .iter()
+        .filter_map(|c| Some((tables.id(c)?, snapshot.id(c)?)))
+        .collect();
+    (lagged, snapshot)
+}
+
+/// Each system's written columns with their slots (SPR-038 T-02, T-03), and its own `person.*`
+/// writes in name order.
+fn write_slots(
+    registered: &Registered,
+    tables: &WorldTables,
+    ledger: Option<&Ledger>,
+) -> (Vec<Vec<WriteSlot>>, Vec<Vec<&'static str>>) {
+    let writes = registered
+        .entries
+        .iter()
+        .map(|e| {
+            e.access
+                .writes
+                .iter()
+                .filter_map(|w| {
+                    let is_ledger =
+                        ledger.is_some_and(|l| l.is_person(w.column) || l.is_life_course(w.column));
+                    Some(WriteSlot {
+                        name: w.column,
+                        id: tables.id(w.column)?,
+                        ledger: is_ledger,
+                        guarded: is_ledger && guarded_column(w.column),
+                    })
+                })
+                .collect()
+        })
+        .collect();
+    let own_person = registered
+        .entries
+        .iter()
+        .map(|e| {
+            let own: BTreeSet<&'static str> = e
+                .access
+                .writes
+                .iter()
+                .map(|w| w.column)
+                .filter(|c| ledger.is_some_and(|l| l.is_person(c)))
+                .collect();
+            own.into_iter().collect()
+        })
+        .collect();
+    (writes, own_person)
 }
 
 /// The binding pass of one phase: the bindings that fire at this instant, level by level, a level

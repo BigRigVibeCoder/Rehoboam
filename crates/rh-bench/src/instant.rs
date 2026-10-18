@@ -197,6 +197,9 @@ impl SystemModel for Ledger {
     ) -> Result<(), SimError> {
         if binding == DAY_VITAL {
             // The drain: nothing sends the command, so there is nothing to take.
+            // S16's positive control: a planted allocation in the quiet path.
+            #[cfg(feature = "instant-alloc-control")]
+            std::hint::black_box(Vec::<u64>::with_capacity(8));
             return match ctx.take_commands().first() {
                 Some(q) => Err(fail(format!("an unexpected {} command", q.command.kind))),
                 None => Ok(()),

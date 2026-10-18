@@ -10,7 +10,11 @@
 //! - `year/*`: the genesis held for a year: 360 day starts, 12 of them month starts whose step
 //!   rewrites one `person.spouse` cell.
 //!
-//! Every case asserts its path in its teardown, outside the measurement.
+//! Every case asserts its path in its teardown, outside the measurement: the levels dispatched and
+//! the rows changed, and what the gated passes ran (`Engine::check_stats`, SPR-038 T-03): a quiet
+//! instant ran no check, compaction or copy; a death compacted one row and checked once; a held
+//! year checked once a month. A quiet instant allocates nothing: the arena's bump offset does not
+//! move across it (S16; `instant-alloc-control` plants an allocation, and the bench must FAIL).
 //!
 //! REF: `CODEX/05_PROJECT/SPR-038_PerInstantCost.md` T-01; `docs/09` V-PERF-04.
 #![allow(
@@ -34,8 +38,9 @@ use iai_callgrind::{library_benchmark, library_benchmark_group, main};
 /// The deterministic arena: counts that do not depend on the checkout's path (`alloc_count::Arena`).
 #[global_allocator]
 static ARENA: rh_bench::alloc_count::Arena = rh_bench::alloc_count::Arena;
+use rh_bench::alloc_count::arena_used;
 use rh_bench::instant::{self, MEASURED_DAY, Mode, YEAR_DAYS, end_of_day};
-use rh_core::engine::{DispatchStats, Engine};
+use rh_core::engine::{CheckStats, DispatchStats, Engine};
 use rh_core::time::SimTime;
 
 #[allow(
@@ -54,8 +59,23 @@ fn path(holds: bool, what: &str) {
 struct Ran {
     engine: Engine,
     before: DispatchStats,
+    checks: CheckStats,
+    /// The arena bytes the measured stretch allocated.
+    allocated: usize,
     n: usize,
     l: usize,
+}
+
+/// What the gated passes ran in the measured stretch.
+fn checks_ran(r: &Ran) -> CheckStats {
+    let (a, b) = (r.checks, r.engine.check_stats());
+    CheckStats {
+        compactions: b.compactions - a.compactions,
+        compacted_rows: b.compacted_rows - a.compacted_rows,
+        ledger_checks: b.ledger_checks - a.ledger_checks,
+        invariant_runs: b.invariant_runs - a.invariant_runs,
+        snapshot_copies: b.snapshot_copies - a.snapshot_copies,
+    }
 }
 
 fn rows(e: &Engine, column: &str) -> usize {
@@ -72,10 +92,15 @@ fn genesis((n, l): (usize, usize)) -> (Engine, usize, usize) {
 
 fn one_instant((mut engine, n, l): (Engine, usize, usize)) -> Ran {
     let before = engine.dispatch_stats();
+    let checks = engine.check_stats();
+    let used = arena_used();
     ok(black_box(&mut engine).advance_until(end_of_day(MEASURED_DAY), |_, _| {}));
+    let allocated = arena_used() - used;
     Ran {
         engine,
         before,
+        checks,
+        allocated,
         n,
         l,
     }
@@ -94,8 +119,17 @@ fn one_instant_ran(r: &Ran, levels: u64) {
 }
 
 fn quiet_path(r: Ran) {
-    // Only the empty drain: one level, no row added or removed.
+    // Only the empty drain: one level, no row added or removed, no check, no allocation.
     one_instant_ran(&r, 1);
+    assert!(
+        r.allocated == 0,
+        "allocated on a quiet instant: the arena's bump offset moved by {} bytes (SPR-038 S16)",
+        r.allocated
+    );
+    path(
+        checks_ran(&r) == CheckStats::default(),
+        "no check, compaction or copy",
+    );
     path(rows(&r.engine, "person.id") == r.n, "no ledger row changed");
     path(
         rows(&r.engine, "life_course.person_id") == r.l,
@@ -119,6 +153,16 @@ fn death_path(r: Ran) {
         .get("life_course.exit_tick")
         .map_or(0, |c| c.iter().filter(|&&x| x == t).count());
     path(closed_now == 1, "one entry closed at the measured instant");
+    let c = checks_ran(&r);
+    path(
+        (
+            c.compactions,
+            c.compacted_rows,
+            c.ledger_checks,
+            c.invariant_runs,
+        ) == (1, 1, 1, 1),
+        "one row compacted, one ledger check, one invariant run",
+    );
 }
 
 fn insert_path(r: Ran) {
@@ -127,6 +171,16 @@ fn insert_path(r: Ran) {
     path(
         rows(&r.engine, "life_course.person_id") == r.l + 1,
         "one entry appended",
+    );
+    let c = checks_ran(&r);
+    path(
+        (
+            c.compactions,
+            c.compacted_rows,
+            c.ledger_checks,
+            c.invariant_runs,
+        ) == (1, 0, 1, 1),
+        "a compaction that removed nothing, one ledger check, one invariant run",
     );
 }
 
@@ -142,6 +196,11 @@ fn year_path(r: Ran) {
         "the year's levels",
     );
     path(rows(&r.engine, "person.id") == r.n, "no ledger row changed");
+    let c = checks_ran(&r);
+    path(
+        (c.ledger_checks, c.invariant_runs, c.compacted_rows) == (12, 12, 0),
+        "one full check a month, nothing compacted",
+    );
 }
 
 #[library_benchmark]
@@ -169,10 +228,13 @@ fn insert(input: (Engine, usize, usize)) -> Ran {
 #[bench::n10k_l100k(args = ((10_000, 100_000)), setup = genesis, teardown = year_path)]
 fn year((mut engine, n, l): (Engine, usize, usize)) -> Ran {
     let before = engine.dispatch_stats();
+    let checks = engine.check_stats();
     ok(black_box(&mut engine).advance_until(end_of_day(YEAR_DAYS - 1), |_, _| {}));
     Ran {
         engine,
         before,
+        checks,
+        allocated: 0,
         n,
         l,
     }

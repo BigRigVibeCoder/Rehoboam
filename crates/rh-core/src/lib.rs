@@ -50,4 +50,19 @@ pub const MUTANTS: &[&str] = &[
     "mutant-deliver-every-job",
     #[cfg(feature = "mutant-compact-keeps-version")]
     "mutant-compact-keeps-version",
+    #[cfg(feature = "mutant-late-pre-image")]
+    "mutant-late-pre-image",
+    #[cfg(feature = "mutant-stale-lagged-snapshot")]
+    "mutant-stale-lagged-snapshot",
+    #[cfg(feature = "mutant-unmarked-put-back")]
+    "mutant-unmarked-put-back",
+];
+
+/// The reference features compiled into this build (SPR-038 S12): `reference-gating-off`, which
+/// adds `Engine::set_gating`. Like a mutant, no world or baseline may come from such a build:
+/// `rh_golden::run::mutant_features` reads this list too, so `rh-cli run` and
+/// `bin/regen_baseline.sh` refuse it (BCK-002 A-52).
+pub const REFERENCE: &[&str] = &[
+    #[cfg(feature = "reference-gating-off")]
+    "reference-gating-off",
 ];

@@ -539,8 +539,85 @@ fn result(name: &'static str, problem: Option<String>) -> InvariantResult {
 /// life-course rows), INV-M2-02 (each ledger row has one open life-course row with its id and
 /// birth tick; no closed row's person is in the ledger) and INV-M2-04 (every row alive with
 /// `death_tick = i64::MAX`). INV-M2-03 needs the agenda and is checked by V-DET-12's tests.
+///
+/// O(N + L) when they hold (SPR-038 T-03): one pass over the log, the open and the closed persons
+/// sorted (linear on a log appended in id order, the common case) and merged with the ledger's
+/// ascending ids. When any does not hold, [`invariants_oracle`] computes the results, so the
+/// results, names and texts are always the oracle's.
 #[must_use]
 pub fn invariants(world: &WorldTables) -> Vec<InvariantResult> {
+    if all_hold(world) {
+        return vec![
+            result("INV-M2-01", None),
+            result("INV-M2-02", None),
+            result("INV-M2-04", None),
+        ];
+    }
+    invariants_oracle(world)
+}
+
+/// Whether INV-M2-01, 02 and 04 all hold, in O(N + L). It answers `true` only when
+/// [`invariants_oracle`] finds all three holding: it asks for a strictly ascending ledger, which the
+/// core's `ledger-sorted` invariant guarantees whenever M2's run, and otherwise defers to the
+/// oracle.
+fn all_hold(world: &WorldTables) -> bool {
+    let ids = col(world, PERSON_ID);
+    let births = col(world, PERSON_BIRTH);
+    if ids.len() != births.len()
+        || ids
+            .windows(2)
+            .any(|w| w[0].cast_unsigned() >= w[1].cast_unsigned())
+    {
+        return false;
+    }
+    let mut open: Vec<(u64, i64)> = Vec::with_capacity(ids.len());
+    let mut closed: Vec<u64> = Vec::new();
+    for ((&p, &k), &b) in col(world, LC_PERSON)
+        .iter()
+        .zip(col(world, LC_EXIT_KIND))
+        .zip(col(world, LC_BIRTH))
+    {
+        if k == 0 {
+            open.push((p.cast_unsigned(), b));
+        } else {
+            closed.push(p.cast_unsigned());
+        }
+    }
+    if open.len() != ids.len() {
+        return false;
+    }
+    open.sort_unstable();
+    // INV-M2-02: the ledger, in table order, equals the sorted open rows.
+    let equal = ids
+        .iter()
+        .zip(births)
+        .zip(&open)
+        .all(|((&i, &b), &o)| (i.cast_unsigned(), b) == o);
+    if !equal {
+        return false;
+    }
+    // INV-M2-02: no closed row's person is in the (strictly ascending) ledger: one merge.
+    closed.sort_unstable();
+    let mut j = 0;
+    for &p in &closed {
+        while j < ids.len() && ids[j].cast_unsigned() < p {
+            j += 1;
+        }
+        if ids.get(j).is_some_and(|&i| i.cast_unsigned() == p) {
+            return false;
+        }
+    }
+    // INV-M2-04.
+    col(world, PERSON_ALIVE)
+        .iter()
+        .zip(col(world, PERSON_DEATH_TICK))
+        .all(|(&a, &d)| a == 1 && d == i64::MAX)
+}
+
+/// M2's invariants as SPR-011 wrote them: the oracle [`invariants`] defers to whenever one does not
+/// hold, and the reference its O(N + L) path is tested against (SPR-038 T-03).
+#[must_use]
+pub fn invariants_oracle(world: &WorldTables) -> Vec<InvariantResult> {
     let ids = col(world, PERSON_ID);
     let births = col(world, PERSON_BIRTH);
     let mut open: Vec<(u64, i64)> = Vec::new();

@@ -73,6 +73,10 @@ arena-alloc = []
 # V-PERF-04's positive control (SPR-009 T-02): bench 7's full state hash does about 15% more work.
 # Only bin/perf_gate.py's control turns it on; it never changes what a plane-A crate computes.
 slowdown-control = []
+# SPR-038 S16's positive control: the instant bench's drain allocates one buffer per step, so the
+# quiet cases' zero-allocation assertion must FAIL ("allocated on a quiet instant"). Only check_all's
+# control turns it on; it never changes what a plane-A crate computes.
+instant-alloc-control = []
 
 # Bench 7 and bench 8 of docs/08 §9 at the PR tier's sizes (SPR-009 ruling 2). Bench 4
 # (raster_8x512) is a named, empty slot until P1a (ruling 1): a `slot` line in the baseline

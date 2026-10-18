@@ -9,8 +9,8 @@
 //! | Mode | What the drain does | Expected |
 //! |---|---|---|
 //! | 1 | with its inbox non-empty, writes an exit field of an open entry (no row count changes) | refused by name: the job has work, so the full guard runs |
-//! | 2 | with its inbox empty, writes the same field | passes: the **known narrowing**, a job without work keeps only its row counts (A-60 revisits it) |
-//! | 3 | with its inbox empty, appends a life-course row | refused by name: the row-count check stays |
+//! | 2 | with its inbox empty, writes the same field | refused by name: the narrowing is gone (SPR-038 T-03), every write of a guarded column is value-checked from its pre-image |
+//! | 3 | with its inbox empty, appends a copy of an open life-course row | fails the core's `life-course-one-open-entry` invariant: a legal append for the guard, a duplicate open entry for the ledger |
 //!
 //! Registration refuses a drain-only binding that drains none of the system's commands.
 
@@ -151,28 +151,30 @@ fn a_drain_with_work_that_writes_an_open_exit_field_is_refused_by_name() {
     println!("A-60 part guard: a drain with work is fully guarded; refused by name");
 }
 
-/// The known narrowing (A-60 revisits it): a drain-only job with an empty inbox keeps only its row
-/// counts, so a value it rewrites is not seen.
+/// The narrowing is gone (SPR-038 T-03, S12): a drain-only job with an empty inbox that writes an
+/// exit field of an open entry is refused by name, as a job with work is: the guard's pre-image is
+/// taken at the first `write()` of a guarded column, whatever the job's work.
 #[test]
-fn a_drain_without_work_keeps_only_its_row_counts() {
-    let mut e = engine(2);
-    through_day(&mut e, 4).unwrap_or_else(|err| panic!("{err}"));
-    let after = e
-        .tables()
-        .get("life_course.death_cause")
-        .expect("the column");
-    assert_eq!(
-        after[PERSONS - 1],
-        3,
-        "the planted rewrite ran unseen: the documented narrowing"
+fn a_drain_without_work_that_writes_is_refused_by_name() {
+    let err = through_day(&mut engine(2), 4)
+        .expect_err("an exit field written on an open entry must be refused");
+    let text = err.to_string();
+    assert!(
+        text == "E1.life: ledger: life_course.death_cause row 4 changed from 0 to 3 on an entry \
+                 this step leaves open: exit fields are written only by the step that closes the \
+                 entry (SPR-011 ruling 5; DEF-3)",
+        "{text}"
     );
+    // An appended entry is a legal write for the guard (an open entry with the open values); the
+    // duplicate open entry it makes fails the core's ledger invariant at the instant's Bookkeeping.
     let err = through_day(&mut engine(3), 4).expect_err("an appended row must be refused");
-    assert_eq!(
-        err.to_string(),
-        "E1.life: ledger: life_course.person_id went from 5 to 6 rows in a step with no work (an \
-         empty drain): such a step writes no ledger row (BCK-002 A-60 part)"
+    let text = err.to_string();
+    assert!(
+        text.starts_with("invariant life-course-one-open-entry of rh-core violated: person ")
+            && text.ends_with(" has 2 open life-course entries"),
+        "{text}"
     );
-    println!("A-60 part guard: a drain without work keeps its row counts; the narrowing pinned");
+    println!("SPR-038 T-03: a drain without work is value-checked; refused by name");
 }
 
 #[test]

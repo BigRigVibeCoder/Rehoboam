@@ -644,10 +644,13 @@ solo_baseline_hand_edited_control() {
     worlds/solo/baselines/solo_yearly_200y.ladder > "$edited" || return 1
   "$PY" -I bin/check_baseline.py --baseline "$edited" --recomputed "$GOLDEN/solo_yearly_t1.ladder" --changed no
 }
-# BCK-002 A-52: a debug rh-cli built with one of rh-sys-demography's planted mutant features (its own
+# BCK-002 A-52: a debug rh-cli built with one of rh-sys-demography's planted mutant features and rh-core's
+# reference-gating-off (SPR-038 S12; its own
 # target directory, so the release build of the golden runs is untouched) refuses to run a world.
 mutant_build_control() {
-  cargo build --locked --quiet -p rh-cli -p rh-sys-demography --features rh-sys-demography/mutant-resample-hit-k1 \
+  # SPR-038 S12: rh-core's reference-gating-off is refused the same way, so it rides in the same build.
+  cargo build --locked --quiet -p rh-cli -p rh-sys-demography \
+    --features rh-sys-demography/mutant-resample-hit-k1,rh-core/reference-gating-off \
     --target-dir "$TARGET_DIR/mutant" || return 2
   "$TARGET_DIR/mutant/debug/rh-cli" run solo --years 1 --out "$TARGET_DIR/rendered-fixtures/mutant.ladder"
 }
@@ -966,7 +969,8 @@ BY_NAME_TESTS="rh-snapshot::hash rh-snapshot::golden rh-snapshot::journal rh-sna
   rh-worldgen::keyframe rh-worldgen::m2_system rh-worldgen::death_path rh-snapshot::lifecycle
   rh-contracts::drift rh-contracts::consumer rh-golden::golden
   rh-golden::solo rh-golden::stream rh-stream::canonical rh-stream::writer rh-stream::parquet_props
-  rh-cli::kill rh-golden::tail rh-cli::tail_live rh-sifter::sift rh-golden::sift rh-golden::replay rh-golden::rungs"
+  rh-cli::kill rh-golden::tail rh-cli::tail_live rh-sifter::sift rh-golden::sift rh-golden::replay rh-golden::rungs
+  rh-snapshot::per_instant_cache rh-sys-demography::invariants_oracle rh-core::per_instant"
 workspace_tests() {
   local id filter=""
   for id in $BY_NAME_TESTS; do filter="${filter:+$filter | }binary_id($id)"; done
@@ -1277,6 +1281,11 @@ run "SPR-014 V-INV-03 subset: commanded deaths from two test-only senders take M
 run "SPR-014 rh-contracts v0: every M2 accessor matches the spec; a reader beside the real M2 reads through the crate (T-06)" "pass:rh-contracts drift: 19 M2 accessors match the spec" cargo nextest run -p rh-contracts --locked --test drift --test consumer --no-capture &&
 run "SPR-014 rh-contracts positive control: a spec with person.sex's values reordered must FAIL naming the column (T-06)" "fail:DRIFT in person.sex" env RH_CONTRACTS_M2_SPEC="$PWD/tests/lint_fixtures/contracts/M2_sex_reordered.odd.toml" cargo nextest run -p rh-contracts --locked --test drift --no-capture &&
 run "SPR-014 A-50: a draw of the wrong entity kind is refused by name (T-07)" "pass:A-50: a draw of the wrong entity kind is refused by name" cargo nextest run -p rh-core --locked --test engine_contract --no-capture a_draw &&
+# SPR-038 stage A in part core: exactness (the differential test against Gating::Off, the planted violations, the
+# O(N + L) oracles) and the cache (about 25 s together; the plan's CI-gates table, X10).
+run "SPR-038 exactness: the gated engine equals Gating::Off after every instant on random worlds (3 sizes x 8 seeds), and every planted violation fails by name at the same instant gated and off (per_instant; T-03, S12)" "pass:gated = Gating::Off after each of" cargo nextest run -p rh-core --locked --features reference-gating-off --test per_instant --no-capture &&
+run "SPR-038 the cached plane hash equals the full hash after every instant of random ledger worlds (per_instant_cache; S11, T4)" "pass:S11: cached = full after each of" cargo nextest run -p rh-snapshot --locked --test per_instant_cache --no-capture &&
+run "SPR-038 M2's O(N + L) invariants give the oracle's results, names and texts on random and planted tables (invariants_oracle; T-03)" "pass:M2's invariants equal the oracle on" cargo nextest run -p rh-sys-demography --locked --test invariants_oracle --no-capture &&
 run "rh-sys-smoke gates by name: registration against the smoke specs, coverage, re-sampling, small-scale V-DET-01/02 (SPR-008 T-01)" "pass:SMOKE: 6 yearly states" cargo nextest run -p rh-sys-smoke --locked --test smoke --no-capture &&
 run "T-05 M2 schedule in fixed point: bit-equal to the exact reference, K = 1 at the standard's e0, Table 19, e0 within 0.06 years, the q(15) band (SPR-012)" "pass:T-05: " cargo nextest run -p rh-sys-demography --locked --test schedule_golden --no-capture &&
 run "T-05 positive control: one altered schedule vector must FAIL (SPR-012)" "fail:K at e0 bits 1966080" env RH_M2_SCHEDULE_GOLDEN="$PWD/tests/lint_fixtures/golden/altered_m2_schedule_v1.txt" cargo nextest run -p rh-sys-demography --locked --test schedule_golden --no-capture &&
@@ -1430,6 +1439,11 @@ run "T-07 M2.demography: registration against the frozen spec, alpha and beta re
 # SPR-014 mutant controls in part golden: each rebuilds its crate with a mutant feature (D1 about 6 s; part core's 12-minute target, Architect ruling 2026-10-17)
 run "SPR-014 V-DET-21 positive control: an engine that hands an owner's inbox to every job (EVO-001 option D1) must FAIL (T-01)" "fail:delivered to a non-draining job" cargo nextest run -p rh-core --locked --features mutant-deliver-every-job --test agenda_events --no-capture v_det_21_delivery &&
 run "SPR-014 R15 positive control: a timer encoder that writes u8 0 for an absent cause must FAIL the hash golden at agenda.timers (T-02)" "fail:root: engine_table rh-core/agenda.timers" cargo nextest run -p rh-snapshot --locked --features mutant-cause-u8-zero --test golden --no-capture &&
+# SPR-038 stage A's mutant controls in part golden: each rebuilds rh-core with its planted feature (about 6-10 s each).
+run "SPR-038 positive control: positional compaction that keeps the old versions must FAIL the per-instant cache test (mutant-compact-keeps-version; S11)" "fail:the cached plane hash differs from the full hash" cargo nextest run -p rh-snapshot --locked --features rh-core/mutant-compact-keeps-version --test per_instant_cache --no-capture &&
+run "SPR-038 positive control: a put-back that ignores person.alive's written flag must FAIL: a dead row survives (mutant-unmarked-put-back; T-03)" "fail:invariant ledger-no-dead-row of rh-core violated" cargo nextest run -p rh-core --locked --features reference-gating-off,mutant-unmarked-put-back --test per_instant --no-capture -E "test(the_gated_engine_equals_gating_off_after_every_instant)" &&
+run "SPR-038 positive control: a guard pre-image taken after the step must FAIL the entry-field refusal (mutant-late-pre-image; T-03)" "fail:an exit field written on an open entry must be refused" cargo nextest run -p rh-core --locked --features mutant-late-pre-image --test agenda_events --no-capture lifecycle_queues::guard &&
+run "SPR-038 positive control: a lagged column never copied again must FAIL the differential test's lagged reader (mutant-stale-lagged-snapshot; T-03)" "fail:the gated engine differs from Gating::Off" cargo nextest run -p rh-core --locked --features reference-gating-off,mutant-stale-lagged-snapshot --test per_instant --no-capture -E "test(the_gated_engine_equals_gating_off_after_every_instant)" &&
 # SPR-030 CRN pairing in part golden: pure Python, about 28 s (REV-SPR-030 R27: part core passed 12 minutes on PR #79's CI, 12:13)
 run "Golden vectors: CRN pairing v0, the V-DET-17 worked computation on twin_vales at seed 1, with its five controls on the same run A (SPR-030; REV-SPR-030 R3, R4, R10)" "pass:CRN PAIRING: PASS" "$PY" -I specs/determinism/selftest_crn_pairing.py --seeds 1 --controls &&
 # SPR-019 population-synthesis control in part golden: pure Python, no build (part core's 12-minute target; SPR-013 Architect ruling)
@@ -1526,7 +1540,7 @@ run "Golden baseline positive control: a hand-edited solo baseline must FAIL (SP
 run "Golden baseline positive control: a regenerated solo baseline in a PR not marked [C3] must FAIL (SPR-012 T-08; SPR-008 ruling 6)" "fail:BASELINE CHANGED in a PR not marked [C3]" "$PY" -I bin/check_baseline.py --baseline worlds/solo/baselines/solo_yearly_200y.ladder --recomputed "$GOLDEN/solo_yearly_t1.ladder" --changed yes --title "SPR-012: walking skeleton B" &&
 run "Golden run positive control: --strict refuses solo, whose manifest names systems this build lacks (SPR-011 ruling 3; SPR-012 T-08)" "fail:--strict refuses solo: the manifest names systems this build lacks (M1.regions, M3.agriculture, M4.economy, S5.daily_life)" "$RH_CLI_RELEASE" run solo --strict --years 2 --out "$TARGET_DIR/rendered-fixtures/solo_strict.ladder" &&
 run "rh-cli build-info: this build compiles in no mutant-* feature (BCK-002 A-52)" "pass:mutants: none" "$RH_CLI_RELEASE" build-info &&
-run "A-52 positive control: rh-cli run in a build with a mutant-* feature compiled in must FAIL" "fail:MUTANT BUILD: this build has the planted control feature(s) mutant-resample-hit-k1 compiled in" mutant_build_control &&
+run "A-52 positive control: rh-cli run in a build with a mutant-* feature compiled in must FAIL" "fail:MUTANT BUILD: this build has the planted control feature(s) mutant-resample-hit-k1, reference-gating-off compiled in" mutant_build_control &&
 run "V-SCALE-03: solo's 1,000-year wall time, reported (SPR-012 T-08)" "pass:V-SCALE-03: solo, 1,000 sim-years at 1 thread in" solo_scale_run &&
 run "rh-golden gates by name: solo resume = continuous through 10-year keyframes, thread invariance, the manifest pin, Ada at genesis, the input's re-sample of her pending death (SPR-012 T-08)" "pass:T-08: solo's input re-samples Ada's pending death (a miss)" cargo nextest run -p rh-golden --release --locked --test solo --no-capture &&
 run "rh-golden gates by name: resume = continuous, thread invariance, V-DET-11 bisect on injected perturbations (SPR-008 T-02, T-03)" "pass:V-DET-11: 4 injected perturbations named exactly" cargo nextest run -p rh-golden --release --locked --test golden --no-capture
