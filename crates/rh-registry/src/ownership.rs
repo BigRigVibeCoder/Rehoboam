@@ -157,6 +157,9 @@ pub struct DeclaredRead {
 struct DeclaredBinding {
     pulse: String,
     phase: String,
+    /// The entry's steps, as written (the review's K6: a drain-only binding has one, the drain).
+    #[serde(default)]
+    steps: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -261,6 +264,9 @@ pub struct SystemSpec {
     /// Its `[[schedule]]` bindings as `(pulse, phase)` names, in spec order. Registration compares
     /// them with the code's bindings (SPR-005 G-a).
     pub schedule: Vec<(String, String)>,
+    /// Each `[[schedule]]` entry's `steps`, parallel to [`SystemSpec::schedule`] (the review's
+    /// K6: what ties a code's drain-only binding to its spec).
+    pub schedule_steps: Vec<Vec<String>>,
     /// The lifecycle commands it submits (`[[commands]]`), in spec order (SPR-006).
     pub commands: Vec<DeclaredCommand>,
     /// The lifecycle commands it owns (`[[applies]]`), in spec order (EVO-001; SPR-014).
@@ -298,6 +304,7 @@ impl SystemSpec {
                 })
                 .collect(),
             rng: f.rng.into_iter().map(|r| r.purpose).collect(),
+            schedule_steps: f.schedule.iter().map(|b| b.steps.clone()).collect(),
             schedule: f.schedule.into_iter().map(|b| (b.pulse, b.phase)).collect(),
             commands: f.commands,
             applies: f.applies,

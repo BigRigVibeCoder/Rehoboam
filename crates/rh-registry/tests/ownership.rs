@@ -95,6 +95,7 @@ fn two_owners_and_plane_leaks_are_found() {
             .collect(),
         rng: vec![],
         schedule: vec![],
+        schedule_steps: vec![],
         commands: vec![],
         applies: vec![],
         rng_keys: vec![],
