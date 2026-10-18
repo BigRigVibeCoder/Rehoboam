@@ -21,6 +21,10 @@
     clippy::disallowed_methods,
     reason = "iai-callgrind's main! macro reads the command line (std::env::args; SPR-011 A-4)"
 )]
+#![allow(
+    clippy::needless_pass_by_value,
+    reason = "an iai-callgrind teardown takes the bench's return value by value"
+)]
 
 use std::fmt::Display;
 use std::hint::black_box;
@@ -32,6 +36,7 @@ use iai_callgrind::{library_benchmark, library_benchmark_group, main};
 static ARENA: rh_bench::alloc_count::Arena = rh_bench::alloc_count::Arena;
 use rh_bench::instant::{self, MEASURED_DAY, Mode, YEAR_DAYS, end_of_day};
 use rh_core::engine::{DispatchStats, Engine};
+use rh_core::time::SimTime;
 
 #[allow(
     clippy::panic,
@@ -41,14 +46,8 @@ fn ok<T, E: Display>(r: Result<T, E>) -> T {
     r.unwrap_or_else(|e| panic!("bench setup failed: {e}"))
 }
 
-#[allow(
-    clippy::panic,
-    reason = "a bench that did not take its path measured something else; it must stop loudly"
-)]
 fn path(holds: bool, what: &str) {
-    if !holds {
-        panic!("bench path not taken: {what}");
-    }
+    assert!(holds, "bench path not taken: {what}");
 }
 
 /// What a case measured, with what its teardown checks it against.
@@ -85,7 +84,7 @@ fn one_instant((mut engine, n, l): (Engine, usize, usize)) -> Ran {
 /// Common to every one-instant case: exactly one instant ran, with the levels `levels`.
 fn one_instant_ran(r: &Ran, levels: u64) {
     path(
-        r.engine.next_instant().map(|t| t.minutes()) == Some((MEASURED_DAY + 1) * instant::DAY),
+        r.engine.next_instant().map(SimTime::minutes) == Some((MEASURED_DAY + 1) * instant::DAY),
         "one instant, the measured day start",
     );
     path(
@@ -134,7 +133,7 @@ fn insert_path(r: Ran) {
 fn year_path(r: Ran) {
     // 360 day starts, each with the drain; 12 month starts, each with one more level.
     path(
-        r.engine.next_instant().map(|t| t.minutes()) == Some(YEAR_DAYS * instant::DAY),
+        r.engine.next_instant().map(SimTime::minutes) == Some(YEAR_DAYS * instant::DAY),
         "the year's 360 instants",
     );
     let levels = u64::try_from(YEAR_DAYS + 12).unwrap_or(u64::MAX);

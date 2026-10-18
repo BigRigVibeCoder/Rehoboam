@@ -197,10 +197,10 @@ impl SystemModel for Ledger {
     ) -> Result<(), SimError> {
         if binding == DAY_VITAL {
             // The drain: nothing sends the command, so there is nothing to take.
-            for q in ctx.take_commands() {
-                return Err(fail(format!("an unexpected {} command", q.command.kind)));
-            }
-            return Ok(());
+            return match ctx.take_commands().first() {
+                Some(q) => Err(fail(format!("an unexpected {} command", q.command.kind))),
+                None => Ok(()),
+            };
         }
         // A change to check each month: one cell rewritten with its own value.
         if let Some(&v) = view.read(PERSON_SPOUSE)?.first() {

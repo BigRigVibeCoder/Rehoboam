@@ -30,3 +30,7 @@ rh-events = { version = "0.0.0", path = "../rh-events" }
 # inbox, not only the binding its spec names. `tests/agenda_events.rs` V-DET-21 must FAIL with
 # "delivered to a non-draining job". No build of a world enables it.
 mutant-deliver-every-job = []
+# SPR-038 S11 (T-02): positional compaction puts each column back with its old version. The
+# per-instant cache test (`rh-snapshot`'s `tests/per_instant_cache.rs`, run with
+# `--features rh-core/mutant-compact-keeps-version`) must FAIL. No build of a world enables it.
+mutant-compact-keeps-version = []

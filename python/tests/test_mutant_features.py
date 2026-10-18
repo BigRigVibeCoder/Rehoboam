@@ -27,9 +27,9 @@ def _mutant_features() -> dict[str, list[str]]:
 
 
 def test_there_are_mutant_features_to_guard() -> None:
-    """SPR-012's two planted switches and SPR-014's two exist; if they move, this test follows."""
+    """The planted switches of SPR-012, SPR-014 and SPR-038 exist; if they move, this follows."""
     assert _mutant_features() == {
-        "rh-core": ["mutant-deliver-every-job"],
+        "rh-core": ["mutant-compact-keeps-version", "mutant-deliver-every-job"],
         "rh-snapshot": ["mutant-cause-u8-zero"],
         "rh-sys-demography": ["mutant-resample-day-k0", "mutant-resample-hit-k1"],
     }

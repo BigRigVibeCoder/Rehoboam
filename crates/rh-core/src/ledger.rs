@@ -35,7 +35,7 @@ use std::collections::BTreeMap;
 
 use crate::phase::Phase;
 use crate::system::SimError;
-use crate::world::{Column, WorldTables};
+use crate::world::{Column, ColumnId, WorldTables};
 
 /// The prefix of the ledger's columns.
 pub const PERSON_PREFIX: &str = "person.";
@@ -75,6 +75,10 @@ const CORE: &str = "rh-core";
 pub struct Ledger {
     person: Vec<String>,
     life_course: Vec<String>,
+    /// The `person.*` columns' slots, in name order (SPR-038 T-02).
+    person_ids: Vec<ColumnId>,
+    /// `person.alive`'s slot.
+    alive: ColumnId,
 }
 
 impl Ledger {
@@ -98,10 +102,8 @@ impl Ledger {
                 .map(str::to_owned)
                 .collect()
         };
-        let ledger = Self {
-            person: names(PERSON_PREFIX),
-            life_course: names(LIFE_COURSE_PREFIX),
-        };
+        let person = names(PERSON_PREFIX);
+        let person_ids = person.iter().filter_map(|c| tables.id(c)).collect();
         let required = [PERSON_ALIVE, LIFE_COURSE_PERSON]
             .into_iter()
             .chain(LIFE_COURSE_EXIT_FIELDS);
@@ -113,7 +115,17 @@ impl Ledger {
                 )));
             }
         }
-        Ok(Some(ledger))
+        let Some(alive) = tables.id(PERSON_ALIVE) else {
+            return Err(error(format!(
+                "the world has person.id but no {PERSON_ALIVE}"
+            )));
+        };
+        Ok(Some(Self {
+            person,
+            life_course: names(LIFE_COURSE_PREFIX),
+            person_ids,
+            alive,
+        }))
     }
 
     /// Whether `column` is a ledger (`person.*`) column.
@@ -134,36 +146,56 @@ impl Ledger {
         &self.person
     }
 
+    /// The `person.*` columns with their slots, in name order (SPR-038 T-02).
+    pub(crate) fn person_slots(&self) -> impl Iterator<Item = (&str, ColumnId)> {
+        self.person
+            .iter()
+            .map(String::as_str)
+            .zip(self.person_ids.iter().copied())
+    }
+
     /// Removes every row with `person.alive = 0` from every `person.*` column (the core-only
     /// exemption from single-writer ownership; module docs). Returns how many rows left. A table
     /// with no dead row is left untouched, so its columns keep their versions.
     ///
+    /// **Positional** (SPR-038 S4): one scan of `person.alive` finds the dead rows' positions (into
+    /// `dead`, a buffer the engine keeps), then each `person.*` column loses exactly those rows by
+    /// moving its later rows down, in place. The same rows stay, in the same order, as the
+    /// collect it replaces; every column it changes takes a new version.
+    ///
     /// # Errors
     /// [`SimError::Invariant`] `ledger-aligned` if the columns are not aligned: compaction would
     /// remove the wrong rows.
-    pub(crate) fn compact(&self, tables: &mut WorldTables) -> Result<usize, SimError> {
+    pub(crate) fn compact(
+        &self,
+        tables: &mut WorldTables,
+        dead: &mut Vec<usize>,
+    ) -> Result<usize, SimError> {
         self.check_aligned(tables)?;
-        let alive = tables
-            .get(PERSON_ALIVE)
-            .map(Vec::as_slice)
-            .unwrap_or_default();
-        if alive.iter().all(|&a| a != 0) {
+        dead.clear();
+        if let Some(alive) = tables.get_at(self.alive) {
+            dead.extend(
+                alive
+                    .iter()
+                    .enumerate()
+                    .filter(|&(_, &a)| a == 0)
+                    .map(|(row, _)| row),
+            );
+        }
+        if dead.is_empty() {
             return Ok(0);
         }
-        let keep: Vec<bool> = alive.iter().map(|&a| a != 0).collect();
-        let removed = keep.iter().filter(|&&k| !k).count();
-        for name in &self.person {
-            let Some(rows) = tables.take(name) else {
+        for &id in &self.person_ids {
+            let Some(mut rows) = tables.take_at(id) else {
                 continue;
             };
-            let kept: Column = rows
-                .into_iter()
-                .zip(&keep)
-                .filter_map(|(v, &k)| k.then_some(v))
-                .collect();
-            tables.insert(name, kept);
+            remove_rows(&mut rows, dead);
+            #[cfg(not(feature = "mutant-compact-keeps-version"))]
+            tables.put_at(id, rows);
+            #[cfg(feature = "mutant-compact-keeps-version")]
+            tables.put_at_keeping_version(id, rows);
         }
-        Ok(removed)
+        Ok(dead.len())
     }
 
     fn check_aligned(&self, tables: &WorldTables) -> Result<(), SimError> {
@@ -493,6 +525,25 @@ impl LifeCourseGuard {
     }
 }
 
+/// Removes the rows at `dead` (ascending, each below `rows.len()`) from `rows`, in place: one
+/// `Vec::remove` for a single row, else each run between two removed rows moved down once.
+fn remove_rows(rows: &mut Column, dead: &[usize]) {
+    if let &[row] = dead {
+        rows.remove(row);
+        return;
+    }
+    let Some(&first) = dead.first() else {
+        return;
+    };
+    let mut write = first;
+    for (k, &row) in dead.iter().enumerate() {
+        let next = dead.get(k + 1).copied().unwrap_or(rows.len());
+        rows.copy_within(row + 1..next, write);
+        write += next - row - 1;
+    }
+    rows.truncate(write);
+}
+
 fn column<'t>(tables: &'t WorldTables, name: &str) -> &'t [i64] {
     tables.get(name).map(Vec::as_slice).unwrap_or_default()
 }
@@ -531,5 +582,40 @@ fn error(message: String) -> SimError {
     SimError::Ledger {
         system: CORE,
         message,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::remove_rows;
+
+    /// SPR-038 S4: positional removal keeps exactly the rows the collect it replaces kept, in
+    /// order, over random columns and dead sets (none, one, runs, the first and the last rows).
+    #[test]
+    fn positional_removal_keeps_what_the_collect_kept() {
+        let mut x = 0x0038_0004_u64;
+        let mut next = || {
+            x = x.wrapping_add(0x9E37_79B9_7F4A_7C15);
+            let mut z = x;
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            z ^ (z >> 31)
+        };
+        for n in [0_usize, 1, 2, 60, 600, 3_000] {
+            for _ in 0..40 {
+                let rate = 1 + next() % 50;
+                let rows: Vec<i64> = (0..n).map(|_| next().cast_signed()).collect();
+                let keep: Vec<bool> = (0..n).map(|_| next() % rate != 0).collect();
+                let dead: Vec<usize> = (0..n).filter(|&r| !keep[r]).collect();
+                let expected: Vec<i64> = rows
+                    .iter()
+                    .zip(&keep)
+                    .filter_map(|(&v, &k)| k.then_some(v))
+                    .collect();
+                let mut got = rows.clone();
+                remove_rows(&mut got, &dead);
+                assert_eq!(got, expected, "n {n}, {} dead", dead.len());
+            }
+        }
     }
 }

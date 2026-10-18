@@ -48,4 +48,6 @@ pub use time::Pulse;
 pub const MUTANTS: &[&str] = &[
     #[cfg(feature = "mutant-deliver-every-job")]
     "mutant-deliver-every-job",
+    #[cfg(feature = "mutant-compact-keeps-version")]
+    "mutant-compact-keeps-version",
 ];
