@@ -1,7 +1,7 @@
 //! The Registry's effect-language sections and the real environment (SPR-017 T-06).
 //!
 //! `registry_v0.toml` carries the succession laws as programs (`[succession_laws.<law>]`), the
-//! language's version, enums, reference kinds, keys and foreign columns (`[effect_language]`) and
+//! language's version, enums, reference kinds, keys and opaque columns (`[effect_language]`) and
 //! the command signatures (`[commands]`). This module types those sections, builds the checker's
 //! [`Env`] from the Registry and the system specs' TOML text ([`effect_env`]), and refuses, by
 //! name, what the Registry cannot mean ([`registry_problems`], [`effect_problems`]).
@@ -68,9 +68,6 @@ pub struct EffectLanguage {
     /// Tables keyed by a column other than their id: entity to its key column.
     #[serde(default)]
     pub keys: BTreeMap<String, String>,
-    /// Columns read from owners without a spec, with their owner and language type.
-    #[serde(default)]
-    pub foreign: BTreeMap<String, ForeignColumn>,
     /// Event-id columns, which no program reads.
     #[serde(default)]
     pub opaque: Opaque,
@@ -88,17 +85,6 @@ pub struct EnumSource {
     pub columns: Vec<String>,
     /// The value a missing read yields.
     pub default: String,
-}
-
-/// A column a spec reads from an owner that has no spec yet.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ForeignColumn {
-    /// Its owner's Registry id.
-    pub owner: String,
-    /// Its language type (`int`, `bool`, `q8_8`, `q16_16`, a kind, `enum:<name>`).
-    #[serde(rename = "type")]
-    pub ty: String,
 }
 
 /// `[effect_language.opaque]`.
@@ -242,14 +228,6 @@ pub fn registry_problems(reg: &Registry) -> Vec<String> {
             ));
         }
     }
-    for (fid, f) in &lang.foreign {
-        if !reg.systems.contains_key(&f.owner) {
-            out.push(format!(
-                "effect_language.foreign.{fid}: owner '{}' is not a Registry system",
-                f.owner
-            ));
-        }
-    }
     for (vid, v) in &reg.verbs {
         if v.effects.is_some() && !reg.systems.contains_key(&v.emitted_by) {
             out.push(format!(
@@ -342,7 +320,7 @@ fn text<'a>(t: &'a toml::Table, key: &str) -> Option<&'a str> {
 /// An `[[owns]]` entry's integer and id types.
 const INT_TYPES: [&str; 8] = ["u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64"];
 
-/// A Registry type name (`[commands]`, `[effect_language.foreign]`, a verb payload) as a
+/// A Registry type name (`[commands]`, a verb payload) as a
 /// language type: `int`, `bool`, `q8_8`, `q16_16`, `event`, `enum:<name>`, or an entity kind.
 fn language_type(env: &mut Env, name: &str) -> Result<Ty, String> {
     Ok(match name {
@@ -394,10 +372,10 @@ fn owned_values(specs: &[Spec]) -> BTreeMap<String, Vec<String>> {
 /// its keyed tables) and the system specs' TOML text, given as `(name, text)` pairs (the name is
 /// for messages only).
 ///
-/// Columns: every `[[owns]]` entry of a known type (an id column is an `int`, or a reference of
-/// the kind `[effect_language.refs]` gives it; an `event_ref` column and an
-/// `[effect_language.opaque]` one are left out, since no program reads an event), and each
-/// `[effect_language.foreign]` entry. An enum column whose enum `[effect_language.enums]` does not
+/// Columns: every `[[owns]]` entry of a known type, and nothing else (a column is in the
+/// environment only when a spec owns it, G4). An id column is an `int`, or a reference of the kind
+/// `[effect_language.refs]` gives it; an `event_ref` column and an `[effect_language.opaque]` one
+/// are left out, since no program reads an event (G3). An enum column whose enum `[effect_language.enums]` does not
 /// name is left out too. Systems: each spec's `[[reads]]` (an identity read needs no `neutral`),
 /// `[[commands]]` and `[[rng]]`, with the Registry's parameters at their exact bounds. Every spec
 /// system is registered.
@@ -463,8 +441,20 @@ pub fn effect_env(
                 key_kind.insert(entity.clone(), kind.clone());
             }
             None => errors.push(format!(
-                "effect_language.keys.{entity}: '{full}' has no kind in [effect_language.refs]"
+                "effect_language.keys.{entity}: '{full}' is not a reference column of that entity in [effect_language.refs]"
             )),
+        }
+    }
+    let declared: BTreeSet<&str> = specs
+        .iter()
+        .flat_map(|s| array(&s.table, "owns"))
+        .filter_map(|o| o.as_table().and_then(|o| text(o, "entity")))
+        .collect();
+    for (column, kind) in &lang.refs {
+        if !declared.contains(kind.as_str()) {
+            errors.push(format!(
+                "effect_language.refs.{column}: kind '{kind}' is not an entity of a spec"
+            ));
         }
     }
     let opaque: BTreeSet<&str> = lang.opaque.columns.iter().map(String::as_str).collect();
@@ -549,32 +539,6 @@ pub fn effect_env(
             errors.push(format!(
                 "effect_language.opaque: '{column}' is not a column of a spec"
             ));
-        }
-    }
-    for (column, f) in &lang.foreign {
-        let added = (|| -> Result<(), String> {
-            if env.column_id(column).is_some() {
-                return Err("is owned by a spec; remove the entry".to_owned());
-            }
-            let entity = column
-                .split_once('.')
-                .map(|(e, _)| e)
-                .ok_or_else(|| "is not entity.column".to_owned())?;
-            let entity = env.intern_kind(entity).map_err(|e| e.0)?;
-            let ty = language_type(&mut env, &f.ty)?;
-            env.add_column(ColumnDef {
-                name: column.clone(),
-                entity,
-                key: entity,
-                ty,
-                plane_a: true,
-                owner: f.owner.clone(),
-            })
-            .map(|_| ())
-            .map_err(|e| e.0)
-        })();
-        if let Err(e) = added {
-            errors.push(format!("effect_language.foreign.{column}: {e}"));
         }
     }
     for (name, c) in &reg.commands {

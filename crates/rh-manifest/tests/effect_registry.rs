@@ -139,11 +139,13 @@ fn an_undeclared_read_is_refused_naming_the_law() {
     );
 }
 
+/// G4: the frozen specs' one rate or mode read of a spec-owned foreign column a law can make is
+/// M7's `person.death_cause` (mode, owner M2, `neutral = "none"`). With the neutral the law
+/// compiles; an M7 copy without it is `E_NO_NEUTRAL`, naming the law.
 #[test]
-fn a_rate_read_without_its_neutral_is_refused() {
-    let law = "[succession_laws.partition]\ncandidates = 'children(holder)'\neligible   = 'person.alive(x) and x != holder and polity.exec_constraint(none) >= 0.0'";
+fn a_mode_read_without_its_neutral_is_refused() {
+    let law = "[succession_laws.partition]\ncandidates = 'children(holder)'\neligible   = 'person.alive(x) and x != holder and person.death_cause(x) == death_cause.none'";
     let t = edit(&registry_text(), PARTITION_ELIGIBLE, law);
-    // Against the real M7 the law compiles: the read carries `neutral = 0.0`.
     assert_eq!(problems(&t), Vec::<String>::new());
     let specs: Vec<(String, String)> = specs()
         .into_iter()
@@ -151,8 +153,8 @@ fn a_rate_read_without_its_neutral_is_refused() {
             if name.starts_with("M7.") {
                 let text = edit(
                     &text,
-                    "lag = \"lagged\"\nuse = \"rate\"\nneutral = 0.0",
-                    "lag = \"lagged\"\nuse = \"rate\"",
+                    "column = \"person.death_cause\"\nowner = \"M2.demography\"\nlag = \"same_instant\"\nuse = \"mode\"\nneutral = \"none\"",
+                    "column = \"person.death_cause\"\nowner = \"M2.demography\"\nlag = \"same_instant\"\nuse = \"mode\"",
                 );
                 (name, text)
             } else {
@@ -163,6 +165,69 @@ fn a_rate_read_without_its_neutral_is_refused() {
     assert_refused(
         &problems_with(&t, &specs),
         &["succession_laws.partition.eligible", "E_NO_NEUTRAL"],
+    );
+}
+
+/// G4: a column of an owner without a spec is not in the environment.
+#[test]
+fn a_column_no_spec_owns_is_unknown() {
+    let law = "[succession_laws.partition]\ncandidates = 'children(holder)'\neligible   = 'person.alive(x) and x != holder and polity.exec_constraint(none) >= 0.0'";
+    let t = edit(&registry_text(), PARTITION_ELIGIBLE, law);
+    assert_refused(
+        &problems(&t),
+        &["succession_laws.partition.eligible", "E_UNKNOWN_NAME"],
+    );
+}
+
+/// G3: an event column is outside the environment, `event_ref` or listed as opaque.
+#[test]
+fn event_columns_are_unknown() {
+    for read in [
+        "claim.cause_event(none) == 0",
+        "opinion.source_event(none) == 0",
+    ] {
+        let law = format!(
+            "[succession_laws.partition]\ncandidates = 'children(holder)'\neligible   = 'person.alive(x) and x != holder and {read}'"
+        );
+        let t = edit(&registry_text(), PARTITION_ELIGIBLE, &law);
+        assert_refused(
+            &problems(&t),
+            &["succession_laws.partition.eligible", "E_UNKNOWN_NAME"],
+        );
+    }
+}
+
+/// G1 and G2: a refs entry must name a u64 spec column and a spec's entity; a key must be a
+/// reference column of its entity.
+#[test]
+fn refs_and_keys_are_checked() {
+    let base = registry_text();
+    let anchor = "\"person.mother\"         = \"person\"";
+    for (plant, needle) in [
+        (
+            "\"person.mother\"         = \"dragon\"",
+            "kind 'dragon' is not an entity of a spec",
+        ),
+        (
+            "\"person.mother\"         = \"person\"\n\"person.nosuch\" = \"person\"",
+            "effect_language.refs.person.nosuch: not a column of a spec",
+        ),
+        (
+            "\"person.mother\"         = \"person\"\n\"person.birth_tick\" = \"person\"",
+            "must be u64, not i64",
+        ),
+    ] {
+        let t = edit(&base, anchor, plant);
+        assert_refused(&problems(&t), &[needle]);
+    }
+    let t = edit(
+        &base,
+        "life_course = \"person_id\"",
+        "life_course = \"birth_tick\"",
+    );
+    assert_refused(
+        &problems(&t),
+        &["effect_language.keys.life_course", "not a reference column"],
     );
 }
 

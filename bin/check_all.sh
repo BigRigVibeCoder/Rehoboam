@@ -1323,7 +1323,7 @@ run "gen_sampler_reference positive control: stale reference must FAIL" "fail:ST
 run "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)" pass "$PY" -I bin/gen_fixed_vectors.py --check &&
 run "Golden cases: effect language v0 reference reproduces effect_language_golden_v0.toml (effect_ref --check; SPR-017)" "pass:EFFECT LANGUAGE v0.5.1: PASS" "$PY" -I specs/registry/effect_ref.py --check &&
 run "effect_ref positive control: one altered expected value must FAIL (SPR-017)" "fail:FAIL lit_true" effect_golden_control &&
-run "V-WC-10 effect language: the Rust evaluator reproduces every golden case in debug (rh-manifest effect_golden; SPR-017 T-05)" "pass:EFFECT LANGUAGE v0.5.1 (rust): PASS (575 cases)" cargo nextest run -p rh-manifest --locked --test effect_golden --no-capture &&
+run "V-WC-10 effect language: the Rust evaluator reproduces every golden case in debug (rh-manifest effect_golden; SPR-017 T-05)" "pass:EFFECT LANGUAGE v0.5.1 (rust): PASS (580 cases)" cargo nextest run -p rh-manifest --locked --test effect_golden --no-capture &&
 run "V-WC-10 positive control: the golden file with one expected value altered must FAIL the Rust test (SPR-017 T-05)" "fail:FAIL lit_true" effect_golden_rust_control &&
 run "Authored numbers: rh-manifest's exact-decimal vectors are the decimal reference's (gen_decimal_vectors --check; SPR-011 T-04)" pass "$PY" -I bin/gen_decimal_vectors.py --check &&
 run "gen_decimal_vectors positive control: one altered vector must FAIL (SPR-011 T-04)" "fail:STALE:" "$PY" -I bin/gen_decimal_vectors.py --check --output tests/lint_fixtures/golden/stale_decimal_vectors.txt &&
@@ -1452,7 +1452,7 @@ run "V-PERF-11 toolchain control: an allocation baseline from another rustc must
 run "V-PERF-11 positive control: a system that zero-fills a buffer in its tick (vec![0; n]) must FAIL (SPR-009 T-05)" "fail:OVER BUDGET threads 1 allocations" "$PY" -I bin/perf_gate.py alloc-gate --control --out artifacts/perf/allocations_control.txt &&
 # Golden runs (SPR-008)
 run "Rust: build rh-cli in release for the golden runs (SPR-008 T-02)" pass cargo build --release --locked --quiet -p rh-cli &&
-run "V-WC-10 effect language: the Rust evaluator reproduces every golden case in release (SPR-017 T-05)" "pass:EFFECT LANGUAGE v0.5.1 (rust): PASS (575 cases)" cargo nextest run -p rh-manifest --locked --release --test effect_golden --no-capture &&
+run "V-WC-10 effect language: the Rust evaluator reproduces every golden case in release (SPR-017 T-05)" "pass:EFFECT LANGUAGE v0.5.1 (rust): PASS (580 cases)" cargo nextest run -p rh-manifest --locked --release --test effect_golden --no-capture &&
 run "V-WC-10 effect language: twelve planted mutants each fail their sentinel cases with the predicted wrong value, and Mutant::None passes (SPR-017 T-05)" "pass:mutant PrefixLast: killed" cargo nextest run -p rh-manifest --locked --release --features mutant-effect --test effect_mutants --no-capture &&
 run "Golden run: smoke, 1,000 sim-years, yearly ladder, 1 thread, parallel levels at least 5% (SPR-008 T-02, DEF-2)" "pass:smoke: 1000 yearly rungs to year 1000 at 1 thread(s)" "$RH_CLI_RELEASE" run smoke --years 1000 --threads 1 --ladder yearly --require-parallel "$PARALLEL_FLOOR" --out "$GOLDEN/smoke_yearly_t1.ladder" &&
 run "Golden run: smoke, 1,000 sim-years, yearly ladder, N threads, parallel levels at least 5%, with the T-03 vitals observer attached (SPR-008 T-02, DEF-2; SPR-009 T-03)" "pass:smoke: 1000 yearly rungs to year 1000 at $GOLDEN_THREADS thread(s)" golden_vitals_run &&

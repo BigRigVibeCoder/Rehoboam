@@ -244,7 +244,7 @@ opinion_modifiers = { registry = "opinion_modifiers", default = "KIN_HARMED_BY" 
 overlays          = { registry = "overlays", default = "paranoia" }
 
 # The entity kind of each reference column a program reads (a u64 id column of the specs; §3.1, §7.4). An unlisted u64
-# column is an int. Proposed to the Architect (SPR-017 T-06, G1) in place of reading a kind from `meaning` text.
+# column is an int. A bridge (Architect, G1): the kinds move onto [[owns]] (`ref`) at the next EVO, and the table goes.
 [effect_language.refs]
 "person.mother"         = "person"
 "person.father"         = "person"
@@ -279,13 +279,9 @@ overlays          = { registry = "overlays", default = "paranoia" }
 "residence_interval.person_id" = "person"
 
 # A table whose rows are keyed by a column other than its id (§4.5, §5.3): the life-course log is read with a person.
+# A column is in the environment only when a spec owns it (G4): polity.exec_constraint waits for M6's spec.
 [effect_language.keys]
 life_course = "person_id"
-
-# Columns a system reads from an owner that has no spec yet, with their language type (proposed to the Architect, SPR-017
-# T-06 G4); an entry goes when the owner's spec lands. The neutral is the reader's [[reads]] entry's.
-[effect_language.foreign]
-"polity.exec_constraint" = { owner = "M6.polity", type = "q8_8" }
 
 # Event-id columns, which no program reads (§3.1: an event exists only as an event-typed command argument). Columns of
 # spec type event_ref are never readable; these are the u64 ones.

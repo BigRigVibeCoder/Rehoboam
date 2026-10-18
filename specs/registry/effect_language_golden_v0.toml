@@ -5774,6 +5774,30 @@ system = "M7.dynasty"
 text = 'q8(1) + 7 div 2'
 expect = "error:E_TYPE"
 [[case]]
+id = "mod_of_literals_beside_a_decimal_is_e_type"
+kind = "expr"
+system = "M7.dynasty"
+text = '0.5 + 7 mod 2'
+expect = "error:E_TYPE"
+[[case]]
+id = "mod_of_literals_under_a_decimal_difference_is_e_type"
+kind = "expr"
+system = "M7.dynasty"
+text = '0.001 - 7 mod 2'
+expect = "error:E_TYPE"
+[[case]]
+id = "mod_of_literals_before_a_decimal_is_e_type"
+kind = "expr"
+system = "M7.dynasty"
+text = '7 mod 2 + 0.5'
+expect = "error:E_TYPE"
+[[case]]
+id = "parenthesised_mod_times_a_decimal_is_e_type"
+kind = "expr"
+system = "M7.dynasty"
+text = '(7 mod 2) * 0.5'
+expect = "error:E_TYPE"
+[[case]]
 id = "mod_of_literals_alone_is_int"
 kind = "expr"
 system = "M7.dynasty"
@@ -5823,3 +5847,12 @@ system = "M7.dynasty"
 bind = { x = "person:7", holder = "person:10" }
 text = 'draw(sortition, x, holder) + draw(sortition, x, 10)'
 expect = "invariant:E_RNG_REUSE"
+# G3 (Architect, 2026-10-18): an event exists only as an event-typed command argument (§3.1); no event column is in the
+# environment, so a program's read of one is an unknown name.
+[[case]]
+id = "event_column_read_is_unknown"
+kind = "expr"
+system = "T1.minds"
+bind = { x = "person:9" }
+text = 'opinion.source_event(x)'
+expect = "error:E_UNKNOWN_NAME"
