@@ -630,3 +630,36 @@ fn an_outcome_command_whose_drain_does_not_follow_is_refused_at_the_merge() {
     );
     println!("probes: an outcome command is refused unless its drain follows in the instant");
 }
+
+/// The review's K10: registration fails closed on an `[[applies]]` entry, as `lint_odd.py` does: a
+/// key rule other than `living` or `any`, and a payload that does not parse, are refused by name.
+#[test]
+fn registration_refuses_an_unknown_key_and_a_malformed_payload() {
+    let refused = |edit: fn(&mut Stub)| {
+        let mut owner = Stub::new("B1.own")
+            .writes("own.n")
+            .at(Pulse::Day, Phase::Vital)
+            .applies("Req")
+            .stepping(own_step);
+        edit(&mut owner);
+        let stubs = vec![owner];
+        let specs = agreeing_specs(&stubs);
+        register(stubs.into_iter().map(Stub::boxed).collect(), &specs)
+            .err()
+            .expect("refused")
+            .to_string()
+    };
+    let key = refused(|s| "maybe".clone_into(&mut s.apply_specs[0].key));
+    assert!(
+        key.contains("VIOLATION [spec] B1.own: command Req's key is maybe, not living or any"),
+        "{key}"
+    );
+    let payload =
+        refused(|s| s.apply_specs[0].payload_malformed = Some("victim PersonId".to_owned()));
+    assert!(
+        payload.contains(
+            "VIOLATION [spec] B1.own: command Req's payload \"victim PersonId\" does not parse"
+        ),
+        "{payload}"
+    );
+}

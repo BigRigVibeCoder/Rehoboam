@@ -399,10 +399,11 @@ impl SystemSpec {
                     .and_then(|n| match columns.get(&r.column) {
                         Some(o) => n.typed(&o.ty, o.values.as_deref()),
                         // An owner with no spec yet (M6's era state): the literal is typed by itself;
-                        // a zero is zero in every type, and anything else is left untyped.
+                        // a zero is zero in every type, and anything else is left untyped (a
+                        // non-zero integer might be a q8_8 or q16_16 value; the review's K11).
                         None => match n {
                             Literal::Bool(b) => Some(i64::from(*b)),
-                            Literal::Int(i) => Some(*i),
+                            Literal::Int(0) => Some(0),
                             Literal::Decimal(d)
                                 if d.bytes().filter(u8::is_ascii_digit).all(|b| b == b'0') =>
                             {
@@ -432,6 +433,11 @@ fn spec_apply(a: &DeclaredApply) -> SpecApply {
         key_field: a.key_field.clone().unwrap_or_else(|| "person".to_owned()),
         payload: a.payload.as_deref().and_then(payload_types),
         outcome: a.outcome.unwrap_or(false),
+        payload_malformed: a
+            .payload
+            .as_ref()
+            .filter(|t| payload_types(t).is_none())
+            .cloned(),
     }
 }
 

@@ -272,6 +272,9 @@ pub struct SpecApply {
     pub payload: Option<Vec<(String, String)>>,
     /// `outcome`: the command carries a sampled outcome (EVO-001 R9).
     pub outcome: bool,
+    /// The payload as written when it does not parse as `"{ name: Type, ... }"`: registration
+    /// refuses it by name rather than treat the command as untyped (the review's K10).
+    pub payload_malformed: Option<String>,
 }
 
 /// How one `[[reads]]` entry uses its column (EVO-001 R4, R12): an identity read requires its

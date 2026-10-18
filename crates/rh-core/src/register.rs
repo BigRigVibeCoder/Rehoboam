@@ -754,11 +754,33 @@ fn typed(
     owner: &str,
     violations: &mut Vec<Violation>,
 ) -> CommandDecl {
-    decl.key = if s.key == "living" {
-        KeyRule::Living
-    } else {
-        KeyRule::Any
+    // Fail closed, as lint_odd.py does (the review's K10): an unknown key rule or a payload that
+    // does not parse is refused by name, never read as `any` or as untyped.
+    decl.key = match s.key.as_str() {
+        "living" => KeyRule::Living,
+        "any" => KeyRule::Any,
+        other => {
+            violations.push(violation(
+                owner,
+                "spec",
+                format!(
+                    "command {}'s key is {other}, not living or any (EVO-001)",
+                    s.command
+                ),
+            ));
+            KeyRule::Any
+        }
     };
+    if let Some(text) = &s.payload_malformed {
+        violations.push(violation(
+            owner,
+            "spec",
+            format!(
+                "command {}'s payload {text:?} does not parse as {{ name: Type, ... }} (EVO-001)",
+                s.command
+            ),
+        ));
+    }
     decl.outcome = s.outcome;
     if let Some(fields) = &s.payload {
         let mut typed = Vec::with_capacity(fields.len());
