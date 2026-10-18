@@ -235,3 +235,116 @@ instant day 0 t=0 pulses=Year,Month,Day
   outcome complete (expected complete)
   thread invariance: 0 permuted orders, every transcript equal
   named at the end: [1, 2] (expected [1, 2])
+
+scenario year_start_dead_holder: a year start (T-00b: K12 with Q6): P3, holder of T707 and of T303 in demesne, and P6, a named adult who meets no criterion, die in Vital; the Year pass still sees P3 holding both, grants T303 to no one, keeps P5 (within the degrees of P3) named, sends nothing about P3 or P6 and demotes P7; on_death then seats P4 in T707, and T303 reverts to him; T1 applies the Demote at Agenda
+  system M2.demography binds Day/Vital after [] observes []
+  system M7.dynasty binds Day/Vital,Year/Polity,Day/Polity after ['M2.demography'] observes ['DEATH']
+  system T1.minds binds Day/Agenda after [] observes ['DEATH', 'MARRIAGE']
+instant day 360 t=518400 pulses=Year,Month,Day
+  view m0 Vital/timers L0 M2.demography:timers: (a)=[] (b)=[]
+  merge m0 Vital/timers L0 M2.demography:timers: events DEATH:P3#0 DEATH:P6#1; +(b) [3, 6]
+  view m1 Vital/bindings L0 M2.demography:Day: (a)=[] (b)=[3, 6]
+  merge m1 Vital/bindings L0 M2.demography:Day: nothing
+  view m2 Vital/bindings L1 M7.dynasty:Day: (a)=[] (b)=[3, 6] (c)DEATH=[P3#0 P6#1]
+  merge m2 Vital/bindings L1 M7.dynasty:Day: nothing
+  view m3 Polity/bindings L0 M7.dynasty:Year: (a)=[] (b)=[3, 6] (c)DEATH=[P3#0 P6#1]
+    K12: T303 is still held by P3, dead this instant, for this Year pass; on_death arbitrates it in Day/Polity, the next merge
+    K12: T707 is still held by P3, dead this instant, for this Year pass; on_death arbitrates it in Day/Polity, the next merge
+    regrant: T303 held in demesne by P3: not granted in this pass, since P3 died this instant (a person in exited() is neither granter nor grantee, Q6); on_death arbitrates it
+    dormancy P3: in exited(), dead this instant: neither Promoted nor Demoted
+    dormancy P4: first in T707's line, criterion (d): stays named
+    dormancy P5: within dormancy_degrees of P3, who still holds for this pass (K12): (c): stays named
+    dormancy P6: in exited(), dead this instant: neither Promoted nor Demoted
+    dormancy P7: meets no criterion: Demote
+  merge m3 Polity/bindings L0 M7.dynasty:Year: commands 1
+  view m4 Polity/bindings L1 M7.dynasty:Day: (a)=[] (b)=[3, 6] (c)DEATH=[P3#0 P6#1]
+  resolve m4 M7.dynasty:Day same_instant(DEATH, P3) -> #0
+  resolve m4 M7.dynasty:Day same_instant(DEATH, P3) -> #0
+  merge m4 Polity/bindings L1 M7.dynasty:Day: events SUCCEED:P3#2(unobserved) SUCCEED:P3#3(unobserved)
+  view m5 Agenda/bindings L0 T1.minds:Day: (a)=[] (b)=[3, 6] (c)DEATH=[P3#0 P6#1] (c)MARRIAGE=[]
+    apply Demote P7: person.named := 0
+  merge m5 Agenda/bindings L0 T1.minds:Day: taken 1; named P7:0
+  compaction: rows [3, 6] leave the ledger; the log keeps their entries
+  end: log (a)=[] (b)=[3, 6] (c)=[DEATH:P3#0 DEATH:P6#1]
+  end: state_hash 3d6afa8ff52a0951; the log is cleared
+  outcome complete (expected complete)
+  thread invariance: 0 permuted orders, every transcript equal
+  named at the end: [4, 5] (expected [4, 5])
+
+scenario vocation_majority_day: T-00b: K19 with X13h and Q6: P21 to P24, later children of P10, reach majority at day 5; in its Vital P22 marries P50, P23 dies and P30 is born to P11 and P10; in Polity's timer pass, before every binding, their VOCATION_DUE timers fire and only P21 draws (P22 is married at the fire, P23 in exited(), P24 second in a line); on_birth schedules P30's at its majority date; the Year pass of day 360 draws nothing
+  system M2.demography binds Day/Vital after [] observes []
+  system M7.dynasty binds Day/Vital,Year/Polity,Day/Polity after ['M2.demography'] observes ['DEATH']
+instant day 5 t=7200 pulses=Day
+  view m0 Vital/timers L0 M2.demography:timers: (a)=[] (b)=[]
+  merge m0 Vital/timers L0 M2.demography:timers: events BIRTH:P30#0(unobserved) MARRIAGE:P22#1(unobserved) DEATH:P23#2; +(a) [30]; +(b) [23]; married P50+P22
+  view m1 Vital/bindings L0 M2.demography:Day: (a)=[30] (b)=[23]
+  merge m1 Vital/bindings L0 M2.demography:Day: nothing
+  view m2 Vital/bindings L1 M7.dynasty:Day: (a)=[30] (b)=[23] (c)DEATH=[P23#2]
+  merge m2 Vital/bindings L1 M7.dynasty:Day: nothing
+  view m3 Polity/timers L0 M7.dynasty:timers: (a)=[30] (b)=[23] (c)DEATH=[P23#2] children(P10)=[20, 21, 22, 23, 24, 30] children(P10)=[20, 21, 22, 23, 24, 30] children(P10)=[20, 21, 22, 23, 24, 30]
+    VOCATION_DUE about P21 (its majority date, Polity's timer pass): a later child (P20 alive), not first or second in a line, holding nothing, unmarried: draws holy_orders
+    VOCATION_DUE about P22 (its majority date, Polity's timer pass): married at the fire (person.spouse = P50, read at same_instant): draws nothing (X13h)
+    VOCATION_DUE about P23 (its majority date, Polity's timer pass): in exited(), dead this instant: drop_timer(dead) (Q6)
+    VOCATION_DUE about P24 (its majority date, Polity's timer pass): second in a title's line: draws nothing
+  merge m3 Polity/timers L0 M7.dynasty:timers: vocation P21:holy_orders
+  view m4 Polity/bindings L0 M7.dynasty:Day: (a)=[30] (b)=[23] (c)DEATH=[P23#2] children(P10)=[20, 21, 22, 23, 24, 30]
+    on_birth P30: a member (its father P10's house): VOCATION_DUE at day 5765, Polity, its majority date (K19)
+  merge m4 Polity/bindings L0 M7.dynasty:Day: timers 1
+  compaction: rows [23] leave the ledger; the log keeps their entries
+  end: log (a)=[30] (b)=[23] (c)=[DEATH:P23#2]
+  end: state_hash 2c7fc9ead57cd55d; the log is cleared
+instant day 360 t=518400 pulses=Year,Month,Day
+  view m0 Vital/bindings L0 M2.demography:Day: (a)=[] (b)=[]
+  merge m0 Vital/bindings L0 M2.demography:Day: nothing
+  view m1 Vital/bindings L1 M7.dynasty:Day: (a)=[] (b)=[] (c)DEATH=[]
+  merge m1 Vital/bindings L1 M7.dynasty:Day: nothing
+  view m2 Polity/bindings L0 M7.dynasty:Year: (a)=[] (b)=[] (c)DEATH=[]
+  merge m2 Polity/bindings L0 M7.dynasty:Year: nothing
+  view m3 Polity/bindings L1 M7.dynasty:Day: (a)=[] (b)=[] (c)DEATH=[]
+  merge m3 Polity/bindings L1 M7.dynasty:Day: nothing
+  end: log (a)=[] (b)=[] (c)=[]
+  end: state_hash 2c7fc9ead57cd55d; the log is cleared
+  outcome complete (expected complete)
+  thread invariance: 0 permuted orders, every transcript equal
+
+scenario regency_genesis_minor: T-00b: F-10 and MIN-10: at tick 0 the world-start pass names P41 regent of T707 for the minor P40 (REGENCY_BEGUN with no edge) and schedules his REGENCY_END and VOCATION_DUE at his majority date, day 9; a material input about P40 at day 3 re-draws M2's death timer and keeps both of M7's (no draw); at day 9 REGENCY_END fires in Polity's timer pass (REGENCY_ENDED), and P40 draws no vocation
+  system M2.demography binds Day/Vital after [] observes []
+  system M7.dynasty binds Day/Vital,Year/Polity,Day/Polity after ['M2.demography'] observes ['DEATH']
+instant day 0 t=0 pulses=Year,Month,Day
+  view m0 Vital/bindings L0 M2.demography:Day: (a)=[] (b)=[]
+  merge m0 Vital/bindings L0 M2.demography:Day: nothing
+  view m1 Vital/bindings L1 M7.dynasty:Day: (a)=[] (b)=[] (c)DEATH=[]
+  merge m1 Vital/bindings L1 M7.dynasty:Day: nothing
+  view m2 Polity/bindings L0 M7.dynasty:Year: (a)=[] (b)=[] (c)DEATH=[]
+    regency T707 (the world-start pass, F-10): P40 is a minor, P41 regent by rule: REGENCY_BEGUN with no edge; REGENCY_END at day 9, Polity
+    vocation (the world-start pass, K19): P40, a member under majority: VOCATION_DUE at day 9, Polity
+  merge m2 Polity/bindings L0 M7.dynasty:Year: events REGENCY_BEGUN:P40#0(unobserved); timers 2
+  view m3 Polity/bindings L1 M7.dynasty:Day: (a)=[] (b)=[] (c)DEATH=[]
+  merge m3 Polity/bindings L1 M7.dynasty:Day: nothing
+  end: log (a)=[] (b)=[] (c)=[]
+  end: state_hash 58db85c7855366ab; the log is cleared
+instant day 3 t=4320 pulses=Day
+  inputs: a material input about P40, epoch 1; resample_timer M7.dynasty:REGENCY_END@9/Polity under regency_end (not drawn: its own tick) -> 9; M7.dynasty:VOCATION_DUE@9/Polity under vocation (not drawn: its own tick) -> 9; M2.demography:DEATH_TIMER@30/Vital under death_time (drawn: re-drawn) -> 33
+  view m0 Vital/bindings L0 M2.demography:Day: (a)=[] (b)=[]
+  merge m0 Vital/bindings L0 M2.demography:Day: nothing
+  view m1 Vital/bindings L1 M7.dynasty:Day: (a)=[] (b)=[] (c)DEATH=[]
+  merge m1 Vital/bindings L1 M7.dynasty:Day: nothing
+  view m2 Polity/bindings L0 M7.dynasty:Day: (a)=[] (b)=[] (c)DEATH=[]
+  merge m2 Polity/bindings L0 M7.dynasty:Day: nothing
+  end: log (a)=[] (b)=[] (c)=[]
+  end: state_hash 176fafa086538aab; the log is cleared
+instant day 9 t=12960 pulses=Day
+  view m0 Vital/bindings L0 M2.demography:Day: (a)=[] (b)=[]
+  merge m0 Vital/bindings L0 M2.demography:Day: nothing
+  view m1 Vital/bindings L1 M7.dynasty:Day: (a)=[] (b)=[] (c)DEATH=[]
+  merge m1 Vital/bindings L1 M7.dynasty:Day: nothing
+  view m2 Polity/timers L0 M7.dynasty:timers: (a)=[] (b)=[] (c)DEATH=[]
+    REGENCY_END about P40 (its majority date, Polity's timer pass): P41 stands down: REGENCY_ENDED with no edge; T707 regent := 0
+    VOCATION_DUE about P40 (its majority date, Polity's timer pass): no father in the life-course log: no elder sibling, exempt
+  merge m2 Polity/timers L0 M7.dynasty:timers: events REGENCY_ENDED:P40#1(unobserved)
+  view m3 Polity/bindings L0 M7.dynasty:Day: (a)=[] (b)=[] (c)DEATH=[]
+  merge m3 Polity/bindings L0 M7.dynasty:Day: nothing
+  end: log (a)=[] (b)=[] (c)=[]
+  end: state_hash b639b664a3e91b15; the log is cleared
+  outcome complete (expected complete)
+  thread invariance: 0 permuted orders, every transcript equal

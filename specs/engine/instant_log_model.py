@@ -48,7 +48,19 @@ records (each job's buffers), never from the log:
 10. EXPECT: each scenario completes, or is refused where and why its script says, and its
     transcript shows what its script says it must (the Year pass sees the pre-death holder, K12);
 11. NAMED: where a scenario names its expected named set (M7's world-start pass, X4), the run ends
-    with it: a member of the manifest's cast who meets no other criterion stays named.
+    with it: a member of the manifest's cast who meets no other criterion stays named;
+12. YEAR PASS (K12; T-00b): at a year's first instant the Year pass sees a holder who died in the
+    instant's Vital still holding his titles, and on_death's SUCCEED for them merges after it;
+13. SKIP (Q6 of T-00a's review; T-00b): M7 sends no Promote or Demote for a person in exited(),
+    grants no seat on behalf of or to one, and draws no vocation for one;
+14. VOCATION (K19 with X13h; T-00b): a vocation is written only at its person's majority date, in
+    Polity's timer pass (the VOCATION_DUE fire, which on_birth schedules at the majority date), and
+    never for a person married at the fire;
+15. RESAMPLE (MIN-10 of T-00a's review; T-00b): at a material input's re-sample a timer whose time
+    is not drawn (REGENCY_END under regency_end, VOCATION_DUE under vocation) keeps its tick.
+
+The checks 12 to 15 are about the order M7 0.6.0's T-00b rules rest on, not about M7's rules: the
+stand-in steps read their outcomes (heirs, regents, draws, the barred) from the script.
 
 The run also writes vectors, ``specs/engine/golden/instant_log_vectors_v0.json``: per scenario
 its systems (bindings, same-instant edges, observed kinds), its world at creation, every job with
@@ -76,7 +88,12 @@ hash-includes-log (HASH), genealogy-late (the index kept only at the
 instant's end: GENEALOGY), late-watermark (the merge-time form resolved against the log as it stands
 at the job's own merge, so an earlier job of its level in canonical order is visible to it:
 VISIBILITY, and the same-level refusal is lost: EXPECT), cast-demoted (M7's naming criteria without
-the manifest's cast, so tick 0's pass demotes a cast member: NAMED).
+the manifest's cast, so tick 0's pass demotes a cast member: NAMED), day-before-year (a level's Day
+binding before its Year binding, so on_death arbitrates before the Year pass: YEAR PASS),
+exited-not-skipped (M7's Year pass and vocation fire treat a person dead this instant as any other:
+SKIP), vocation-yearly (the vocation drawn at the Year pass after the majority date, not by the
+timer: VOCATION), married-draws (the vocation fire ignores person.spouse: VOCATION), regency-redrawn
+(M7's re-sample moves REGENCY_END as if its date were drawn: RESAMPLE).
 Exit:   0 ok, 1 stale golden file, 2 the self-test failed or a control went undetected.
 Standard library only (GOV-003 §3).
 """
@@ -116,6 +133,7 @@ PHASES = (
     "Culture",
     "Bookkeeping",
 )
+INPUTS = "Inputs"
 VITAL = "Vital"
 POLITY = "Polity"
 AGENDA = "Agenda"
@@ -126,6 +144,8 @@ PULSE_RANK = {"Year": 0, "Season": 1, "Month": 2, "Day": 3, "Hour": 4}
 DAYS_PER_MONTH = 30
 DAYS_PER_YEAR = 360
 MINUTES_PER_DAY = 1440
+# majority_age 16 (twin_vales, kingdom_10k and manor) on this calendar
+MAJORITY_DAYS = 16 * DAYS_PER_YEAR
 # Entity kinds in rh_ids tag order (a title is F-4's proposed tag 6; a house is a model label).
 KIND_RANK = {"P": 1, "T": 6, "H": 7}
 NONE = -1
@@ -143,6 +163,11 @@ HASH_INCLUDES_LOG = "hash-includes-log"
 GENEALOGY_LATE = "genealogy-late"
 LATE_WATERMARK = "late-watermark"
 CAST_DEMOTED = "cast-demoted"
+DAY_BEFORE_YEAR = "day-before-year"
+EXITED_NOT_SKIPPED = "exited-not-skipped"
+VOCATION_YEARLY = "vocation-yearly"
+MARRIED_DRAWS = "married-draws"
+REGENCY_REDRAWN = "regency-redrawn"
 CONTROLS = (
     PEER_VISIBLE,
     UNSORTED_INSERTED,
@@ -152,6 +177,11 @@ CONTROLS = (
     GENEALOGY_LATE,
     LATE_WATERMARK,
     CAST_DEMOTED,
+    DAY_BEFORE_YEAR,
+    EXITED_NOT_SKIPPED,
+    VOCATION_YEARLY,
+    MARRIED_DRAWS,
+    REGENCY_REDRAWN,
 )
 
 M2 = "M2.demography"
@@ -166,6 +196,23 @@ DEATH = "DEATH"
 BIRTH = "BIRTH"
 MARRIAGE = "MARRIAGE"
 X_MARK = "X_MARK"
+REGENCY_END = "REGENCY_END"
+VOCATION_DUE = "VOCATION_DUE"
+# The [[rng]] purpose each timer kind is filed under, which names its re-sample rule (05.1 §2
+# rule 2): a time that is not drawn re-samples to its own tick; a drawn time is re-drawn, except one
+# that decided an outcome already emitted (the interregnum's resolution), which keeps its tick.
+PURPOSE = {
+    (M2, "DEATH_TIMER"): "death_time",
+    (M2, "BIRTH_TIMER"): "conception",
+    (M2, "MARRY_TIMER"): "marriage_time",
+    (M7, "MURDER_DUE"): "exit_murder",
+    (M7, "RESOLVE"): "interregnum_delay",
+    (M7, REGENCY_END): "regency_end",
+    (M7, VOCATION_DUE): "vocation",
+    (T1, "BREAK"): "break_delay",
+}
+NOT_DRAWN = frozenset({"regency_end", "vocation", "outcome_delay"})
+KEPT = frozenset({"interregnum_delay"})
 
 Ref = tuple[str, int]
 # (c): kind, target, actor, EventId, merge index. The model's cast is the target and the actor roles
@@ -182,6 +229,11 @@ def ref_text(ref: Ref | None) -> str:
 def person(pid: int) -> Ref:
     """The person ``pid`` as an entity reference."""
     return ("P", pid)
+
+
+def ref_id(ref: Ref | None) -> int:
+    """An entity's id, 0 for none."""
+    return 0 if ref is None else ref[1]
 
 
 # ----------------------------------------------------------------------------- slots and buffers
@@ -305,6 +357,15 @@ class Title:
     resolve_to: int = 0
     state: int = HELD
     predecessor: int = 0
+    regent: int = 0
+
+    def text(self) -> str:
+        """The row in plane A's canonical text.
+
+        The regent only when there is one, so a scenario without regencies keeps its hashes.
+        """
+        regent = f",r{self.regent}" if self.regent else ""
+        return f"{self.tier},{self.liege},{self.holder},{self.state},{self.predecessor}{regent}"
 
 
 @dataclass
@@ -320,6 +381,8 @@ class Outbox:
     titles: dict[int, Title] = field(default_factory=dict)
     houses: list[int] = field(default_factory=list)
     named: dict[int, int] = field(default_factory=dict)
+    spouses: list[tuple[int, int]] = field(default_factory=list)
+    vocations: dict[int, str] = field(default_factory=dict)
 
 
 # ----------------------------------------------------------------------------- plane-A state
@@ -342,6 +405,9 @@ class World:
     next_event: int = 0
     next_seq: int = 0
     named: dict[int, int] = field(default_factory=dict)  # T1's person.named, 1 or 0
+    spouse: dict[int, int] | None = None  # M2's person.spouse, where a scenario tracks it (T-00b)
+    vocation: dict[int, str] = field(default_factory=dict)  # M7's person.vocation, once drawn
+    epochs: dict[int, int] = field(default_factory=dict)  # each person's re-sample epoch (ADR-0025)
 
     def copy(self) -> World:
         """A keyframe: an independent copy (every element is immutable)."""
@@ -356,6 +422,9 @@ class World:
             self.next_event,
             self.next_seq,
             dict(self.named),
+            None if self.spouse is None else dict(self.spouse),
+            dict(self.vocation),
+            dict(self.epochs),
         )
 
     def seed(self, owner: str, draft: TimerDraft) -> World:
@@ -389,14 +458,12 @@ def event_text(e: Event) -> str:
 def plane_a_text(world: World) -> str:
     """Plane A's canonical text.
 
-    Ledger, life-course log, titles, houses, events, agenda, queue, counters, and T1's named column
-    when a scenario has one (a line only then, so the other scenarios' hashes do not move). It reads
-    no instant log and no genealogy index.
+    Ledger, life-course log, titles, houses, events, agenda, queue, counters, and T1's named column,
+    M2's spouse column, M7's vocation column and the epochs when a scenario has them (a line only
+    then, so the other scenarios' hashes do not move). It reads no instant log and no genealogy
+    index.
     """
-    titles = " ".join(
-        f"T{t}:{x.tier},{x.liege},{x.holder},{x.state},{x.predecessor}"
-        for t, x in sorted(world.titles.items())
-    )
+    titles = " ".join(f"T{t}:{x.text()}" for t, x in sorted(world.titles.items()))
     agenda = " ".join(
         f"{x.day}/{x.phase}/{ref_text(x.entity)}/{x.seq}/{x.owner}/{x.kind}/{x.payload}/{x.cause}"
         for x in sorted(world.agenda, key=Timer.key)
@@ -406,6 +473,12 @@ def plane_a_text(world: World) -> str:
         if world.named
         else []
     )
+    if world.spouse is not None:
+        named.append("spouse " + " ".join(f"{p}:{s}" for p, s in sorted(world.spouse.items())))
+    if world.vocation:
+        named.append("vocation " + " ".join(f"{p}:{v}" for p, v in sorted(world.vocation.items())))
+    if world.epochs:
+        named.append("epochs " + " ".join(f"P{p}:{e}" for p, e in sorted(world.epochs.items())))
     return "\n".join(
         [
             *named,
@@ -571,6 +644,15 @@ class Script:
     criteria: tuple[tuple[int, str], ...] = ()
     late_births: tuple[tuple[int, int, int], ...] = ()  # (child, mother, father) at M2's drain
     kin_probe: tuple[int, ...] = ()  # the persons whose children M7's Day/Polity reads each instant
+    # T-00b: the facts M7's regency, regrant and vocation stand-ins read (outcomes, never computed)
+    majority_timers: bool = False  # on_birth schedules a newborn member's VOCATION_DUE (K19)
+    born: tuple[tuple[int, int], ...] = ()  # (person, birth day) of persons alive at creation
+    minors: tuple[int, ...] = ()  # holders under majority_age at tick 0
+    regents: tuple[tuple[int, int], ...] = ()  # (title, the regent the rule names)
+    regrants: tuple[tuple[int, int], ...] = ()  # (title held in demesne, its best candidate)
+    barred: tuple[tuple[int, str], ...] = ()  # (person, why it is no vocation candidate)
+    draws: tuple[tuple[int, str], ...] = ()  # (person, the vocation its draw gives if it draws)
+    redraws: tuple[tuple[str, int, int], ...] = ()  # (timer kind, person, day) of a drawn re-sample
 
 
 @dataclass(frozen=True)
@@ -592,6 +674,9 @@ class Scenario:
     readers: tuple[str, ...] = ()
     expect_named: tuple[int, ...] | None = None
     expect_seen: tuple[str, ...] = ()
+    # (day, person): a material input in the person's scope, applied in that instant's Inputs
+    inputs: tuple[tuple[int, int], ...] = ()
+    expect_vocations: tuple[tuple[int, str], ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -686,6 +771,26 @@ class JobMerge:
     killed: tuple[int, ...]
     events: tuple[tuple[str, Ref | None, int], ...]
     rows: tuple[tuple[int, int, int], ...]
+    where: str = ""
+    sent: tuple[tuple[str, int], ...] = ()  # (command kind, its person)
+    granted: tuple[tuple[int, int, int], ...] = ()  # SEAT_GRANTED: (title, granter, grantee)
+    vocations: tuple[tuple[int, str], ...] = ()
+    marriages: tuple[tuple[int, int], ...] = ()
+    timers: tuple[tuple[int, str, Ref, str], ...] = ()  # (day, phase, entity, kind)
+    succeeded: tuple[tuple[int, int], ...] = ()  # SUCCEED: (title, the predecessor)
+
+
+@dataclass(frozen=True)
+class Resample:
+    """One timer re-sampled at a material input (ADR-0025 item 3), as the engine applied it."""
+
+    day: int
+    owner: str
+    kind: str
+    pid: int
+    purpose: str
+    old: int
+    new: int
 
 
 @dataclass(frozen=True)
@@ -719,6 +824,10 @@ class Run:
     scans: dict[int, list[int]] = field(default_factory=dict)
     jobs: list[dict[str, object]] = field(default_factory=list)
     instants: list[dict[str, object]] = field(default_factory=list)
+    # (day, merge, title, holder): each title's holder as M7's Year pass saw it (K12's oracle input)
+    year_holders: list[tuple[int, int, int, int]] = field(default_factory=list)
+    resamples: list[Resample] = field(default_factory=list)
+    born: dict[int, int] = field(default_factory=dict)  # each dated person's birth day
 
     def outcome(self) -> str:
         """``complete``, or ``refused:<reason>``."""
@@ -823,6 +932,26 @@ class Ctx:
         """The living ledger rows as this job's level started, ascending."""
         return sorted(p for p, alive in self.engine.world.ledger.items() if alive == 1)
 
+    def rows(self) -> list[int]:
+        """Every ledger row as this job's level started, ascending.
+
+        The dead of this instant too: their rows stay until Bookkeeping's compaction (SPR-011
+        ruling 5).
+        """
+        return sorted(self.engine.world.ledger)
+
+    def spouse(self, pid: int) -> int:
+        """M2's ``person.spouse`` at ``same_instant``: what M2 merged before this job's level."""
+        return (self.engine.world.spouse or {}).get(pid, 0)
+
+    def majority_day(self, pid: int) -> int:
+        """The day start of ``pid``'s majority date: its birth day plus majority_age's 16 years."""
+        return self.engine.birth_day(pid) + MAJORITY_DAYS
+
+    def members(self) -> list[int]:
+        """Every great-house member (M7's house_member rows), ascending."""
+        return sorted({p for _, (m, _) in self.engine.world.houses.items() for p in m})
+
     def is_named(self, pid: int) -> bool:
         """T1's ``person.named`` as M7 reads it (lagged: as the instant started)."""
         return self.engine.world.named.get(pid, 0) == 1
@@ -882,6 +1011,15 @@ class Ctx:
         """Mark M7's house extinct."""
         self.out.houses.append(hid)
 
+    def marry(self, husband: int, wife: int) -> None:
+        """M2 writes its own ``person.spouse`` both ways (``apply_marry``), where it is tracked."""
+        if self.engine.world.spouse is not None:
+            self.out.spouses.append((husband, wife))
+
+    def write_vocation(self, pid: int, vocation: str) -> None:
+        """M7 writes its own ``person.vocation``."""
+        self.out.vocations[pid] = vocation
+
     def record(self, where: str) -> ViewRecord:
         """What this job saw."""
         return ViewRecord(
@@ -921,6 +1059,15 @@ class Engine:
         self.day = 0
         self.merge = 0
         self.levels = {ph: binding_levels(scenario.systems, ph) for ph in PHASES}
+        # birth_tick, which the model keeps beside its plane-A text: scripted for the persons alive
+        # at creation, the insert's day for a newborn
+        self.born = dict(scenario.script.born)
+
+    def birth_day(self, pid: int) -> int:
+        """``pid``'s birth day (``birth_tick`` in days)."""
+        if pid not in self.born:
+            raise RefusedError("script", f"no birth day for P{pid} (Script.born)")
+        return self.born[pid]
 
     def line(self, text: str) -> None:
         """Append a transcript line for the current instant."""
@@ -940,6 +1087,8 @@ class Engine:
         for phase in PHASES:
             if phase == BOOKKEEPING:
                 self.compact()
+            if phase == INPUTS:
+                self.apply_inputs()
             for i, jobs in enumerate(self.timer_levels(phase)):
                 self.run_level(LevelKey(day, phase, TIMERS, i), jobs)
             for i, jobs in enumerate(self.binding_jobs(phase, fired)):
@@ -964,14 +1113,61 @@ class Engine:
             by_level.setdefault(min(mine), []).append(job)
         return [by_level[k] for k in sorted(by_level)]
 
+    def apply_inputs(self) -> None:
+        """The Inputs phase: each material input of this instant re-samples its person's timers.
+
+        Each timer is re-sampled through its owner's resample_timer under the purpose it is filed
+        under (05.1 §2 rule 2; ADR-0025 item 3), and the person's epoch is bumped. A time that is
+        not drawn keeps its tick, as does a drawn one that decided an outcome already emitted; a
+        drawn time moves to the day the script gives its re-draw. Under the regency-redrawn
+        control M7 moves REGENCY_END as if its date were drawn.
+        """
+        for day, pid in self.scenario.inputs:
+            if day != self.day:
+                continue
+            epoch = self.world.epochs.get(pid, 0) + 1
+            self.world.epochs[pid] = epoch
+            parts = []
+            mine = sorted((t for t in self.world.agenda if t.entity == person(pid)), key=Timer.key)
+            redraws = {(k, p): d for k, p, d in self.scenario.script.redraws}
+            for timer in mine:
+                purpose = PURPOSE[(timer.owner, timer.kind)]
+                if timer.kind == REGENCY_END and REGENCY_REDRAWN in self.flags:
+                    new, rule = timer.day + 3, "planted re-draw"
+                elif purpose in NOT_DRAWN:
+                    new, rule = timer.day, "not drawn: its own tick"
+                elif purpose in KEPT:
+                    new, rule = timer.day, "kept: its outcome is emitted"
+                else:
+                    new, rule = redraws[(timer.kind, pid)], "drawn: re-drawn"
+                self.world.agenda = [
+                    replace(t, day=new) if t == timer else t for t in self.world.agenda
+                ]
+                self.run.resamples.append(
+                    Resample(day, timer.owner, timer.kind, pid, purpose, timer.day, new)
+                )
+                parts.append(
+                    f"{timer.owner}:{timer.kind}@{timer.day}/{timer.phase} under {purpose} "
+                    f"({rule}) -> {new}"
+                )
+            self.line(
+                f"  inputs: a material input about P{pid}, epoch {epoch}; resample_timer "
+                + ("; ".join(parts) or "nothing pending")
+            )
+
     def binding_jobs(self, phase: str, fired: tuple[str, ...]) -> list[list[Job]]:
-        """The binding pass: the firing bindings by level, coarser pulse first, then system id."""
+        """The binding pass: the firing bindings by level, coarser pulse first, then system id.
+
+        Under the day-before-year control a level's finer pulse runs first, so a system's Day
+        binding precedes its Year binding at a year's first instant.
+        """
         by_level: dict[int, list[Job]] = {}
         for (sid, pulse), lv in self.levels[phase].items():
             if pulse in fired:
                 by_level.setdefault(lv, []).append(Job(sid, pulse, phase))
+        sign = -1 if DAY_BEFORE_YEAR in self.flags else 1
         groups = [
-            sorted(by_level[k], key=lambda j: (PULSE_RANK[j.pulse], j.sid))
+            sorted(by_level[k], key=lambda j: (sign * PULSE_RANK[j.pulse], j.sid))
             for k in sorted(by_level)
         ]
         return split_levels(groups)
@@ -1036,6 +1232,12 @@ class Engine:
         removed = sorted(p for p, alive in self.world.ledger.items() if alive == 0)
         for p in removed:
             del self.world.ledger[p]
+            # the person.* columns of the other owners go with the row (T1's named, M2's spouse,
+            # M7's vocation); M2's apply_death cleared the living spouse's (H4)
+            self.world.named.pop(p, None)
+            self.world.vocation.pop(p, None)
+            if self.world.spouse is not None:
+                self.world.spouse.pop(p, None)
         if removed:
             self.line(f"  compaction: rows {removed} leave the ledger; the log keeps their entries")
 
@@ -1096,6 +1298,11 @@ class Engine:
             self.world.next_seq += 1
         self.world.titles.update(out.titles)
         self.world.named.update(out.named)
+        if self.world.spouse is not None:
+            for husband, wife in out.spouses:
+                self.world.spouse[husband] = wife
+                self.world.spouse[wife] = husband
+        self.world.vocation.update(out.vocations)
         for hid in out.houses:
             self.world.houses[hid] = (self.world.houses[hid][0], True)
         for pid in out.kills:
@@ -1173,6 +1380,7 @@ class Engine:
             )
         self.world.ledger[pid] = 1
         self.world.life_course.append((pid, mother, father))
+        self.born[pid] = self.day
         self.log.add_inserted(pid, ctx.merge, sort=UNSORTED_INSERTED not in self.flags)
 
     def record_merge(self, ctx: Ctx, where: str, assigned: list[int], exits: list[int]) -> None:
@@ -1197,6 +1405,17 @@ class Engine:
                 tuple(sorted(set(out.kills))),
                 events,
                 tuple(out.inserts),
+                where,
+                tuple((c.kind, c.victim) for c in out.commands),
+                tuple(
+                    (d.payload, ref_id(d.actor), ref_id(d.target))
+                    for d in out.events
+                    if d.kind == "SEAT_GRANTED"
+                ),
+                tuple(sorted(out.vocations.items())),
+                tuple(out.spouses),
+                tuple((t.day, t.phase, t.entity, t.kind) for t in out.timers),
+                tuple((d.payload, ref_id(d.target)) for d in out.events if d.kind == "SUCCEED"),
             )
         )
         parts = [
@@ -1214,6 +1433,10 @@ class Engine:
             f"taken {len(out.taken)}" if out.taken else "",
             "named " + " ".join(f"P{p}:{v}" for p, v in sorted(out.named.items()))
             if out.named
+            else "",
+            "married " + " ".join(f"P{a}+P{b}" for a, b in out.spouses) if out.spouses else "",
+            "vocation " + " ".join(f"P{p}:{v}" for p, v in sorted(out.vocations.items()))
+            if out.vocations
             else "",
         ]
         shown = "; ".join(p for p in parts if p) or "nothing"
@@ -1281,8 +1504,9 @@ def m2_birth(ctx: Ctx, timer: Timer) -> None:
 
 
 def m2_marry(ctx: Ctx, timer: Timer) -> None:
-    """M2's marriage timer: MARRIAGE (actor the husband, target the wife)."""
+    """M2's marriage timer: MARRIAGE (actor the husband, target the wife), and person.spouse."""
     ctx.emit(Draft(MARRIAGE, timer.entity, person(timer.payload)))
+    ctx.marry(timer.payload, timer.entity[1])
 
 
 def m2_day_vital(ctx: Ctx) -> None:
@@ -1334,6 +1558,13 @@ def m7_day_polity(ctx: Ctx) -> None:
         father = ctx.father(child)
         if father:
             ctx.children(father)
+        if ctx.script.majority_timers and father in ctx.members():
+            due = ctx.majority_day(child)
+            ctx.schedule(TimerDraft(due, POLITY, person(child), VOCATION_DUE))
+            ctx.note(
+                f"on_birth P{child}: a member (its father P{father}'s house): VOCATION_DUE at day "
+                f"{due}, Polity, its majority date (K19)"
+            )
     dead = ctx.exited()
     if not dead:
         return
@@ -1412,15 +1643,168 @@ def m7_resolve(ctx: Ctx, timer: Timer) -> None:
 
 
 def m7_year_polity(ctx: Ctx) -> None:
-    """M7's Year/Polity binding (K12): a holder dead this instant still holds for this pass."""
+    """M7's Year/Polity binding (K12): a holder dead this instant still holds for this pass.
+
+    Its steps in order (M7 0.6.0 with T-00b): regency (tick 0 only), regrant, vocation (tick 0
+    only), dormancy. Each title's holder as this pass sees it is kept for check 12.
+    """
     for tid in ctx.title_ids():
         holder = ctx.title(tid).holder
+        ctx.engine.run.year_holders.append((ctx.day, ctx.merge, tid, holder))
         if holder and holder in ctx.exited():
             ctx.note(
                 f"K12: T{tid} is still held by P{holder}, dead this instant, for this Year pass; "
                 "on_death arbitrates it in Day/Polity, the next merge"
             )
+    if ctx.day == 0:
+        m7_world_start_regency(ctx)
+    m7_regrant(ctx)
+    if ctx.day == 0:
+        m7_world_start_vocation(ctx)
+    elif VOCATION_YEARLY in ctx.engine.flags:
+        m7_yearly_vocation(ctx)
     m7_dormancy(ctx)
+
+
+def m7_world_start_regency(ctx: Ctx) -> None:
+    """The regency step at tick 0 (F-10): each minor holder's regent by rule, by tier then TitleId.
+
+    REGENCY_BEGUN has no edge (genesis is not an event) and the holder's REGENCY_END timer is due at
+    its majority date's day start, Polity, under the no-draw purpose regency_end.
+    """
+    regents = dict(ctx.script.regents)
+    for tid in sorted(ctx.title_ids(), key=lambda t: (ctx.title(t).tier, t)):
+        t = ctx.title(tid)
+        if t.holder not in ctx.script.minors:
+            continue
+        regent = regents.get(tid, 0)
+        if not regent:
+            ctx.note(f"regency T{tid}: P{t.holder} is a minor and the rule names none: regent 0")
+            continue
+        ctx.emit(Draft("REGENCY_BEGUN", person(t.holder), person(regent), (), tid))
+        ctx.write_title(tid, replace(t, regent=regent))
+        due = ctx.majority_day(t.holder)
+        ctx.schedule(TimerDraft(due, POLITY, person(t.holder), REGENCY_END, tid))
+        ctx.note(
+            f"regency T{tid} (the world-start pass, F-10): P{t.holder} is a minor, P{regent} "
+            f"regent by rule: REGENCY_BEGUN with no edge; REGENCY_END at day {due}, Polity"
+        )
+
+
+def m7_regrant(ctx: Ctx) -> None:
+    """The regrant step: each scripted title held in demesne goes to its scripted candidate.
+
+    A person in exited() is neither granter nor grantee (Q6): the title waits, and on_death
+    arbitrates it. Under the exited-not-skipped control the dead are treated as any other.
+    """
+    for tid, grantee in ctx.script.regrants:
+        t = ctx.title(tid)
+        granter = t.holder
+        dead = [p for p in (granter, grantee) if p in ctx.exited()]
+        if dead and EXITED_NOT_SKIPPED not in ctx.engine.flags:
+            ctx.note(
+                f"regrant: T{tid} held in demesne by P{granter}: not granted in this pass, since "
+                f"P{dead[0]} died this instant (a person in exited() is neither granter nor "
+                "grantee, Q6); on_death arbitrates it"
+            )
+            continue
+        ctx.emit(Draft("SEAT_GRANTED", person(grantee), person(granter), (), tid))
+        ctx.write_title(tid, replace(t, holder=grantee))
+        ctx.note(f"regrant: T{tid} granted by P{granter} to P{grantee}: SEAT_GRANTED")
+
+
+def m7_world_start_vocation(ctx: Ctx) -> None:
+    """The vocation step at tick 0 (K19): a VOCATION_DUE for each living member under majority."""
+    if not ctx.script.majority_timers:
+        return
+    for pid in ctx.members():
+        if pid in ctx.engine.born and ctx.alive(pid) and ctx.majority_day(pid) > ctx.day:
+            due = ctx.majority_day(pid)
+            ctx.schedule(TimerDraft(due, POLITY, person(pid), VOCATION_DUE))
+            ctx.note(
+                f"vocation (the world-start pass, K19): P{pid}, a member under majority: "
+                f"VOCATION_DUE at day {due}, Polity"
+            )
+
+
+def m7_yearly_vocation(ctx: Ctx) -> None:
+    """The vocation-yearly control: the 0.5.0 reading, a draw at the Year pass.
+
+    Each member whose majority date fell in the year that ends here draws at this pass, instead of
+    at its timer's fire.
+    """
+    for pid in ctx.members():
+        if pid not in ctx.engine.born or not ctx.alive(pid):
+            continue
+        if ctx.day - DAYS_PER_YEAR < ctx.majority_day(pid) <= ctx.day:
+            draw, why = vocation_draw(ctx, pid)
+            if draw:
+                ctx.write_vocation(pid, draw)
+            ctx.note(f"vocation (the yearly mutant) P{pid}: {why}")
+
+
+def vocation_draw(ctx: Ctx, pid: int) -> tuple[str | None, str]:
+    """The vocation rule at its fire (K19, X13h, Q6), on the instant's state; the draw is scripted.
+
+    Alive (a person in exited() is skipped), a later child (an elder child of the same father
+    alive; PersonId order is birth order here), not barred (first or second in a line, a holder),
+    not married at the fire (person.spouse at same_instant).
+    """
+    flags = ctx.engine.flags
+    if pid in ctx.exited() and EXITED_NOT_SKIPPED not in flags:
+        return None, "in exited(), dead this instant: drop_timer(dead) (Q6)"
+    father = ctx.father(pid)
+    if not father:
+        return None, "no father in the life-course log: no elder sibling, exempt"
+    elder = [c for c in ctx.children(father) if c < pid and ctx.alive(c)]
+    if not elder:
+        return None, f"no elder child of P{father} alive: the eldest living, exempt"
+    barred = dict(ctx.script.barred)
+    if pid in barred:
+        return None, f"{barred[pid]}: draws nothing"
+    spouse = ctx.spouse(pid)
+    if spouse and MARRIED_DRAWS not in flags:
+        return None, (
+            f"married at the fire (person.spouse = P{spouse}, read at same_instant): draws "
+            "nothing (X13h)"
+        )
+    draw = dict(ctx.script.draws)[pid]
+    return draw, (
+        f"a later child (P{elder[0]} alive), not first or second in a line, holding nothing, "
+        "unmarried: "
+        f"draws {draw}"
+    )
+
+
+def m7_vocation_due(ctx: Ctx, timer: Timer) -> None:
+    """M7's VOCATION_DUE fire, in Polity's timer pass at the majority date (K19)."""
+    pid = timer.entity[1]
+    if VOCATION_YEARLY in ctx.engine.flags:
+        ctx.note(f"VOCATION_DUE about P{pid}: the yearly mutant draws nothing at the fire")
+        return
+    draw, why = vocation_draw(ctx, pid)
+    if draw:
+        ctx.write_vocation(pid, draw)
+    ctx.note(f"VOCATION_DUE about P{pid} (its majority date, Polity's timer pass): {why}")
+
+
+def m7_regency_end(ctx: Ctx, timer: Timer) -> None:
+    """M7's REGENCY_END fire at the holder's majority date: the regent stands down."""
+    holder, tid = timer.entity[1], timer.payload
+    t = ctx.title(tid)
+    if not ctx.alive(holder):
+        ctx.note(f"REGENCY_END about P{holder}: dead: drop_timer(dead)")
+    elif t.holder != holder:
+        ctx.note(f"REGENCY_END about P{holder}: no longer holds T{tid}: drop_timer(ended)")
+    elif not t.regent:
+        ctx.note(f"REGENCY_END about P{holder}: T{tid} has no regent: nothing to end")
+    else:
+        ctx.emit(Draft("REGENCY_ENDED", person(holder), person(t.regent), (), tid))
+        ctx.write_title(tid, replace(t, regent=0))
+        ctx.note(
+            f"REGENCY_END about P{holder} (its majority date, Polity's timer pass): P{t.regent} "
+            f"stands down: REGENCY_ENDED with no edge; T{tid} regent := 0"
+        )
 
 
 def m7_dormancy(ctx: Ctx) -> None:
@@ -1429,12 +1813,19 @@ def m7_dormancy(ctx: Ctx) -> None:
     A person meets a naming criterion when it is of the manifest's cast (criterion (e), the
     Architect's cast ruling) or when the script gives it another; a person not named who meets one
     is Promoted, a named adult who meets none is Demoted (every scripted person is an adult). Under
-    the cast-demoted control the cast is not a criterion.
+    the cast-demoted control the cast is not a criterion. The pass reads every ledger row, the dead
+    of this instant too (their rows stay until Bookkeeping), and sends nothing about a person in
+    exited() (Q6 of T-00a's review), unless the exited-not-skipped control is planted.
     """
     if not (ctx.script.cast or ctx.script.criteria):
         return
     others = dict(ctx.script.criteria)
-    for pid in ctx.persons():
+    for pid in ctx.rows():
+        if pid in ctx.exited() and EXITED_NOT_SKIPPED not in ctx.engine.flags:
+            ctx.note(
+                f"dormancy P{pid}: in exited(), dead this instant: neither Promoted nor Demoted"
+            )
+            continue
         reasons = [others[pid]] if pid in others else []
         if pid in ctx.script.cast and CAST_DEMOTED not in ctx.engine.flags:
             reasons.insert(0, "of the manifest's cast, criterion (e)")
@@ -1532,6 +1923,8 @@ FIRES: dict[tuple[str, str], Callable[[Ctx, Timer], None]] = {
     (M2, "MARRY_TIMER"): m2_marry,
     (M7, "MURDER_DUE"): m7_murder_due,
     (M7, "RESOLVE"): m7_resolve,
+    (M7, REGENCY_END): m7_regency_end,
+    (M7, VOCATION_DUE): m7_vocation_due,
     (T1, "BREAK"): t1_break,
 }
 
@@ -1612,8 +2005,55 @@ def newborn_world() -> World:
     return founders(2, 6).seed(M2, birth(1, 6, 50))
 
 
+def dead_holder_world() -> World:
+    """A year start (day 360) at which P3 and P6 die in M2's timer pass.
+
+    P3 holds the sovereign T707 and, in demesne, its vassal T303; P4 is T707's heir and P5 kin of P3
+    within the degrees; P6 and P7 are named adults who meet no criterion. All five are named.
+    """
+    w = founders(3, 4, 5, 6, 7, parents=((4, 0, 3), (5, 0, 3)))
+    w.titles = {707: Title(SOVEREIGN, 0, 3, heir=4), 303: Title(MINOR, 707, 3)}
+    w.houses = {12: ((3, 4, 5), False)}
+    w.named = {3: 1, 4: 1, 5: 1, 6: 1, 7: 1}
+    w.seed(M2, death(DAYS_PER_YEAR, 3))
+    return w.seed(M2, death(DAYS_PER_YEAR, 6))
+
+
+VOCATION_DAY = 5
+VOCATION_KIDS = (20, 21, 22, 23, 24)
+
+
+def vocation_world() -> World:
+    """Day 5 is the majority date of P21 to P24, later children of P10 and P11 (P20 is their elder).
+
+    They share a birth day, so the model's birth order is PersonId order; on_birth scheduled each
+    one's VOCATION_DUE at its birth. In day 5's Vital P22 marries P50, P23 dies and P11 bears P30.
+    """
+    w = founders(10, 11, *VOCATION_KIDS, 50, parents=tuple((k, 11, 10) for k in VOCATION_KIDS))
+    w.houses = {11: ((10, *VOCATION_KIDS), False)}
+    w.spouse = {10: 11, 11: 10}
+    for pid in VOCATION_KIDS[1:]:
+        w.seed(M7, TimerDraft(VOCATION_DAY, POLITY, person(pid), VOCATION_DUE))
+    w.seed(M2, TimerDraft(VOCATION_DAY, VITAL, person(22), "MARRY_TIMER", 50))
+    w.seed(M2, death(VOCATION_DAY, 23))
+    return w.seed(M2, birth(VOCATION_DAY, 11, 30))
+
+
+def regency_world() -> World:
+    """Tick 0: P40, a minor, holds the sovereign T707.
+
+    P41, his adult mother, is alive; M2's drawn death timer for P40 is pending at day 30.
+    """
+    w = founders(40, 41, parents=((40, 41, 0),))
+    w.titles = {707: Title(SOVEREIGN, 0, 40)}
+    w.houses = {11: ((40,), False)}
+    return w.seed(M2, death(30, 40))
+
+
 PEER_SYS = System(X2, ((DAY, AGENDA),), (), (X_MARK,))
 NEXT_SYS = System(X2, ((DAY, AGENDA),), (X1,), (X_MARK,))
+M7_YEAR_SYS = System(M7, ((DAY, VITAL), (YEAR, POLITY), (DAY, POLITY)), (M2,), (DEATH,))
+T1_AGENDA_SYS = System(T1, ((DAY, AGENDA),), (), (DEATH, MARRIAGE))
 SCENARIOS = (
     Scenario(
         "succession_day",
@@ -1725,6 +2165,84 @@ SCENARIOS = (
         Script(cast=(1,), criteria=((2, "holds T707, criterion (a)"),)),
         expect_named=(1, 2),
     ),
+    Scenario(
+        "year_start_dead_holder",
+        "a year start (T-00b: K12 with Q6): P3, holder of T707 and of T303 in demesne, and P6, a "
+        "named adult who meets no criterion, die in Vital; the Year pass still sees P3 holding "
+        "both, grants T303 to no one, keeps P5 (within the degrees of P3) named, sends nothing "
+        "about P3 or P6 and demotes P7; on_death then seats P4 in T707, and T303 reverts to him; "
+        "T1 applies the Demote at Agenda",
+        (M2_SYS, M7_YEAR_SYS, T1_AGENDA_SYS),
+        dead_holder_world,
+        (DAYS_PER_YEAR,),
+        Script(
+            regrants=((303, 5),),
+            criteria=(
+                (3, "holds T707 and T303, criterion (a)"),
+                (4, "first in T707's line, criterion (d)"),
+                (5, "within dormancy_degrees of P3, who still holds for this pass (K12): (c)"),
+            ),
+        ),
+        expect_named=(4, 5),
+        expect_seen=(
+            "K12: T303 is still held by P3, dead this instant, for this Year pass",
+            "regrant: T303 held in demesne by P3: not granted in this pass",
+            "dormancy P6: in exited(), dead this instant: neither Promoted nor Demoted",
+        ),
+    ),
+    Scenario(
+        "vocation_majority_day",
+        "T-00b: K19 with X13h and Q6: P21 to P24, later children of P10, reach majority at day "
+        "5; in its Vital P22 marries P50, P23 dies and P30 is born to P11 and P10; in Polity's "
+        "timer pass, before every binding, their VOCATION_DUE timers fire and only P21 draws (P22 "
+        "is married at the fire, P23 in exited(), P24 second in a line); on_birth schedules P30's "
+        "at its majority date; the Year pass of day 360 draws nothing",
+        (M2_SYS, M7_YEAR_SYS),
+        vocation_world,
+        (VOCATION_DAY, DAYS_PER_YEAR),
+        Script(
+            fathers=((30, 10),),
+            majority_timers=True,
+            born=(
+                (20, VOCATION_DAY - MAJORITY_DAYS - 400),
+                *((k, VOCATION_DAY - MAJORITY_DAYS) for k in VOCATION_KIDS[1:]),
+            ),
+            barred=((24, "second in a title's line"),),
+            draws=((21, "holy_orders"), (22, "household"), (23, "mercenary"), (24, "household")),
+        ),
+        expect_seen=(
+            "VOCATION_DUE about P22 (its majority date, Polity's timer pass): married at the fire",
+            "VOCATION_DUE about P23 (its majority date, Polity's timer pass): in exited()",
+            f"on_birth P30: a member (its father P10's house): VOCATION_DUE at day "
+            f"{VOCATION_DAY + MAJORITY_DAYS}, Polity",
+        ),
+        expect_vocations=((21, "holy_orders"),),
+    ),
+    Scenario(
+        "regency_genesis_minor",
+        "T-00b: F-10 and MIN-10: at tick 0 the world-start pass names P41 regent of T707 for the "
+        "minor P40 (REGENCY_BEGUN with no edge) and schedules his REGENCY_END and VOCATION_DUE at "
+        "his majority date, day 9; a material input about P40 at day 3 re-draws M2's death timer "
+        "and keeps both of M7's (no draw); at day 9 REGENCY_END fires in Polity's timer pass "
+        "(REGENCY_ENDED), and P40 draws no vocation",
+        (M2_SYS, M7_YEAR_SYS),
+        regency_world,
+        (0, 3, 9),
+        Script(
+            majority_timers=True,
+            born=((40, 9 - MAJORITY_DAYS),),
+            minors=(40,),
+            regents=((707, 41),),
+            redraws=(("DEATH_TIMER", 40, 33),),
+        ),
+        expect_seen=(
+            "regency T707 (the world-start pass, F-10): P40 is a minor, P41 regent by rule",
+            "M7.dynasty:REGENCY_END@9/Polity under regency_end (not drawn: its own tick) -> 9",
+            "P41 stands down: REGENCY_ENDED with no edge",
+        ),
+        inputs=((3, 40),),
+        expect_vocations=(),
+    ),
 )
 
 
@@ -1786,8 +2304,14 @@ def job_vector(ctx: Ctx, rec: ViewRecord) -> dict[str, object]:
 
 
 def world_vector(world: World) -> dict[str, object]:
-    """A world at creation, for the vectors."""
+    """A world at creation, for the vectors (M2's spouse column only where a scenario tracks it)."""
+    spouse = (
+        {}
+        if world.spouse is None
+        else {"spouse": [[p, s] for p, s in sorted(world.spouse.items())]}
+    )
     return {
+        **spouse,
         "ledger": [[pid, alive] for pid, alive in sorted(world.ledger.items())],
         "life_course": [list(r) for r in world.life_course],
         "titles": [
@@ -1809,9 +2333,17 @@ def scenario_vector(sc: Scenario, run: Run) -> dict[str, object]:
     Its registration, its world, each job's view, actions and merge, each resolution and refusal,
     and each instant's log and state hash at its end.
     """
+    extra: dict[str, object] = {}
+    if sc.inputs:
+        extra["inputs"] = [[day, f"P{pid}"] for day, pid in sc.inputs]
+    if run.resamples:
+        extra["resamples"] = [
+            [r.day, r.owner, r.kind, f"P{r.pid}", r.purpose, r.old, r.new] for r in run.resamples
+        ]
     return {
         "name": sc.name,
         "days": list(sc.days),
+        **extra,
         "systems": [
             {
                 "id": s.sid,
@@ -1852,6 +2384,7 @@ def run_scenario(
         if day == sc.keyframe_after:
             engine.run.keyframe = engine.world.copy()
     engine.run.named_at_end = tuple(sorted(p for p, v in engine.world.named.items() if v))
+    engine.run.born = dict(engine.born)
     return engine.run
 
 
@@ -1980,6 +2513,145 @@ def check_hash(run: Run) -> list[str]:
     ]
 
 
+def died_before(run: Run, day: int, merge: int) -> set[int]:
+    """The persons killed at the merges of ``day`` before ``merge``: (b)'s oracle, from buffers."""
+    return {p for jm in run.merges if jm.day == day and jm.merge < merge for p in jm.killed}
+
+
+def check_year_pass(run: Run) -> list[str]:
+    """12. YEAR PASS (K12): the Year pass sees the dead holder; on_death arbitrates after it.
+
+    For each SUCCEED that answers a death of its own instant, a Year pass of that instant saw the
+    dead holder still holding the title, at an earlier merge.
+    """
+    errs = []
+    for jm in run.merges:
+        for tid, pred in jm.succeeded:
+            if pred not in died_before(run, jm.day, jm.merge):
+                continue
+            for day, merge, title, holder in run.year_holders:
+                if (day, title) != (jm.day, tid):
+                    continue
+                if holder != pred:
+                    errs.append(
+                        f"YEAR PASS (K12): the Year pass at day {day} (m{merge}) saw T{tid} held "
+                        f"by P{holder}, where its holder P{pred} died this instant: a holder dead "
+                        "in the instant's Vital still holds for the Year pass"
+                    )
+                if merge > jm.merge:
+                    errs.append(
+                        f"YEAR PASS (K12): on_death's SUCCEED of T{tid} merged at m{jm.merge}, "
+                        f"before the Year pass's m{merge}: on_death arbitrates after the Year pass"
+                    )
+    return errs
+
+
+def check_skip(run: Run) -> list[str]:
+    """13. SKIP (Q6): M7 sends, grants and draws nothing about a person in exited().
+
+    No Promote or Demote, no seat granted by or to one, no vocation; exited() is the oracle's,
+    from the merges' kills.
+    """
+    errs = []
+    for jm in run.merges:
+        if jm.sid != M7:
+            continue
+        dead = died_before(run, jm.day, jm.merge)
+        errs += [
+            f"SKIP (Q6): M7 sent {kind} for P{pid} at day {jm.day} ({jm.where}), who exited this "
+            "instant"
+            for kind, pid in jm.sent
+            if kind in ("Promote", "Demote") and pid in dead
+        ]
+        errs += [
+            f"SKIP (Q6): SEAT_GRANTED of T{tid} at day {jm.day} names P{p}, who exited this "
+            "instant: a person in exited() is neither granter nor grantee"
+            for tid, granter, grantee in jm.granted
+            for p in (granter, grantee)
+            if p in dead
+        ]
+        errs += [
+            f"SKIP (Q6): a vocation ({v}) was drawn for P{pid} at day {jm.day}, who exited this "
+            "instant"
+            for pid, v in jm.vocations
+            if pid in dead
+        ]
+    return errs
+
+
+def check_vocation(sc: Scenario, run: Run) -> list[str]:
+    """14. VOCATION (K19, X13h): the timer at the majority date, the draw at its fire.
+
+    Every VOCATION_DUE is scheduled at its person's majority date's day start, Polity; a vocation
+    is written never for a person married at the fire (M2's person.spouse as the merges before the
+    write left it), and only where and as the script expects.
+    """
+    errs = [
+        f"VOCATION: VOCATION_DUE about {ref_text(entity)} was scheduled at ({day}, {phase}), not "
+        f"at its majority date's day start, Polity (day {run.born[entity[1]] + MAJORITY_DAYS})"
+        for jm in run.merges
+        for day, phase, entity, kind in jm.timers
+        if kind == VOCATION_DUE and (day, phase) != (run.born[entity[1]] + MAJORITY_DAYS, POLITY)
+    ]
+    spouse = dict(sc.world().spouse or {})
+    writes = []
+    for jm in sorted(run.merges, key=lambda m: (m.day, m.merge)):
+        for pid, v in jm.vocations:
+            if spouse.get(pid):
+                errs.append(
+                    f"VOCATION: P{pid}, married at the fire (person.spouse = P{spouse[pid]}), "
+                    f"drew {v}: a person married at the fire draws nothing (X13h)"
+                )
+            writes.append((jm.day, jm.where, pid, v))
+        for a, b in jm.marriages:
+            spouse[a], spouse[b] = b, a
+    if sc.expect_vocations is not None:
+        errs += vocation_writes_expected(dict(sc.expect_vocations), writes, run.born)
+    return errs
+
+
+def vocation_writes_expected(
+    expected: dict[int, str], writes: list[tuple[int, str, int, str]], born: dict[int, int]
+) -> list[str]:
+    """14, continued: the expected vocations, each where K19 puts it, and no other.
+
+    Each is written at its majority date's day start in Polity's timer pass (the VOCATION_DUE
+    fire).
+    """
+    errs = []
+    for pid, v in expected.items():
+        due = born[pid] + MAJORITY_DAYS
+        mine = [w for w in writes if w[2] == pid]
+        if not mine:
+            errs.append(f"VOCATION: P{pid} drew no vocation; its script expects {v} at day {due}")
+        for day, where, _, got in mine:
+            if day != due or not where.startswith(f"{POLITY}/{TIMERS} "):
+                errs.append(
+                    f"VOCATION: P{pid}'s vocation was written at day {day} {where}, not at its "
+                    f"majority date's day start in Polity's timer pass (day {due}): the draw is "
+                    "the VOCATION_DUE fire (K19)"
+                )
+            elif got != v:
+                errs.append(f"VOCATION: P{pid} drew {got}; its script expects {v}")
+    errs += [
+        f"VOCATION: P{pid} drew {v} at day {day}, which its script does not expect"
+        for day, _, pid, v in writes
+        if pid not in expected
+    ]
+    return errs
+
+
+def check_resample(run: Run) -> list[str]:
+    """15. RESAMPLE (MIN-10): a timer whose time is not drawn keeps its tick at a re-sample."""
+    return [
+        f"RESAMPLE: {r.kind} about P{r.pid} moved from day {r.old} to day {r.new} at the material "
+        f"input of day {r.day}: a timer whose time is not drawn ({r.purpose}) keeps its tick at a "
+        "re-sample (05.1 §2 rule 2; MIN-10)"
+        for r in run.resamples
+        if r.purpose in NOT_DRAWN | KEPT and r.new != r.old
+    ]
+
+
 @dataclass(frozen=True)
 class Verdict:
     """One scenario's checks, and the counts the golden file records."""
@@ -2039,6 +2711,7 @@ def verdict(sc: Scenario, run: Run, flags: frozenset[str]) -> Verdict:
     """Every check of one scenario."""
     errs = check_cleared(run) + check_visibility(run) + check_order(run) + check_scan(run)
     errs += check_genealogy(run) + check_hash(run)
+    errs += check_year_pass(run) + check_skip(run) + check_vocation(sc, run) + check_resample(run)
     readers, readers_note = check_readers(sc, run, flags)
     resume, resume_note = check_resume(sc, run, flags)
     threads, count = check_threads(sc, run, flags)

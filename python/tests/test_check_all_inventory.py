@@ -201,10 +201,11 @@ REQUIRED_GATES = (
     "Golden vectors: rh-snapshot plane hashes match the independent reference (gen_hash_golden "
     "--check; SPR-007 T-01)",
     "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference (SPR-018)",
-    "Instant log model v0: phases, levels, bindings and serial merges on eleven scripted "
+    "Instant log model v0: phases, levels, bindings and serial merges on fourteen scripted "
     "scenarios; what each step sees in inserted(), exited() and the observed events, the "
-    "merge-time form and its refusals, the genealogy index, thread invariance, the hash, resume; "
-    "the transcript and the vectors current (instant_log_model --check; EVO-002)",
+    "merge-time form and its refusals, the genealogy index, thread invariance, the hash, resume, "
+    "and the order M7's T-00b rules rest on (K12, Q6, K19 with X13h, MIN-10); the transcript and "
+    "the vectors current (instant_log_model --check; EVO-002)",
     "Keyframe sizes per rung: solo, household and hamlet's 200-year golden runs (SPR-013 T-13; "
     "reported)",
     "Licence ledger control: the GPL fixture is listed as GPL-3.0-only",
@@ -486,13 +487,19 @@ REQUIRED_GATES = (
     "gen_sampler_reference positive control: stale reference must FAIL",
     "gen_skeletons positive control: a hand-edited smoke skeleton must FAIL (SPR-008 ruling 2)",
     "gen_skeletons positive control: hand-edited skeleton must FAIL",
+    "instant_log_model positive control: M7's Year pass and vocation fire treating a person dead "
+    "this instant as any other must FAIL (T-00b; Q6 of T-00a's review)",
     "instant_log_model positive control: M7's naming criteria without the manifest's cast, so that "
     "tick 0's pass demotes a cast member, must FAIL (EVO-002; X4)",
+    "instant_log_model positive control: M7's re-sample moving REGENCY_END as if its date were "
+    "drawn must FAIL (T-00b; MIN-10 of T-00a's review)",
     "instant_log_model positive control: a genealogy index kept only at the instant's end must "
     "FAIL (EVO-002)",
     "instant_log_model positive control: a log not cleared at the instant's end must FAIL "
     "(EVO-002)",
     "instant_log_model positive control: a state hash that covers the log must FAIL (EVO-002)",
+    "instant_log_model positive control: a system's Day binding run before its Year binding at a "
+    "year's first instant, so on_death arbitrates before the Year pass, must FAIL (T-00b; K12)",
     "instant_log_model positive control: an append in place of exited()'s sorted insert must FAIL "
     "the order check, a later merge's death having the lower id (EVO-002; R9; T-00a MAJ-1)",
     "instant_log_model positive control: an append in place of inserted()'s sorted insert must "
@@ -501,6 +508,10 @@ REQUIRED_GATES = (
     "level's peers, must FAIL thread invariance (EVO-002)",
     "instant_log_model positive control: the merge-time form resolved against the log at the job's "
     "own merge must FAIL visibility (EVO-002)",
+    "instant_log_model positive control: the vocation drawn at the Year pass after the majority "
+    "date, not at the VOCATION_DUE fire, must FAIL (T-00b; K19)",
+    "instant_log_model positive control: the vocation fire ignoring person.spouse, so a person "
+    "married at the fire draws, must FAIL (T-00b; X13h)",
     "instant_log_model positive control: vectors with one state hash altered must FAIL as stale "
     "(EVO-002; T-00a MIN-5)",
     "kill -9 by name: a kill during sealing leaves no partial segment and the resume reseals "
@@ -700,8 +711,8 @@ REQUIRED_GATES = (
     "must FAIL (R3)",
     "lint_odd next positive control: a frozen fidelity-ladder representation changed "
     "without a record must FAIL (R3)",
-    "lint_odd next positive control: a frozen isolation expectation changed without a "
-    "record must FAIL (R3)",
+    "lint_odd next positive control: a frozen isolation horizon changed without a record must "
+    "FAIL (R3; T-00b amends the expectation)",
     "lint_odd next positive control: a frozen parameter source changed without a record "
     "must FAIL (R3)",
     "lint_odd next positive control: a frozen purpose statement changed without a record "
