@@ -451,13 +451,13 @@ odd_next_control() {
       # the M7 draft beside the M2 one and the lock; and the reviewer's three q5 cases, which linted PASS before R3
       cp "$src" "$lock" "$dir/" || return 1
       case "$1" in
-        submodel) sed '/^name = "regency"$/{n;s/^summary = "/summary = "PLANTED /}' "$m7" > "$dir/M7.dynasty.odd.toml" ;;   # regency: no record amends it (exit_hazards has one since 0.6.0, F-3)
+        submodel) sed '/^name = "apply_commands"$/{n;s/^summary = "/summary = "PLANTED /}' "$m7" > "$dir/M7.dynasty.odd.toml" ;;   # apply_commands: no record amends it (exit_hazards has one since 0.6.0, F-3; regency since T-00b, F-10)
         command) sed '/^command = "ScheduleDeath"$/,/^why = "/s/^why = "/why = "PLANTED /' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
         coupling) sed '0,/^via = "/s//via = "PLANTED /' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
         source) sed '0,/^source = "/s//source = "PLANTED /' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
         ladder) sed '0,/^representation = "/s//representation = "PLANTED /' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
         purpose) sed '0,/^statement = "Keep houses/s//statement = "PLANTED Keep houses/' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
-        isolation) sed '0,/^expect = "/s//expect = "PLANTED /' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
+        isolation) sed '0,/^horizon = "/s//horizon = "PLANTED /' "$m7" > "$dir/M7.dynasty.odd.toml" ;;   # horizon: no record amends it (expect has one since T-00b)
         design) sed '0,/^basic_principles = "/s//basic_principles = "PLANTED /' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
         scales) sed '0,/^extent = "/s//extent = "PLANTED /' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
         requirements) sed '0,/^requirements = \["SIM-3"/s//requirements = ["DATA-8", "SIM-3"/' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
@@ -1470,13 +1470,13 @@ run "lint_odd next positive control: a next version that changes a frozen algori
 run "lint_odd next positive control: a new RNG purpose before a frozen one must FAIL (SPR-015)" "fail:frozen RNG purpose death_time must stay at position 0" odd_next_control rng &&
 run "lint_odd next positive control: a Registry overlay that moves a frozen parameter bound must FAIL (SPR-015)" "fail:replacement changes or drops parameter tfr bounds" odd_next_control bound &&
 run "lint_odd next positive control: an amendment whose text changed since the committed lock must FAIL (SPR-015)" "fail:changed its text since amendments.lock.toml" odd_next_control lock &&
-run "lint_odd next positive control: a frozen submodel summary changed without a record must FAIL (deny by default; PR #79 review R3)" "fail:frozen submodels.regency.summary changed without an [[amends]] record" odd_next_control submodel &&
+run "lint_odd next positive control: a frozen submodel summary changed without a record must FAIL (deny by default; PR #79 review R3)" "fail:frozen submodels.apply_commands.summary changed without an [[amends]] record" odd_next_control submodel &&
 run "lint_odd next positive control: a frozen command why changed without a record must FAIL (R3)" "fail:frozen commands.ScheduleDeath.why changed without an [[amends]] record" odd_next_control command &&
 run "lint_odd next positive control: a frozen coupling via changed without a record must FAIL (R3)" "fail:frozen couplings.M6.polity/in.via changed without an [[amends]] record" odd_next_control coupling &&
 run "lint_odd next positive control: a frozen parameter source changed without a record must FAIL (R3)" "fail:frozen params.murder_hazard_base.source changed without an [[amends]] record" odd_next_control source &&
 run "lint_odd next positive control: a frozen fidelity-ladder representation changed without a record must FAIL (R3)" "fail:frozen fidelity_ladder.F0.representation changed without an [[amends]] record" odd_next_control ladder &&
 run "lint_odd next positive control: a frozen purpose statement changed without a record must FAIL (R3)" "fail:frozen purpose.statement changed without an [[amends]] record" odd_next_control purpose &&
-run "lint_odd next positive control: a frozen isolation expectation changed without a record must FAIL (R3)" "fail:frozen isolation.expect changed without an [[amends]] record" odd_next_control isolation &&
+run "lint_odd next positive control: a frozen isolation horizon changed without a record must FAIL (R3; T-00b amends the expectation)" "fail:frozen isolation.horizon changed without an [[amends]] record" odd_next_control isolation &&
 run "lint_odd next positive control: a frozen design concept changed without a record must FAIL (R3)" "fail:frozen design.basic_principles changed without an [[amends]] record" odd_next_control design &&
 run "lint_odd next positive control: a frozen scales field changed without a record must FAIL (R3)" "fail:frozen scales.extent changed without an [[amends]] record" odd_next_control scales &&
 run "lint_odd next positive control: the frozen requirement ids changed without a record must FAIL (R3)" "fail:frozen system.requirements changed without an [[amends]] record" odd_next_control requirements &&
@@ -1709,7 +1709,7 @@ run "control_v1 positive control: a step that pauses one instant past its target
 run "control_v1 positive control: control.pace on the stream method table must FAIL (wire_v1 §4.5; SPR-027 T-01)" "fail:the stream method table carries control.pace" "$PY" -I specs/stream/selftest_control_v1.py --control pace-on-stream &&
 run "control_v1 positive control: a resume that owes the paused wall time must FAIL (SPR-027 T-01)" "fail:paused time was owed" "$PY" -I specs/stream/selftest_control_v1.py --control paused-time-owed &&
 run "control_v1 positive control: a sixth method on the control table must FAIL the method-table check (REV-SPR-027-control C4; SPR-027 T-01)" "fail:the control method table is not exactly the five methods of" "$PY" -I specs/stream/selftest_control_v1.py --control extra-method &&
-run "Instant log model v0: phases, levels, bindings and serial merges on eleven scripted scenarios; what each step sees in inserted(), exited() and the observed events, the merge-time form and its refusals, the genealogy index, thread invariance, the hash, resume; the transcript and the vectors current (instant_log_model --check; EVO-002)" "pass:OK:" "$PY" -I specs/engine/instant_log_model.py --check &&
+run "Instant log model v0: phases, levels, bindings and serial merges on fourteen scripted scenarios; what each step sees in inserted(), exited() and the observed events, the merge-time form and its refusals, the genealogy index, thread invariance, the hash, resume, and the order M7's T-00b rules rest on (K12, Q6, K19 with X13h, MIN-10); the transcript and the vectors current (instant_log_model --check; EVO-002)" "pass:OK:" "$PY" -I specs/engine/instant_log_model.py --check &&
 run "instant_log_model positive control: jobs that merge as they finish, so a later job sees its level's peers, must FAIL thread invariance (EVO-002)" "fail:THREAD INVARIANCE: job order" "$PY" -I specs/engine/instant_log_model.py --control peer-visible &&
 run "instant_log_model positive control: an append in place of inserted()'s sorted insert must FAIL the order check (EVO-002)" "fail:ORDER: inserted() is not in ascending row order" "$PY" -I specs/engine/instant_log_model.py --control unsorted-inserted &&
 run "instant_log_model positive control: an append in place of exited()'s sorted insert must FAIL the order check, a later merge's death having the lower id (EVO-002; R9; T-00a MAJ-1)" "fail:ORDER: exited() is not in ascending row order" "$PY" -I specs/engine/instant_log_model.py --control unsorted-exited &&
@@ -1718,6 +1718,11 @@ run "instant_log_model positive control: a state hash that covers the log must F
 run "instant_log_model positive control: a genealogy index kept only at the instant's end must FAIL (EVO-002)" "fail:GENEALOGY: children(P" "$PY" -I specs/engine/instant_log_model.py --control genealogy-late &&
 run "instant_log_model positive control: the merge-time form resolved against the log at the job's own merge must FAIL visibility (EVO-002)" "fail:VISIBILITY: X2.observer resolved the merge-time form" "$PY" -I specs/engine/instant_log_model.py --control late-watermark &&
 run "instant_log_model positive control: M7's naming criteria without the manifest's cast, so that tick 0's pass demotes a cast member, must FAIL (EVO-002; X4)" "fail:NAMED: world_start_cast ends with" "$PY" -I specs/engine/instant_log_model.py --control cast-demoted &&
+run "instant_log_model positive control: a system's Day binding run before its Year binding at a year's first instant, so on_death arbitrates before the Year pass, must FAIL (T-00b; K12)" "fail:YEAR PASS (K12): the Year pass at day 360" "$PY" -I specs/engine/instant_log_model.py --control day-before-year &&
+run "instant_log_model positive control: M7's Year pass and vocation fire treating a person dead this instant as any other must FAIL (T-00b; Q6 of T-00a's review)" "fail:SKIP (Q6): M7 sent Demote for P6" "$PY" -I specs/engine/instant_log_model.py --control exited-not-skipped &&
+run "instant_log_model positive control: the vocation drawn at the Year pass after the majority date, not at the VOCATION_DUE fire, must FAIL (T-00b; K19)" "fail:VOCATION: P21's vocation was written at day 360" "$PY" -I specs/engine/instant_log_model.py --control vocation-yearly &&
+run "instant_log_model positive control: the vocation fire ignoring person.spouse, so a person married at the fire draws, must FAIL (T-00b; X13h)" "fail:VOCATION: P22, married at the fire" "$PY" -I specs/engine/instant_log_model.py --control married-draws &&
+run "instant_log_model positive control: M7's re-sample moving REGENCY_END as if its date were drawn must FAIL (T-00b; MIN-10 of T-00a's review)" "fail:RESAMPLE: REGENCY_END about P40 moved from day 9" "$PY" -I specs/engine/instant_log_model.py --control regency-redrawn &&
 run "instant_log_model positive control: vectors with one state hash altered must FAIL as stale (EVO-002; T-00a MIN-5)" "fail:STALE: target/rendered-fixtures/instant_log_vectors_altered.json differs from the reference" instant_log_vectors_stale_control &&
 run "Chronicle SQL-twin equivalence" pass "$PY" -I specs/chronicle/selftest.py &&
 run "Chronicle envelope v0: anchored snapshots, typed edges, cause_told, provenance index, byte budget (selftest_envelope; SPR-020)" "pass:ENVELOPE v0: PASS" "$PY" -I specs/chronicle/selftest_envelope.py &&

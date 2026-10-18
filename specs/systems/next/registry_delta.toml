@@ -1,5 +1,5 @@
 # Registry delta for the next-version M2 spec (specs/systems/next/M2.demography.odd.toml, 0.3.0 draft; SPR-015) and the next M7
-# (specs/systems/next/M7.dynasty.odd.toml, 0.6.0 draft; T-00a): M7 adds no verb and gains its sixteen parameter defaults (below).
+# (specs/systems/next/M7.dynasty.odd.toml, 0.6.0 draft; T-00a, then T-00b): M7 adds no verb and no enum and gains its sixteen parameter defaults (below).
 # Linted with: python -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml
 # In --next mode (specs/systems/next/README.md) an overlay may REPLACE the Registry's [systems] entry of a system that
 # has a next-version spec, keeping its fidelity_levels and every existing parameter's bounds and default (the lint
