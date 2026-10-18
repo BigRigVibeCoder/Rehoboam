@@ -195,7 +195,10 @@ EXIT_OK = 0
 EXIT_VIOLATIONS = 1
 EXIT_UNREADABLE = 2
 
-ESCAPE_PATTERN = re.compile(r"LINT-ALLOW\(forbidden-api\)(?P<colon>:?)(?P<reason>.*)")
+HIDDEN_STATE_RULE = "hidden-state"
+ESCAPE_PATTERN = re.compile(
+    r"LINT-ALLOW\((?P<kind>forbidden-api|hidden-state)\)(?P<colon>:?)(?P<reason>.*)"
+)
 IDENT_CHAR = re.compile(r"[A-Za-z0-9_]")
 RAW_STRING_START = re.compile(r'(?:b|c)?r(?P<hashes>#*)"')
 FLOAT_FIELD_REASON = re.compile(r"f32_field\s+(?P<column>\S+)")
@@ -505,6 +508,19 @@ RULES: tuple[Rule, ...] = (
         "Money; DET-3). A declared float field needs `// LINT-ALLOW(forbidden-api): f32_field "
         "<entity.column>` naming a column a system spec declares f32_field",
     ),
+    Rule(
+        HIDDEN_STATE_RULE,
+        _rx(
+            r"\bstatic\s+mut\b|\bthread_local\s*!"
+            r"|\b(?:OnceLock|LazyLock|Mutex|RwLock|RefCell|UnsafeCell)\b"
+            r"|(?<!\bstruct\s)(?<!\benum\s)(?<!\btrait\s)\bCell\b"
+            r"|\bAtomic\w*\b|\bonce_cell\b|\blazy_static\s*!|\blazy_static\b"
+        ),
+        "interior mutability or hidden state in plane A (static mut, thread_local!, OnceLock, "
+        "LazyLock, Atomic*, Mutex, RwLock, Cell, RefCell, UnsafeCell, once_cell, lazy_static; "
+        "W31); all plane-A state belongs in EngineState or SystemView. Escape with "
+        "`// LINT-ALLOW(hidden-state): <reason>`",
+    ),
 )
 
 
@@ -536,6 +552,7 @@ class Escape:
     line: int
     covers: int
     reason: str
+    kind: str = "forbidden-api"
 
 
 @dataclass
@@ -802,6 +819,8 @@ def _applies(finding: Finding, scan: "FloatScan") -> bool:
         return False  # the re-export rule exists for NETWORK_FILES files; plane A has `network`
     if finding.rule == FLOAT_RULE:
         return scan.scope == "rule"
+    if finding.rule == HIDDEN_STATE_RULE:
+        return scan.scope != "none" and not scan.network_only
     # File I/O and std::process are refused where the float rule's scope says engine code (src/,
     # build.rs; and the float zone's src/): tests may read their golden files and name temporary
     # directories by process id. File I/O is allowed in FILE_IO_CRATES.
@@ -819,9 +838,10 @@ def find_escapes(lexed: Lexed, path: str) -> list[Escape]:
         match = ESCAPE_PATTERN.search(comment)
         if match is None:
             continue
+        kind = match.group("kind")
         reason = match.group("reason").strip() if match.group("colon") else ""
         alone = not code_lines[line - 1].strip()
-        escapes.append(Escape(path, line, line + 1 if alone else line, reason))
+        escapes.append(Escape(path, line, line + 1 if alone else line, reason, kind=kind))
     return escapes
 
 
@@ -1083,10 +1103,21 @@ def _report_findings(
         where = f"{finding.path}:{finding.line}:{finding.column}"
         escape = valid.get(finding.line)
         problem = None
-        if escape is not None and finding.rule in (FLOAT_RULE, FLOAT_DEP_RULE):
-            problem = _float_escape_problem(escape, float_fields)
-        elif escape is not None and finding.rule == FLOAT_API_RULE:
-            problem = FLOAT_API_WHY
+        if escape is not None:
+            if escape.kind == "hidden-state" and finding.rule != HIDDEN_STATE_RULE:
+                problem = (
+                    f"LINT-ALLOW(hidden-state) covers no hidden-state API on line {escape.covers}; "
+                    "remove it"
+                )
+            elif escape.kind == "forbidden-api" and finding.rule == HIDDEN_STATE_RULE:
+                problem = (
+                    "hidden-state finding must use `// LINT-ALLOW(hidden-state): <reason>`, "
+                    "not LINT-ALLOW(forbidden-api)"
+                )
+            elif finding.rule in (FLOAT_RULE, FLOAT_DEP_RULE):
+                problem = _float_escape_problem(escape, float_fields)
+            elif finding.rule == FLOAT_API_RULE:
+                problem = FLOAT_API_WHY
         if escape is not None and problem is None:
             report.escaped.append(
                 f"ESCAPE [{RULE_ID}/{finding.rule}] `{finding.text}` at {where}; "
@@ -1099,14 +1130,15 @@ def _report_findings(
             )
     for escape in escapes:
         where = f"{escape.path}:{escape.line}"
+        tag = f"LINT-ALLOW({escape.kind})"
         if not escape.reason:
             report.violations.append(
-                f"VIOLATION [{RULE_ID}/escape] {where}: LINT-ALLOW(forbidden-api) needs a reason "
+                f"VIOLATION [{RULE_ID}/escape] {where}: {tag} needs a reason "
                 "after the colon"
             )
         elif escape.covers not in covered_lines:
             report.violations.append(
-                f"VIOLATION [{RULE_ID}/escape] {where}: LINT-ALLOW(forbidden-api) covers no "
+                f"VIOLATION [{RULE_ID}/escape] {where}: {tag} covers no "
                 f"forbidden API on line {escape.covers}; remove it"
             )
 

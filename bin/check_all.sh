@@ -656,7 +656,8 @@ FORBIDDEN_API_CONTROLS="hash_map:hash-collections:HashMap hash_set:hash-collecti
   extern_crate_std:std-rename:extern~crate~std~as
   net_socket:network:std::os::unix::net net_parent_alias:network:net::UnixListener
   net_parent_glob:network:net::TcpListener net_parent_self:network:net::UnixDatagram
-  path_attr:source-include:#[path include_macro:source-include:include!("
+  path_attr:source-include:#[path include_macro:source-include:include!(
+  hidden_state_mutex:hidden-state:Mutex hidden_state_thread_local:hidden-state:thread_local!"
 forbidden_api_controls() {
   local - spec file rest rule token tick='`'
   set -f  # tokens such as #[path must not be glob-expanded; `local -` restores the option

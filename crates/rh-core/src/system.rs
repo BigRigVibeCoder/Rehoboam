@@ -38,6 +38,7 @@
 //! `CODEX/05_PROJECT/SPR-005_CoreTimeAndScheduler.md` T-03, T-06, rulings 1 and 2;
 //! `CODEX/05_PROJECT/SPR-006_AgendaEventsInvariants.md` T-02–T-05, rulings 1–5.
 
+// LINT-ALLOW(hidden-state): single-thread per-job step context
 use core::cell::RefCell;
 use core::fmt;
 use std::collections::BTreeMap;
@@ -677,8 +678,9 @@ pub struct StepCtx<'a> {
     /// system's jobs in turn, so the guard spans every binding and the timer pass (BCK-002 A-37).
     /// The `RefCell` makes `StepCtx` `!Sync`: a job runs on one thread and the context is never
     /// shared, so the set cannot be reached from two threads.
+    // LINT-ALLOW(hidden-state): single-thread per-job step context
     taken: RefCell<Taken>,
-    /// `K1` at each epoch other than 0 this job has drawn at (derived once per epoch).
+    // LINT-ALLOW(hidden-state): single-thread per-job step context
     epoch_keys: RefCell<BTreeMap<u32, SystemKey>>,
 }
 
@@ -720,7 +722,9 @@ impl<'a> StepCtx<'a> {
             phase,
             inbox,
             out: Outbox::default(),
+            // LINT-ALLOW(hidden-state): single-thread per-job step context
             taken: RefCell::new(taken),
+            // LINT-ALLOW(hidden-state): single-thread per-job step context
             epoch_keys: RefCell::new(BTreeMap::new()),
         }
     }
