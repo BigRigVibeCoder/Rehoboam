@@ -117,6 +117,8 @@ struct Shared {
     cap: usize,
     active: AtomicUsize,
     connections: AtomicU64,
+    /// Viewer frames answered (`--test-wait-viewer` waits for the first).
+    requests: AtomicU64,
     frames: AtomicU64,
     largest_frame: AtomicUsize,
     peak_bytes: AtomicUsize,
@@ -291,6 +293,7 @@ fn serve_connection(mut stream: UnixStream, shared: &Shared) {
             if reply.frames.is_empty() && reply.used == 0 {
                 break; // an incomplete frame: read more
             }
+            shared.requests.fetch_add(1, Ordering::Relaxed);
             for f in &reply.frames {
                 if send(&mut stream, shared, f).is_err() {
                     break 'serve;
@@ -378,6 +381,7 @@ impl Server {
             cap,
             active: AtomicUsize::new(0),
             connections: AtomicU64::new(0),
+            requests: AtomicU64::new(0),
             frames: AtomicU64::new(0),
             largest_frame: AtomicUsize::new(0),
             peak_bytes: AtomicUsize::new(0),
@@ -394,6 +398,19 @@ impl Server {
             accept: Some(accept),
             _lock: lock,
         })
+    }
+
+    /// Blocks until a viewer's first frame has been answered, or `limit` has passed (`false`).
+    fn wait_for_request(&self, limit: Duration) -> bool {
+        // A count of polls, not a wall-clock deadline (the clock is the Clock's alone).
+        let polls = limit.as_millis() / POLL.as_millis().max(1);
+        for _ in 0..polls {
+            if self.shared.requests.load(Ordering::Relaxed) > 0 {
+                return true;
+            }
+            std::thread::sleep(POLL);
+        }
+        self.shared.requests.load(Ordering::Relaxed) > 0
     }
 
     /// Serves until every viewer has gone or `linger` has passed, then stops and removes the
@@ -549,16 +566,21 @@ struct Opts {
     policy: Policy,
     cap: usize,
     seal_log: bool,
+    /// A test hook (`--test-wait-viewer`; SPR-026 DEF-1): the run starts only once a viewer's
+    /// first request has been answered, so a test's viewer is attached before anything is
+    /// emitted, however loaded the machine.
+    wait_viewer: bool,
 }
 
-/// Takes `--socket`, `--linger S`, `--window year-end|sync`, `--max-viewers N` and `--seal-log`
-/// out of `words`; the rest is the run's.
+/// Takes `--socket`, `--linger S`, `--window year-end|sync`, `--max-viewers N`, `--seal-log` and
+/// the test hook `--test-wait-viewer` out of `words`; the rest is the run's.
 fn take_opts(words: &[&str]) -> Result<(Opts, Vec<String>), String> {
     let mut opts = Opts {
         linger: Duration::from_secs(10),
         policy: Policy::YearEnd,
         cap: control::DEFAULT_CAP,
         seal_log: false,
+        wait_viewer: false,
     };
     let mut rest = Vec::new();
     let mut it = words.iter();
@@ -571,6 +593,7 @@ fn take_opts(words: &[&str]) -> Result<(Opts, Vec<String>), String> {
         match w {
             "--socket" => {}
             "--seal-log" => opts.seal_log = true,
+            "--test-wait-viewer" => opts.wait_viewer = true,
             "--linger" => {
                 let v = value()?;
                 opts.linger = Duration::from_secs(
@@ -639,6 +662,7 @@ fn run_inner(world: &str, words: &[&str], repo: &Path) -> Result<u8, String> {
     let server: Rc<RefCell<Option<Server>>> = Rc::new(RefCell::new(None));
     let slot = Rc::clone(&server);
     let cap = opts.cap;
+    let wait_viewer = opts.wait_viewer;
     let name = world.to_owned();
     let on_edge = move |edge: LiveEdge, dir: &Path| -> Result<(), Error> {
         let run = RunToml::read(dir)?;
@@ -653,6 +677,14 @@ fn run_inner(world: &str, words: &[&str], repo: &Path) -> Result<u8, String> {
         let info = info_of(&run, Channel::A, rh_stream::segment::FORMAT_A, run_nonce());
         let s = Server::start(&sock, lock, info, edge, cap).map_err(Error)?;
         println!("{name}: serving channel A live on {}", sock.display());
+        if wait_viewer {
+            println!("{name}: waiting for a viewer's first request (--test-wait-viewer)");
+            if !s.wait_for_request(Duration::from_mins(1)) {
+                return Err(Error(
+                    "--test-wait-viewer: no viewer sent a request within 60 s".to_owned(),
+                ));
+            }
+        }
         *slot.borrow_mut() = Some(s);
         Ok(())
     };
@@ -690,6 +722,11 @@ fn sift_inner(words: &[&str], repo: &Path) -> Result<u8, String> {
     let socket = words.contains(&"--socket");
     let words: Vec<&str> = words.iter().copied().filter(|w| *w != "--follow").collect();
     let (opts, rest) = take_opts(&words)?;
+    if opts.wait_viewer {
+        return Err(
+            "--test-wait-viewer is a hook of `rh-cli run --socket`, not of sift".to_owned(),
+        );
+    }
     let [dir] = rest.as_slice() else {
         return Err(
             "usage: rh-cli sift <run-dir> --follow [--socket] [--linger S] \

@@ -1,9 +1,10 @@
 """No test hook in a baseline or golden command line (SPR-026; the Architect's poison ruling).
 
-`rh-cli run` has test hooks (`--test-poison`, `--test-stall`, `--test-pace-ms`: every flag of
-`crates/rh-golden/src/cli.rs` that starts with `--test-`, read from that file so a new hook is
-covered when it is added). They exist for the live-edge and run-directory tests; a baseline or a
-golden ladder made with one is not a baseline. This gate refuses one:
+`rh-cli run` has test hooks (`--test-poison`, `--test-stall`, `--test-pace-ms`,
+`--test-wait-viewer`: every flag of `crates/rh-golden/src/cli.rs` and `crates/rh-cli/src/serve.rs`
+that starts with `--test-`, read from those files so a new hook is covered when it is added).
+They exist for the live-edge and run-directory tests; a baseline or a golden ladder made with one
+is not a baseline. This gate refuses one:
 
 - anywhere in `bin/regen_baseline.sh` and `bin/golden_nightly.sh`;
 - in any `bin/check_all.sh` command line (backslash continuations joined) that runs `rh-cli run`
@@ -21,7 +22,10 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-CLI = REPO / "crates" / "rh-golden" / "src" / "cli.rs"
+HOOK_FILES = (
+    REPO / "crates" / "rh-golden" / "src" / "cli.rs",
+    REPO / "crates" / "rh-cli" / "src" / "serve.rs",
+)
 WHOLE_FILES = ("bin/regen_baseline.sh", "bin/golden_nightly.sh")
 CHAIN = "bin/check_all.sh"
 HOOK = re.compile(r'"(--test-[a-z][a-z-]*)"')
@@ -31,7 +35,7 @@ GOLDEN = re.compile(r"\$GOLDEN|\$\{GOLDEN|target/golden|baselines/|check_baselin
 
 def hooks() -> list[str]:
     """The `--test-*` flags rh-cli run parses, sorted."""
-    return sorted(set(HOOK.findall(CLI.read_text(encoding="utf-8"))))
+    return sorted({h for f in HOOK_FILES for h in HOOK.findall(f.read_text(encoding="utf-8"))})
 
 
 def logical_lines(text: str) -> list[tuple[int, str]]:
@@ -78,7 +82,10 @@ def main(argv: list[str]) -> int:
         return 2
     names = hooks()
     if not names:
-        print(f"TEST HOOKS NOT FOUND: no --test-* flag in {CLI.relative_to(REPO)}")
+        print(
+            "TEST HOOKS NOT FOUND: no --test-* flag in "
+            + ", ".join(str(f.relative_to(REPO)) for f in HOOK_FILES)
+        )
         return 1
     texts = {p: (REPO / p).read_text(encoding="utf-8") for p in (*WHOLE_FILES, CHAIN)}
     if argv == ["--plant"]:

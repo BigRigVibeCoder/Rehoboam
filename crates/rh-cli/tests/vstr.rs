@@ -427,11 +427,18 @@ fn v_str_05_a_viewer_survives_a_kill_and_resume_with_a_seal_in_flight() {
         "--socket",
         "--test-stall",
         &stall,
+        // The viewer is attached before anything is emitted, so it receives every year live
+        // (DEF-1: a late viewer read the early years from disk and verified none).
+        "--test-wait-viewer",
     ]);
     support::wait_socket(&a_sock(&dir));
-    let viewer = {
+    let (viewer, progress) = {
         let v = Viewer::new("survivor", &dir, Mode::Edge);
-        std::thread::spawn(move || v.run(Duration::from_mins(3)))
+        let progress = v.progress();
+        (
+            std::thread::spawn(move || v.run(Duration::from_mins(3))),
+            progress,
+        )
     };
     let a = host.wait_line("STALL");
     let b = host.wait_line("STALL");
@@ -440,14 +447,29 @@ fn v_str_05_a_viewer_survives_a_kill_and_resume_with_a_seal_in_flight() {
         "{a} {b}"
     );
     assert!([&a, &b].iter().any(|l| l.contains("mid tick")), "{a} {b}");
-    std::thread::sleep(Duration::from_millis(300)); // the viewer reaches the edge
+    // The viewer reaches the stalled host's edge before the kill: a wait on what it received, not
+    // a sleep (DEF-1).
+    let mut probe = support::Client::connect(&a_sock(&dir));
+    let (status, _) = probe.call("stream.status", None);
+    let tip = status["result"]["live"]["next_seq"].as_u64().unwrap();
+    drop(probe);
+    let deadline = Instant::now() + Duration::from_mins(1);
+    while progress.load(std::sync::atomic::Ordering::Relaxed) < tip {
+        assert!(
+            Instant::now() < deadline,
+            "the viewer never reached seq {tip}"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
     host.kill();
     assert!(
         !dir.join("stream/t0000000000/A/y000014").exists(),
         "year 14's seal was in flight"
     );
     let kf = dir.join("keyframes/year-0010.rhkf").display().to_string();
-    // A slow resumed host (5 ms a stop), so the viewer is back before it re-emits its cursor.
+    // The resumed host waits for the viewer's first request before it emits anything
+    // (--test-wait-viewer, a handshake rather than a sleep: DEF-1), and is slow (5 ms a stop), so
+    // the viewer is back before the host re-emits its cursor however loaded the machine.
     let resumed = Host::start(&[
         "run",
         "solo",
@@ -462,6 +484,7 @@ fn v_str_05_a_viewer_survives_a_kill_and_resume_with_a_seal_in_flight() {
         "60",
         "--test-pace-ms",
         "5",
+        "--test-wait-viewer",
     ]);
     let r = viewer.join().unwrap();
     let (code, lines, err) = resumed.finish();
@@ -477,7 +500,15 @@ fn v_str_05_a_viewer_survives_a_kill_and_resume_with_a_seal_in_flight() {
     assert!(r.retries >= 1, "the viewer never backed off");
     assert!(
         r.verified_resumed >= 1,
-        "no re-emitted year verified against its stream.sealed"
+        "no re-emitted year verified against its stream.sealed: reconnects {}, future_seq {}, \
+         retries {}, received {}, live {}, sealed years {:?}, host {:?}",
+        r.reconnects,
+        r.future_seqs,
+        r.retries,
+        r.received.len(),
+        r.live.len(),
+        r.sealed.keys().collect::<Vec<_>>(),
+        lines
     );
     let (segs, next) = segment_digests(&dir);
     assert_eq!(

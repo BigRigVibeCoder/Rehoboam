@@ -17,6 +17,8 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use rh_protocol::control::{self, EndReason, Kind, Notice, SubscribeFrom};
@@ -86,7 +88,12 @@ pub struct Viewer {
     started: Instant,
     slept: bool,
     jumped: bool,
+    /// One past the highest seq delivered so far, for a test to wait on ([`Viewer::progress`]).
+    progress: Arc<AtomicU64>,
 }
+
+/// One poll of a backoff (`Action::Wait`).
+const BACKOFF_POLL: Duration = Duration::from_millis(2);
 
 fn year_of(line: &str, mpy: i64) -> i64 {
     line.split(' ')
@@ -117,7 +124,13 @@ impl Viewer {
             started: Instant::now(),
             slept: false,
             jumped: false,
+            progress: Arc::new(AtomicU64::new(0)),
         }
+    }
+
+    /// One past the highest seq this viewer has delivered, readable while it runs on its thread.
+    pub fn progress(&self) -> Arc<AtomicU64> {
+        Arc::clone(&self.progress)
     }
 
     /// Another connection's `stream.status` result.
@@ -134,6 +147,7 @@ impl Viewer {
                 self.report.live.insert(seq, l.clone());
             }
             self.report.received.push((seq, l.clone()));
+            self.progress.fetch_max(seq + 1, Ordering::Relaxed);
         }
     }
 
@@ -436,7 +450,10 @@ impl Viewer {
                 }
                 Action::Wait(polls, _) => {
                     self.report.retries += 1;
-                    std::thread::sleep(Duration::from_millis(20) * u32::try_from(polls).unwrap());
+                    // One poll is 2 ms: the longest backoff (64 polls, wire_v1.md §6.3) is then
+                    // 128 ms, inside the window of a resumed host paced at 5 ms a stop, so the
+                    // viewer's retry lands before that host's window passes its cursor (DEF-1).
+                    std::thread::sleep(BACKOFF_POLL * u32::try_from(polls).unwrap());
                     self.lp.next(Event::RetryElapsed)
                 }
                 Action::Status => {
