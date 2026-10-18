@@ -63,7 +63,7 @@
 
 | PR | Branch @ head | State | Next action |
 |---|---|---|---|
-| #83 (draft) | `sprint/SPR-014-lifecycle-queues` @ `1a67ab9` | **P1 critical path.** Tester PASS on `d1e79e4`. The code-review fix batch (K1, K2, K3, K6, K7, K10, K11, K13; one commit each) plus a merge of `main` `3d26090` by gate name are on `backup/SPR-014-dev-handoff-20261018` @ `28ab29e`, a fast-forward of the sprint head. The full `check_all` on `28ab29e` is not confirmed | §5 step 1 |
+| #83 (draft) | `sprint/SPR-014-lifecycle-queues` @ `1a67ab9` | **P1 critical path.** Tester PASS on `d1e79e4`. The code-review fix batch (K1, K2, K3, K6, K7, K10, K11, K13; one commit each) plus a merge of `main` `3d26090` by gate name are on `backup/SPR-014-dev-handoff-20261018` @ `28ab29e`, a fast-forward of the sprint head. The developer reports `check_all` PASS on `28ab29e`, all three parts (core 11:43, golden 11:25, stream 7:59 locally) | §5 step 1 |
 | #82 (draft) | `sprint/SPR-026-stream-v1` @ `2de1841` | World Stream v1 live edge. Tester phase 4 done (GAP-8 met, merge faithful). Code review: 1 MAJ (C1 quadratic append) + MINs. The developer's C1 fix is a WIP commit, **gates not run**, on `backup/SPR-026-dev-handoff-20261018` @ `2323640` (a fast-forward) | §5 step 4 |
 | #84 (draft) | `sprint/SPR-020-envelope` @ `512432a` | The event envelope in the engine. Waits for SPR-014; then merge main, regenerate baselines `[C3] [perf-baseline]` | §5 step 3 |
 | #88 (draft) | `sprint/SPR-016-mortality-f1` @ `da6c74d` | Stage 1 (exp/ln Q32_32, the F1 schedule) Tester PASS; stage 2 held until SPR-015 merges | After SPR-015 |
@@ -92,6 +92,7 @@
   - `an0_drafter_report.md`, `an0_review.md` and `an0_rulings.md`: AN-0 (R1–R11 to apply).
   - `pypkg_drafter_report.md` and `pypkg_review.md`: PY-PKG (already applied on PR #101).
   - `rulings_by_message.md`: the SPR-038a and SPR-017 rulings sent by message (copy them into those audits).
+  - `session_reports.md`: each remote session's own handoff report (state, what was and was not run, next steps). Read the one for a sprint before you touch its branch.
   - `architect_log.md`: the Architect's terse running log, 2026-10-16 to 2026-10-18.
 
 ## 5. What to do next, in order (P1 first)
@@ -101,7 +102,7 @@ Each step ends with the Architect's audit (a `VER-` record) and a merge with a m
 1. **SPR-014 (lifecycle queues; C3 `[perf-baseline]`), merge first.**
    1. Fast-forward the sprint branch to `28ab29e` (`git push origin 28ab29e:sprint/SPR-014-lifecycle-queues`; it is a descendant, so no force is needed). It already holds the fix batch and a merge of `main` `3d26090` by gate name.
    2. Merge the current `main` (#100, #101 and this handoff: docs and Python packaging, no gate changes expected). Check the baselines with `bin/check_baseline.py`; they should not move.
-   3. Run the full `check_all`. The Tester's probes and draft re-check scope are on `review/SPR-014-tester-handoff-20261018` @ `b03cc79` (under `tester-probes/SPR-014-handoff/`; evidence, not for merging).
+   3. Run the full `check_all` (the developer reports a PASS on `28ab29e` itself). The Tester's probes and draft re-check scope are on `review/SPR-014-tester-handoff-20261018` @ `b03cc79` (under `tester-probes/SPR-014-handoff/`; evidence, not for merging).
    4. Push, and mark PR #83 ready.
    5. The Tester re-checks K1, K2, K3, K6, K7, K10 and K11 by scope (the list is in `spr014_rulings.md`).
    6. Write `VER-SPR-014`.
@@ -110,14 +111,15 @@ Each step ends with the Architect's audit (a `VER-` record) and a merge with a m
       - K8, to SPR-021a;
       - K5's figures, into A-60, marked part done;
       - K12, to SPR-015 N7;
+      - the Tester's survivors M4, M5, M7 and S2, and K4's pending test (`session_reports.md`);
       - the "a event" wart;
       - the sealed constructor.
-   8. Ask the director to delete `review/SPR-014-tester-probes`.
+   8. Delete `backup/SPR-014-pre-audit` and, once folded in, `backup/SPR-014-dev-handoff-20261018`. Ask the director to delete `review/SPR-014-tester-probes`.
    9. Merge.
-2. **SPR-038a (per-instant cost, stage A; C2 `[perf-baseline]`).** Fast-forward the sprint branch to `789c138` (the conditions `160be40` and the evidence draft). Merge main, re-run `check_all`, and open the PR with the before/after table. Then the Tester's phase 2. Check every condition in `rulings_by_message.md`. Audit and merge. SPR-038b follows (D60).
+2. **SPR-038a (per-instant cost, stage A; C2 `[perf-baseline]`).** Fast-forward the sprint branch to **`160be40`**, the Architect's conditions (local `check_all` PASS, 564 checks). Leave out the handoff commit `789c138`, but take its `handoff/SPR-038a_evidence.md` as the PR body. Merge main by gate name, re-record both perf baselines with the tools in a `[perf-baseline]` commit, re-run `check_all`, and open the PR `SPR-038a: per-instant engine cost, stage A [perf-baseline] [C2]` with the before/after table. Then the Tester's phase 2. Check every condition in `rulings_by_message.md`. Audit and merge. SPR-038b follows (D60).
 3. **SPR-020 (the event envelope; C3 `[perf-baseline]`).** Merge main by gate name, regenerate the baselines in the final `[C3]` commit, then the Tester, the audit and the merge.
 4. **SPR-026 (World Stream v1; C2).**
-   1. Start from `2323640` (the developer's WIP C1 fix, gates not run) and finish the batch in `spr026_rulings.md`:
+   1. Start from `2323640` (the developer's WIP C1 fix, gates not run; the timing could not reproduce the reviewer's figures on that machine, so re-measure on a hosted runner or `adjutant`; `session_reports.md`) and finish the batch in `spr026_rulings.md`:
       - **C1:** no per-append copy of the chunk list. Re-measure; at most 5% overhead on solo 3,000 years and hamlet 6,000 years with `--ladder monthly`.
       - **DEF-2:** the accounting test and its two mutants.
       - **The MIN and cheap NIT fixes.**
@@ -136,7 +138,7 @@ Each step ends with the Architect's audit (a `VER-` record) and a merge with a m
    3. Send one batch: the review findings plus `7d83b2e` (the fuzz control on seeds 1–4, on `backup/SPR-017-dev-handoff-20261018`; fast-forward the sprint branch to it).
    4. If golden is still over 12:00, move the two fuzz gates to part stream.
    5. Write `VER-SPR-017` (rule on deviations 1–10), merge, and ask the director to delete `review/SPR-017-tester-cases`.
-6. **Then the wave order** (PRJ-002 §3–§4; the cross-plan ruling X9): SPR-015 (births F1), then SPR-016 stage 2, then wave 6 (SPR-018, SPR-019), then wave 7 (SPR-021a/b, SPR-022a/b, once D58 is approved), and so on. Minds (SPR-023 onward) need D59; wave 8 needs D61.
+6. **Then the wave order** (PRJ-002 §3–§4; the cross-plan ruling X9). Note for SPR-021: SPR-017's Tester found that M7 0.3.4 lacks a `person.id` read, so the real M7 fails `UndeclaredRead(person.id)` through the effect seam until SPR-021 adds it. SPR-015 (births F1), then SPR-016 stage 2, then wave 6 (SPR-018, SPR-019), then wave 7 (SPR-021a/b, SPR-022a/b, once D58 is approved), and so on. Minds (SPR-023 onward) need D59; wave 8 needs D61.
 7. **Spec PRs in flight** (each: finish, independent review on a different model, rulings, close with a `REV-`, PR, merge):
    - **AN-0** (`arch/AN-0-annals-fold`): apply R1–R11 (`an0_rulings.md`); the WIP commit has started R1–R3. Then verify, write `REV-AN0`, open the PR and merge, **before AN-1**.
    - **AN-1** (`arch/AN-1-annals-m7-fixtures`): run its gates, review, merge after AN-0 (the conflicts are mechanical: `annals_v0.md`'s status line and §14, the `CLAUDE.md` annals line, `check_all`'s annals block). AN-0's control needs `solitary` to keep its two segments at y000000 and y000003.
@@ -151,7 +153,7 @@ Each step ends with the Architect's audit (a `VER-` record) and a merge with a m
 
 ## 6. Remote work sessions (Claude Code on the web) at the handoff
 
-Each session was asked to push its unpushed work, reply and stop. These arrived (checked with `git ls-remote` at about 12:00 UTC). Each `backup/` and `review/` head is a fast-forward of its sprint branch's head.
+Each session was asked to push its unpushed work, reply and stop. These arrived (checked with `git ls-remote` at about 12:00 UTC); each session's own report is in `docs/handoff/2026-10-18/session_reports.md`. Each `backup/` and `review/` head is a fast-forward of its sprint branch's head.
 
 | Role | Branch @ head | What it holds |
 |---|---|---|
