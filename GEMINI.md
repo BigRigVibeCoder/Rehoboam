@@ -15,3 +15,8 @@ The rules you are most likely to break by habit:
 - **Never commit `CODEX/00_INDEX/MANIFEST.yaml`.**
 - **Run `bin/check_all.sh` before asking for an audit.** No report, no pass.
 - **Merge conflicts in `bin/check_all.sh` are resolved by gate name.** Then run `python -I bin/check_all_selftest.py inventory`.
+- **Keep context small and calls few** (GOV-011 §8):
+  - restart daily from `HANDOFF.md`;
+  - batch tool calls;
+  - do not poll;
+  - keep command output short.

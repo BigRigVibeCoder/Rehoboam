@@ -64,23 +64,23 @@ PR #83 merges with a merge commit, because the branch carries merges of `main` a
 | K1 | `submit` validates payload only when `decl.payload.is_some()`. Untyped accepts `Arg::Event` | FIX. Refuse `Arg::Event` when payload is `None` with typed `SimError` | Fixed in `1d351f5` (`untyped_payload_with_event_rejected`) |
 | K2 | `lint_forbidden.py` A-50 rule bypassed by macro renaming | FIX. Flag `use` of `core::env`, `core::option_env`, `std::option_env` and aliases | Fixed in `1d351f5` with planted controls |
 | K3 | Engine did not enforce R9 (`outcome = true` cross-instant check) | FIX. Require drain pulse fires at `t` in later-or-equal phase or `SimError::Timer` | Fixed in `1d351f5` |
-| K4 | Drain settlement check (taken = applied + dropped) not enforced | BCK. Filed to SPR-038b T-07 | BCK-002 A-72 |
+| K4 | Drain settlement check (taken = applied + dropped) not enforced | BCK. Filed to SPR-038b T-07 | BCK-002 A-74 |
 | K5 | Per-instant cost measurements on `life_course` | Documented. Figures filed to BCK-002 A-60 and used as baseline for SPR-038a | BCK-002 A-60 |
 | K6 | `drain_only` not tied to spec step count | FIX. Added `crates/rh-sys-demography/tests/drain_only.rs` | Fixed in `1d351f5` |
 | K7 | `death_path.rs` concurrency test ran at 1 thread only | FIX. Test loops across 1, 2, 4, N threads asserting equal state and drops | Fixed in `1d351f5` |
-| K8 | `DraftRef::from_index` public | BCK. Seal constructor or reword at SPR-021a | BCK-002 A-73 |
-| K9 | Owner drop reasons unconstrained | BCK. Two-variant reason (`dead`, `ended`) filed to SPR-038b | BCK-002 A-72 |
+| K8 | `DraftRef::from_index` public | BCK. Seal constructor or reword at SPR-021a | BCK-002 A-75 |
+| K9 | Owner drop reasons unconstrained | BCK. Two-variant reason (`dead`, `ended`) filed to SPR-038b | BCK-002 A-74 |
 | K10 | Rust loader failed open on mistyped `key` or malformed `payload` | FIX. Fail closed by name | Fixed in `1d351f5` |
 | K11 | Integer neutral on spec-less column typed as raw bits | FIX. Left untyped (`None`) | Fixed in `1d351f5` |
-| K12 | `Marry{a,a}` and stale former spouse admitted | BCK. Filed to SPR-015 N7 | BCK-002 A-74 |
+| K12 | `Marry{a,a}` and stale former spouse admitted | BCK. Filed to SPR-015 N7 | BCK-002 A-76 |
 | K13 | Plan BLUF and `05.1` changelog ordering | FIX. Text updated | Fixed in `1d351f5` |
 
 ## 4. Backlog items filed (BCK-002)
 - **A-60:** Updated with K5 measurements (16/104/1,109 µs per instant at 100/1,000/10,000 rows; ~59 allocations per idle solo tick).
-- **A-72:** K4 & K9 filed to SPR-038b T-07 (settlement check and two-variant drop reason).
-- **A-73:** K8 filed to SPR-021a (sealed `DraftRef` constructor).
-- **A-74:** K12 filed to SPR-015 N7 (`Marry{a,a}` validation).
-- **A-75:** Tester's survivors (M4, M5, M7, S2, K4 pending test) and the "with a event" wart.
+- **A-74:** K4 & K9 filed to SPR-038b T-07 (settlement check and two-variant drop reason).
+- **A-75:** K8 filed to SPR-021a (sealed `DraftRef` constructor).
+- **A-76:** K12 filed to SPR-015 N7 (`Marry{a,a}` validation).
+- **A-77:** Tester's survivors (M4, M5, M7, S2, K4 pending test) and the "with a event" wart.
 
 ## 5. Audit conclusion
 SPR-014 meets all functional, determinism, performance, and governance requirements under P1a. Status is **CLOSED**.
