@@ -815,6 +815,15 @@ effect_golden_rust_control() {
   RH_EFFECT_GOLDEN="$planted" cargo nextest run -p rh-manifest --locked --test effect_golden --no-capture
 }
 
+# SPR-017 T-06: the Registry's programs against the real environment; the control drops seniority's order.
+effect_programs_control() {
+  local planted="$PWD/target/rendered-fixtures/registry_seniority_without_order.toml"
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed "/^order      = '(count(y in line_agnatic/d" specs/manifest/registry_v0.toml > "$planted" || return 1
+  if cmp -s "$planted" specs/manifest/registry_v0.toml; then echo "control not planted: seniority's order line not found"; return 1; fi
+  "$RH_CLI" effect check --registry "$planted"
+}
+
 # SPR-009 T-02a: the instruction-count gate (V-PERF-04) and its controls. The gate measures benches 7
 # and 8 under callgrind (bin/perf_gate.py) and compares them with the committed baseline; a second
 # run must give identical counts; a changed baseline must equal the tool's output (ruling 3).
@@ -1194,6 +1203,9 @@ run "lint_odd neutral positive control: an enum neutral outside the column's cod
 run "lint_odd neutral control: a frozen substrate reading a non-substrate's column as identity warns and passes; the rule is advisory, registration enforces it (REV-EVO-001 R12, R16)" "pass:WARN  M3.agriculture.odd.toml: a substrate reads title.holder from M7.dynasty as identity" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/substrate_identity &&
 run "lint_odd neutral positive control: an identity read carrying a neutral must FAIL (REV-EVO-001 R12)" "fail:ERROR M3.agriculture.odd.toml: read person.alive from M2.demography is an identity read, which requires its owner and declares no neutral" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/identity_neutral &&
 run "lint_odd neutral control: a draft spec's rate read of an absent owner with no neutral warns and passes (EVO-001)" "pass:WARN  M3.agriculture.odd.toml: read polity.exec_constraint from M6.polity needs a neutral value" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/draft_missing &&
+run "lint_odd [commands] positive control: a ScheduleDeath with a tick parameter must FAIL, naming M2's [[applies]] (SPR-017 T-06)" "fail:differ from M2.demography.odd.toml's [[applies]] ScheduleDeath payload" "$PY" -I specs/systems/lint_odd.py --commands tests/lint_fixtures/registry_commands/tick.toml &&
+run "lint_odd [commands] positive control: an [[applies]] with no Registry [commands] entry must FAIL (SPR-017 T-06)" "fail:ERROR M2.demography.odd.toml: [[applies]] Marry has no Registry [commands] entry" "$PY" -I specs/systems/lint_odd.py --commands tests/lint_fixtures/registry_commands/no_entry.toml &&
+run "lint_odd [commands] positive control: a cause_event typed int must FAIL (SPR-017 T-06)" "fail:parameter cause_event must be typed event, not int" "$PY" -I specs/systems/lint_odd.py --commands tests/lint_fixtures/registry_commands/cause_event_int.toml &&
 run "System specs, next version: the M2 F1 draft supersedes the frozen rung-0 slice and preserves it (lint_odd --next; SPR-015)" "pass:self-check (next of M2.demography): 46 planted changes rejected (3 of them by the amendments lock), 45 amendments recorded and locked, the clean next version kept" "$PY" -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml &&
 run "lint_odd next positive control: a next version that changes a frozen algorithm step must FAIL (SPR-015)" "fail:frozen [algorithm.mortality_rung0] changed" odd_next_control algorithm &&
 run "lint_odd next positive control: a new RNG purpose before a frozen one must FAIL (SPR-015)" "fail:frozen RNG purpose death_time must stay at position 0" odd_next_control rng &&
@@ -1291,6 +1303,8 @@ run "Doctest count gate positive control: one typed-ID case missing must FAIL" "
 run "V-WC-04 manifest parity: Rust loader agrees with manifest_v0.py (SPR-004)" "pass:PARITY: all" "$PY" -I bin/manifest_parity.py --rust-bin "$RH_CLI" specs/manifest/examples/*.yaml tests/manifest_parity/*.yaml &&
 run "V-WC-04 parity positive control: drifted Registry must FAIL" "fail:PARITY MISMATCH specs/manifest/examples/invalid_draft_style.yaml" "$PY" -I bin/manifest_parity.py --rust-bin "$RH_CLI" --rust-registry tests/lint_fixtures/parity/registry_drift.toml specs/manifest/examples/invalid_draft_style.yaml &&
 run "V-WC-04 parity positive control: message-only drift must FAIL (GAP-3)" "fail:PARITY MISMATCH specs/manifest/examples/invalid_draft_style.yaml" "$PY" -I bin/manifest_parity.py --rust-bin "$RH_CLI" --rust-registry tests/lint_fixtures/parity/registry_drift_message.toml specs/manifest/examples/invalid_draft_style.yaml &&
+run "Effect programs: every Registry program compiles against the real environment (rh-cli effect check; SPR-017 T-06)" "pass:EFFECT PROGRAMS: PASS (7 laws, 21 programs)" "$RH_CLI" effect check &&
+run "Effect programs positive control: a Registry whose seniority has no order must FAIL (SPR-017 T-06)" "fail:ERROR succession_laws.seniority: no order program" effect_programs_control &&
 run "Ownership lint: single writer from specs/systems (SPR-004 T-03)" "pass:0 violations" "$RH_CLI" ownership &&
 run "Ownership lint positive control: unowned write must FAIL" "fail:VIOLATION [single-writer] S5.daily_life: writes person.alive, which M2.demography owns" "$RH_CLI" ownership tests/lint_fixtures/ownership/unowned_write.access.toml &&
 run "Ownership lint positive control: a write declared twice must FAIL (SPR-005 DEF-3)" "fail:VIOLATION [duplicate] M2.demography: declares a write to person.alive twice" "$RH_CLI" ownership tests/lint_fixtures/ownership/duplicate_write.access.toml &&

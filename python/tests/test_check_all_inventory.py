@@ -83,6 +83,10 @@ REQUIRED_GATES = (
     "Doctest count gate positive control: one typed-ID case missing must FAIL",
     "Doctest count gate: every expected compile-fail case and twin ran (SPR-002 T-01; DEF-2)",
     "Document index builds (gen_manifest --check)",
+    "Effect programs positive control: a Registry whose seniority has no order must FAIL "
+    "(SPR-017 T-06)",
+    "Effect programs: every Registry program compiles against the real environment (rh-cli "
+    "effect check; SPR-017 T-06)",
     "Family annals v0: provenance re-derived by a whole-group re-render, template slots, no "
     "model, calendar, a possible history under M7's rules, determinism in two processes, "
     "coverage, injective designation, a canonical extract digest, golden annals and manifests "
@@ -561,6 +565,11 @@ REQUIRED_GATES = (
     "lint_forbidden positive control: the six ways round sockets-only-in-serve.rs (re-exports, "
     "#[path], include!) must FAIL (SPR-026 R19)",
     "lint_forbidden positive control: workspace plane-A crate must FAIL",
+    "lint_odd [commands] positive control: a ScheduleDeath with a tick parameter must FAIL, "
+    "naming M2's [[applies]] (SPR-017 T-06)",
+    "lint_odd [commands] positive control: a cause_event typed int must FAIL (SPR-017 T-06)",
+    "lint_odd [commands] positive control: an [[applies]] with no Registry [commands] entry "
+    "must FAIL (SPR-017 T-06)",
     "lint_odd applies control: a sender's payload matching a typed [[applies]] field for field, "
     "with its drain binding, passes (REV-P1a section 7; EVO-001)",
     "lint_odd applies positive control: a sender's payload fields differ from [[applies]], "
