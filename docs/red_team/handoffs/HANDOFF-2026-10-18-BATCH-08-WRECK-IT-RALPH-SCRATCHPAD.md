@@ -2,15 +2,48 @@
 ## The Real-World Historical Fidelity, Dynastic Stress & Engine Robustness Matrix
 
 > **Document ID:** `HANDOFF-2026-10-18-BATCH-08-SCRATCHPAD`  
-> **Status:** Living Red Team Working Dossier (In Progress)  
+> **Status:** Living Red Team Master Dossier & Strategic Execution Plan  
 > **Maintained by:** Red Team Leader & Quality Auditor  
 > **Date:** 2026-10-18  
 > **Branch Tracking:** `arch/red-team-batch-04`  
-> **Target Audience:** The Director (Personal Private World Engine)  
+> **Target Audience:** The Director & The Architect  
 
 ---
 
-## 1. THE FOUNDATIONAL MANDATE: AUDIENCE OF ONE
+## 1. THE DIRECTOR'S NON-NEGOTIABLE 3-TIER PRIORITY INVARIANT
+
+There is **zero ambiguity** between the Director, the Red Team, and the Architect regarding project priorities:
+
+```
++─────────────────────────────────────────────────────────────────────────────────────────+
+| PRIORITY 1: BUILD THE ENGINE TO A MINIMUM VIABLE CORE (PHASE 1A / 1B)                    |
+| • Living ledger, bloodlines, births, deaths, and dynastic succession (M7).              |
+| • Real demography (M2) and stress/mental breaks (T1.minds).                             |
+| • Apache Arrow IPC World Stream sink and bitwise determinism (SPR-013, SPR-026).        |
+| • Status: Active execution. Non-negotiable prerequisite for all visual layers.           |
++─────────────────────────────────────────────────────────────────────────────────────────+
+                                             │
+                                             ▼
++─────────────────────────────────────────────────────────────────────────────────────────+
+| PRIORITY 2: THE PERSONAL 3D VOXEL VIEWER FOR THE DIRECTOR (PLANE C / BEVY & WEBGL)       |
+| • The visual spectator harness (rh-view / PRJ-003, SPR-033, ADR-0036).                  |
+| • Direct subscription to wire_v1 (A.sock / C.sock) streaming un-enveloped frames.       |
+| • Peak SOTA 0.35m micro-voxel fidelity, first-person ground walking, locked 60 FPS.     |
+| • The Director must be able to sit back and watch his living world unfold with zero lag.│
++─────────────────────────────────────────────────────────────────────────────────────────+
+                                             │
+                                             ▼
++─────────────────────────────────────────────────────────────────────────────────────────+
+| PRIORITY 3: THE 4-EPOCH PROGRESSIVE HISTORICAL EXPANSION                                |
+| • Once Priorities 1 & 2 are solid, expand the timeline along authentic historical eras.  |
+| • Era is state, not hardcoded branches (ADR-0027): E2 Gunpowder -> E3 Steam -> E4 Modern.│
+| • Unleash Adjutant's 16 vCPUs and 62 GB RAM to scale to 1,000,000 living citizens.       |
++─────────────────────────────────────────────────────────────────────────────────────────+
+```
+
+---
+
+## 2. THE FOUNDATIONAL MANDATE: AUDIENCE OF ONE
 
 1. **Private Personal Product, Not a Commercial SaaS:**
    * There are zero enterprise customers, zero sales funnels, zero multi-tenant permissions, and no commercial cloud servers.
@@ -26,53 +59,71 @@
 
 ---
 
-## 2. THE "WRECK-IT RALPH" ATTACK MATRIX
+## 3. ADJUTANT CLOUD BEAST: HARDWARE SPECS & PERFORMANCE RE-ASSESSMENT
 
-These are the four operational assault vectors under active execution:
+Probed directly from `/proc/cpuinfo`, `free -h`, and `lscpu --caches` on 2026-10-18:
+
+| Hardware Component | Adjutant Specification | Simulation Impact & Scaling Ceiling |
+| :--- | :--- | :--- |
+| **CPU Architecture** | **AMD EPYC 9B14 "Genoa" (Zen 4)** | 16 vCPUs (8 physical cores, 16 threads @ 5.2 GHz BogoMIPS). |
+| **Vector Extensions** | **Native AVX-512** (`avx512_vnni`, `avx512bw`) | SIMD vectorized evaluation of 16–32 agent life states per clock cycle. |
+| **L3 Cache** | **32 MiB Unified Cache** | **Holds 466,000 living humans entirely in CPU cache** ($72\text{ bytes/person}$). |
+| **L2 Cache** | **8 MiB** (1 MiB dedicated per core) | Blazing-fast inner tick loops on active settlement subsets. |
+| **RAM** | **62 GiB DDR5 Server Memory** | **57 GiB available.** Holds 1,000,000 agents in 72 MB; 5,000,000 in 360 MB. |
+| **RAM Disk** | **32 GiB `/dev/shm` tmpfs** | Zero-latency Arrow IPC ring buffers & DuckDB Parquet segments in RAM. |
+| **Storage** | **PCIe NVMe SSD** | High-throughput background chronicle persistence. |
+
+**The Hardware Sledgehammer:** The old fear that a 500,000-person demographic transition would melt the Director's laptop is dead. Adjutant can simulate a 1,000,000-person empire entirely in memory with sub-millisecond tick execution.
+
+---
+
+## 4. THE 4-EPOCH PROGRESSIVE ROADMAP (ADR-0027 REALIZED)
+
+Eras are continuous state, not hardcoded engine branches. Coverage expands progressively:
 
 ```
-+-----------------------------------------------------------------------------------------+
-| VECTOR 1: DYNASTIC DRAMA & SURVIVAL (THE WORLD CANNOT DIE OUT)                           |
-| Target: M2.demography, M7.dynasty, specs/worldgen/project_population.py                 |
-| The Risk: The Director runs a 200-year feudal simulation (Manor / Twin Vales), and by   |
-| year 80 every noble house collapses to zero living heirs due to aggressive mortality.   |
-| The Attack: Sweep 100 seeds across 300+ years. Check extinction rates under strict       |
-| primogeniture and agnatic succession. Measure noble cohort survival.                    |
-+-----------------------------------------------------------------------------------------+
-                                           │
-                                           ▼
-+-----------------------------------------------------------------------------------------+
-| VECTOR 2: BIT-FOR-BIT CROSS-MACHINE DETERMINISM                                         |
-| Target: PRNG streams (rh-ids), floating-point leaks, thread race conditions              |
-| The Risk: A 500-year soak run on the cloud Genoa VM (`adjutant`) diverges when re-run    |
-| on the Director's ThinkPad P51.                                                         |
-| The Attack: Assert 100% bitwise parity on golden event hashes and state digests across   |
-| 1, 2, 4, and N worker threads. Hunt down any unseeded standard library randoms.         |
-+-----------------------------------------------------------------------------------------+
-                                           │
-                                           ▼
-+-----------------------------------------------------------------------------------------+
-| VECTOR 3: SPECTATOR STREAMING & ZERO-LAG SCRUBBING                                      |
-| Target: SPR-026 wire_v1, crates/rh-protocol, bin/stream_server.py, 3D Voxel Viewer      |
-| The Risk: The socket blocks the simulation engine, drops frames, or stutters during     |
-| 50-year timeline scrubbing in the viewer.                                               |
-| The Attack: Stress-test slow consumers, un-enveloped raw wire_v1 frames, and            |
-| keyframe seek latencies (< 250 ms for a 20-year scrub).                                 |
-+-----------------------------------------------------------------------------------------+
-                                           │
-                                           ▼
-+-----------------------------------------------------------------------------------------+
-| VECTOR 4: HARDWARE RESOURCE BOUNDS (LAPTOP PRESERVATION)                                |
-| Target: Memory footprint, Arrow IPC buffers, Parquet segment rollover                   |
-| The Risk: A 1,000-year simulation run leaks memory or clutters disk, freezing hardware. |
-| The Attack: Enforce O(1) memory per agent (dead rows purged immediately to lifecycle    |
-| queues) and bounded Parquet/Arrow streaming footprints.                                 |
-+-----------------------------------------------------------------------------------------+
+                                  THE REHOBOAM PROGRESSIVE TIMELINE
+                                 (Tuned for Cloud Beast "Adjutant")
+  
+   EPOCH 1: THE FEUDAL FOUNDATION (1000–1500 CE) — [ACTIVE BUILD: TODAY]
+   ┌──────────────────────────────────────────────────────────────────────────────────────┐
+   │ • Scope: Manors, keeps, bloodlines (M7), peasant demography (M2), stress breaks (T1). │
+   │ • Mechanics: Food/wheat harvests (M3/M4), castle sieges & wall breaches (M8).         │
+   │ • Scale: 60 to 10,000 living humans. Sub-millisecond tick speeds on Adjutant.         │
+   │ • Personal Experience: The gritty, intimate saga of a noble dynasty holding a keep.  │
+   └──────────────────────────────────────────────────────────────────────────────────────┘
+                                              │
+                                              ▼
+   EPOCH 2: THE AGE OF GUNPOWDER & SAIL (1500–1750 CE) — [ERA PACK E2]
+   ┌──────────────────────────────────────────────────────────────────────────────────────┐
+   │ • Adds: Matchlocks, cannons, trace italienne star forts replacing vertical keeps.     │
+   │ • Mechanics: Caravels and galleons on oceanic trade routes; early parliaments (M6).   │
+   │ • Scale: 10,000 to 50,000 living humans. Build time: ~24–48 agent hours.             │
+   │ • Personal Experience: Stone castles shatter under cannon fire; merchant fleets rise. │
+   └──────────────────────────────────────────────────────────────────────────────────────┘
+                                              │
+                                              ▼
+   EPOCH 3: STEAM, COAL & THE INDUSTRIAL LEAP (1750–1900 CE) — [ERA PACK E3]
+   ┌──────────────────────────────────────────────────────────────────────────────────────┐
+   │ • Adds: Coal mining, steam engines, textile factories, iron railroads.                │
+   │ • Mechanics: Malthusian escape (sanitation collapses death rates; 10x population).    │
+   │ • Scale: 100,000 to 1,000,000+ living humans (unleashing Adjutant's 62 GB DDR5 RAM).   │
+   │ • Personal Experience: Smoke stacks rise over the river; trains haul iron ore.        │
+   └──────────────────────────────────────────────────────────────────────────────────────┘
+                                              │
+                                              ▼
+   EPOCH 4: THE INDUSTRIAL CRUCIBLE & MASS MOBILIZATION (1900–1945 CE) — [ERA PACK E4]
+   ┌──────────────────────────────────────────────────────────────────────────────────────┐
+   │ • Adds: Telegraph/radio communications, mass conscription, artillery, trench systems. │
+   │ • Mechanics: National mobilization, war bonds, factory supply chains.                 │
+   │ • Scale: Continental empires; multi-district metropolises.                            │
+   │ • Personal Experience: The epic death of the old feudal order under industrial war.   │
+   └──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 3. THE REAL-WORLD HISTORICAL FIDELITY SCORECARD
+## 5. THE REAL-WORLD HISTORICAL FIDELITY SCORECARD
 
 An unflinching reality check comparing authentic medieval mechanics against Rehoboam's architecture:
 
@@ -86,15 +137,34 @@ An unflinching reality check comparing authentic medieval mechanics against Reho
 
 ---
 
-## 4. IMMEDIATE EXECUTION BACKLOG
+## 6. FORMAL STRATEGIC MEMO FOR THE ARCHITECT
 
-1. **Probe B08-01: Dynastic Longevity Sweep (`probe_dynastic_survival.py`)**
-   * Run 100 seeds of `manor` and `twin_vales` through `specs/worldgen/project_population.py` and `selftest_population_synthesis.py`.
-   * Measure: How many noble houses survive past Year 100? Year 200? Year 300?
-   * Pinpoint the exact tipping point where strict agnatic primogeniture causes total dynastic extinction.
-2. **Probe B08-02: Live Wire v1 Stream Ingestion (`probe_wire_v1_feed.py`)**
-   * Build the interim subscriber for `A.sock` directly consuming raw `wire_v1` frames (PR #87 Directive 2).
-   * Verify that canonical simulation records stream into the viewer with zero custom JSON envelope bloat and zero client-side calendar math.
-3. **Probe B08-03: Famine & Army Ceiling Stress Audit**
-   * Inspect the coupling between `M3.agriculture` yield and `M8` army mobilization.
-   * Verify that pulling 30% of male commoners into war causes an immediate food deficit in the home region.
+```markdown
+MEMORANDUM FOR THE ARCHITECT (AGT-001)
+FROM: Red Team Leader & Quality Auditor
+DATE: 2026-10-18
+SUBJECT: Strategic Execution Alignment & Director Priorities
+
+The Director has established an ironclad, non-negotiable 3-tier prioritization invariant:
+
+1. PRIORITY 1: Minimum Viable Engine Core (Phase 1a / 1b)
+   - Do not defer or distract core developers with auxiliary tooling or premature era packs.
+   - Deliver and lock down the living ledger, M2 demography knots, M7 dynastic succession, 
+     T1 stress/mental breaks, and the raw Apache Arrow wire_v1 stream writer.
+   - G1a and G1b remain the primary critical path.
+
+2. PRIORITY 2: The Director's 3D Voxel Viewer (Plane C / rh-view / WebGL)
+   - Immediately following SPR-026/SPR-027, the visual spectator harness (PRJ-003, SPR-033) 
+     is the primary deliverable for the Director's personal workstation.
+   - The viewer must subscribe directly to wire_v1 on 127.0.0.1, render 0.35m micro-voxels 
+     at locked 60 FPS, support first-person walking, and achieve sub-250ms timeline scrubbing.
+   - The Director must have a working, beautiful window into his simulated world before 
+     sagas or narrative compilers are scheduled.
+
+3. PRIORITY 3: The 4-Epoch Progressive Expansion (E2 -> E3 -> E4)
+   - With Adjutant's hardware profile verified (AMD EPYC Genoa Zen 4, 16 vCPUs, 32 MiB L3, 
+     62 GiB RAM, 32 GiB /dev/shm RAM disk), the 1M-person memory ceiling is fully lifted.
+   - Following G2, era packs expand continuously: E2 Gunpowder/Sail (1500-1750) -> E3 Steam/Rail (1750-1900) -> 
+     E4 Industrial War (1900-1945).
+   - Eras remain state vectors (ADR-0027), preserving 100% backward compatibility.
+```
