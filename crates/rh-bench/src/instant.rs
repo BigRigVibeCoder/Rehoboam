@@ -272,6 +272,7 @@ fn specs() -> SpecTable {
             key_field: "person".to_owned(),
             payload: Some(Vec::new()),
             outcome: false,
+            payload_malformed: None,
         }],
         ..SpecEntry::default()
     };
