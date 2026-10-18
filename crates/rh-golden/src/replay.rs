@@ -117,6 +117,8 @@ fn files(dir: &Path) -> Result<BTreeMap<String, Vec<u8>>, Error> {
                 if !rel.ends_with("/C") {
                     walk(root, &p, out)?;
                 }
+            } else if crate::stream::is_host_file(&p) {
+                // A live host's socket and lock (SPR-026): the host's, not the stream's.
             } else {
                 out.insert(rel, std::fs::read(&p).map_err(io("replay"))?);
             }

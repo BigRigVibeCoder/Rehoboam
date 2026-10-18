@@ -1,0 +1,30 @@
+[package]
+name = "rh-protocol"
+description = "World Stream wire format v1 (IF-0 live edge): frames, control messages, the host's dispatcher and the Catchup viewer state machine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+# specs/stream/wire_v1.md §7 (SPR-026 T-01): a tool crate, pinned by name in bin/lint_arch.py
+# PINNED_LABELS, and an engine crate (it runs in the engine host's process; ENGINE_CRATES). A leaf:
+# no workspace crate of any dependency kind, and exactly serde and serde_json as third-party
+# dependencies (rule protocol-leaf, PROTOCOL_EXTERNAL_DEPS). Bytes in, bytes out: no socket.
+[package.metadata.rehoboam]
+plane = "tool"
+kind = "tool"
+
+[lints]
+workspace = true
+
+[dependencies]
+# The versions the workspace already pins (nothing new in the lock). serde_json without
+# `preserve_order`, so its maps are sorted and serialise as canonical JSON (wire_v1.md §3.1).
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+
+[features]
+# Planted controls (SPR-026 T-01): each must fail its own test, by name. Never in a release build
+# (rh-cli build-info refuses them, BCK-002 A-52).
+mutant-pace-method = []
+mutant-accept-flags = []

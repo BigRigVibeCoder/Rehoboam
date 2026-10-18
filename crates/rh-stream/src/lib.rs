@@ -12,6 +12,8 @@
 //! - [`seal`]: atomic sealing on disk and reading back; the one file allowed file I/O.
 //! - [`convert`]: the drained events, the applied journal rows and the life-course delta as
 //!   records.
+//! - [`live`]: the live edge (SPR-026): one `ArcSwap` snapshot of the window, read by the
+//!   socket host's serving threads, published by the writer and its seal thread.
 //! - [`writer`]: the per-timeline writer the host feeds after each instant; resume from a
 //!   keyframe; the reader of a timeline's sealed segments.
 //!
@@ -25,6 +27,7 @@ use core::fmt;
 
 pub mod canonical;
 pub mod convert;
+pub mod live;
 pub mod parquet_io;
 pub mod record;
 pub mod seal;
@@ -74,3 +77,13 @@ impl From<canonical::CanonicalError> for StreamError {
         Self::Canonical(e)
     }
 }
+
+/// The planted-control features compiled into this build (none in a real one; BCK-002 A-52).
+pub const MUTANTS: &[&str] = &[
+    #[cfg(feature = "mutant-bytes-queue-canonical")]
+    "mutant-bytes-queue-canonical",
+    #[cfg(feature = "mutant-bytes-window-only")]
+    "mutant-bytes-window-only",
+    #[cfg(feature = "mutant-window-gap")]
+    "mutant-window-gap",
+];

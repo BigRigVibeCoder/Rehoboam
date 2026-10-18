@@ -308,6 +308,14 @@ hash_golden_control() {
   "$PY" -I bin/gen_hash_golden.py --check --golden "$planted"
 }
 
+# Event digest golden control (SPR-020 T-02): the committed event digest file with one digest changed.
+event_digest_golden_control() {
+  local planted=target/rendered-fixtures/stale_event_digest_v2.txt
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed '0,/^event 0 /s/ [0-9a-f]\{16\}$/ 0000000000000000/' crates/rh-events/tests/golden/event_digest_v2.txt > "$planted" || return 1
+  "$PY" -I bin/gen_hash_golden.py --check --events-golden "$planted"
+}
+
 # Canonical-form golden control (SPR-013 T-09): the committed canonical golden file with one digest changed.
 canonical_golden_control() {
   local planted=target/rendered-fixtures/stale_canonical_v0.txt
@@ -394,6 +402,18 @@ odd_observes_control() {
     *) echo "odd_observes_control: unknown case $1"; return 1 ;;
   esac
   "$PY" -I specs/systems/lint_odd.py --extra-specs "$dir" "${overlay[@]}"
+}
+
+# annals_fold_control (annals_v0.md §9.1; AN-0): the committed solitary chronicle cut by the reference into its two
+# sim-year segments, which must fold, then with the second #segment line's digest zeroed, which must FAIL the fold.
+annals_fold_control() {
+  local dir=target/rendered-fixtures/annals_fold
+  rm -rf "$dir" && mkdir -p "$dir" || return 1
+  "$PY" -I specs/annals/selftest_annals_v0.py segment --world specs/annals/fixtures/solitary --out "$dir/cut.txt" || return 1
+  "$PY" -I specs/annals/selftest_annals_v0.py fold "$dir/cut.txt" >/dev/null || { echo "HARNESS ERROR: the unaltered cut does not fold"; return 1; }
+  sed 's/^\(#segment y000003 .* canonical_digest=\)[0-9a-f]*$/\100000000000000000000000000000000/' "$dir/cut.txt" > "$dir/altered.txt" || return 1
+  if cmp -s "$dir/cut.txt" "$dir/altered.txt"; then echo "HARNESS ERROR: the sed planted nothing"; return 1; fi
+  "$PY" -I specs/annals/selftest_annals_v0.py fold "$dir/altered.txt"
 }
 
 # lint_odd --next controls (SPR-015; REV-SPR-015 NIT-4): rendered from the next M2 spec itself, never copied, so they
@@ -627,6 +647,10 @@ FORBIDDEN_API_CONTROLS="hash_map:hash-collections:HashMap hash_set:hash-collecti
   env_rename:env:std::env env_var:env:std::env env_current_dir:env:std::env env_current_exe:env:std::env
   env_temp_dir:env:std::env env_home_dir:env:std::env env_set_current_dir:env:std::env
   env_split_paths:env:std::env env_join_paths:env:std::env
+  build_env_home:build-env:env!( build_env_option:build-env:option_env!( build_env_concat:build-env:env!(
+  build_env_manifest:build-env:env![ build_env_rename_core:build-env:core::env
+  build_env_rename_option:build-env:std::option_env build_env_rename_group:build-env:core::option_env
+  build_env_rename_reexport:build-env:some_crate::env
   fs_renamed_std:file-io:fs::r fs_os_symlink:file-io:fs::s raw_ident_fs:file-io:std::fs
   std_rename:std-rename:std~as std_rename_root:std-rename:std~as std_rename_self:std-rename:std~as
   extern_crate_std:std-rename:extern~crate~std~as
@@ -685,6 +709,26 @@ baseline_hand_edited_control() {
     "$input" > "$edited" || return 2
   if cmp -s "$input" "$edited"; then echo "HARNESS ERROR: no rung 1 hash was typed over"; return 2; fi
   "$PY" -I bin/check_baseline.py --baseline "$edited" --recomputed "$GOLDEN/$1_yearly_t1.ladder" --changed no
+}
+
+# SPR-026 C1: live edge overhead (reported, ungated): solo 3,000 years monthly headless vs --socket
+live_edge_overhead() {
+  local d="$GOLDEN/live_edge_overhead" t0 t1 headless socket pct
+  rm -rf "$d"; mkdir -p "$d"
+  t0=$(date +%s%N)
+  "$RH_CLI_RELEASE" run solo --years 3000 --ladder monthly --out "$d/headless.ladder" >/dev/null 2>&1 || return 1
+  t1=$(date +%s%N)
+  headless=$(( (t1 - t0) / 1000000 ))
+  t0=$(date +%s%N)
+  "$RH_CLI_RELEASE" run solo --years 3000 --ladder monthly --run-dir "$d/socket" --socket >/dev/null 2>&1 || return 1
+  t1=$(date +%s%N)
+  socket=$(( (t1 - t0) / 1000000 ))
+  if [ "$headless" -gt 0 ]; then
+    pct=$(( ((socket - headless) * 100) / headless ))
+  else
+    pct=0
+  fi
+  echo "live edge overhead: headless ${headless}ms, --socket ${socket}ms (+${pct}%)"
 }
 
 # SPR-013 T-10: the run never waits on a reader (05.10 §7 item 3). A tail --wait is attached to the run
@@ -769,10 +813,13 @@ stream_release_build() {
 stream_inputs() {
   solo_stream_run && world_golden_run household && world_golden_run hamlet
 }
-# BCK-002 A-52: a debug rh-cli built with one of rh-sys-demography's planted mutant features (its own
+# BCK-002 A-52: a debug rh-cli built with one of rh-sys-demography's planted mutant features and rh-core's
+# reference-gating-off (SPR-038 S12; its own
 # target directory, so the release build of the golden runs is untouched) refuses to run a world.
 mutant_build_control() {
-  cargo build --locked --quiet -p rh-cli -p rh-sys-demography --features rh-sys-demography/mutant-resample-hit-k1 \
+  # SPR-038 S12: rh-core's reference-gating-off is refused the same way, so it rides in the same build.
+  cargo build --locked --quiet -p rh-cli -p rh-sys-demography \
+    --features rh-sys-demography/mutant-resample-hit-k1,rh-core/reference-gating-off \
     --target-dir "$TARGET_DIR/mutant" || return 2
   "$TARGET_DIR/mutant/debug/rh-cli" run solo --years 1 --out "$TARGET_DIR/rendered-fixtures/mutant.ladder"
 }
@@ -936,6 +983,74 @@ effect_golden_control() {
   sed '0,/^expect = "bool:true"$/s//expect = "bool:false"/' specs/registry/effect_language_golden_v0.toml > "$planted" || return 1
   "$PY" -I specs/registry/effect_ref.py --check --golden "$planted"
 }
+# The same planted file must fail the Rust evaluator's golden test by the case's name (SPR-017 T-05).
+effect_golden_rust_control() {
+  local planted="$PWD/target/rendered-fixtures/altered_effect_language_golden_v0.toml"
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed '0,/^expect = "bool:true"$/s//expect = "bool:false"/' specs/registry/effect_language_golden_v0.toml > "$planted" || return 1
+  RH_EFFECT_GOLDEN="$planted" cargo nextest run -p rh-manifest --locked --test effect_golden --no-capture
+}
+
+# SPR-017 T-06: the Registry's programs against the real environment; the control drops seniority's order.
+effect_programs_control() {
+  local planted="$PWD/target/rendered-fixtures/registry_seniority_without_order.toml"
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed "/^order      = '(count(y in line_agnatic/d" specs/manifest/registry_v0.toml > "$planted" || return 1
+  if cmp -s "$planted" specs/manifest/registry_v0.toml; then echo "control not planted: seniority's order line not found"; return 1; fi
+  "$RH_CLI" effect check --registry "$planted"
+}
+
+# SPR-017 T-06: the keyed tables' order; the control feeds check_key_order the Rust lines with every table sorted.
+key_order_control() {
+  local planted="$PWD/target/rendered-fixtures/key_order_sorted.txt"
+  mkdir -p "$(dirname "$planted")" || return 1
+  "$RH_CLI" effect keys | while IFS=: read -r section ids; do
+    printf '%s: %s\n' "$section" "$(printf '%s\n' $ids | LC_ALL=C sort | tr '\n' ' ')"
+  done > "$planted" || return 1
+  "$PY" -I bin/check_key_order.py --rust-output "$planted"
+}
+
+# SPR-017 T-09 (V-WC-10, EVO-1): the data-only extension's control drops the law's programs from its
+# fixture Registry, keeping its id: the Registry must be refused by name.
+extension_control() {
+  local planted="$PWD/target/rendered-fixtures/registry_extension_without_programs.toml"
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed '/^\[succession_laws.absolute_primogeniture\]$/,/^order /d' tests/registry_effect/registry_absolute_primogeniture.toml > "$planted" || return 1
+  if cmp -s "$planted" tests/registry_effect/registry_absolute_primogeniture.toml; then echo "control not planted: the law's table was not found"; return 1; fi
+  "$RH_CLI" effect check --registry "$planted"
+}
+
+# SPR-017 T-08: effect_ref.py --emit and rh-cli effect eval print the same line for every case of a
+# golden-format file (the reference reads the golden file; the Rust side reads $1, the file itself or
+# a planted copy).
+effect_emit_parity() {
+  local ref rs file="${1:-specs/registry/effect_language_golden_v0.toml}"
+  ref="$("$PY" -I specs/registry/effect_ref.py --emit)" || return 1
+  rs="$("$RH_CLI" effect eval "$file")" || return 1
+  if [ "$ref" != "$rs" ]; then
+    diff <(printf '%s\n' "$ref") <(printf '%s\n' "$rs") | head -20
+    echo "EMIT PARITY: FAIL"
+    return 1
+  fi
+  echo "EMIT PARITY: $(printf '%s\n' "$ref" | wc -l | tr -d ' ') cases"
+}
+effect_emit_parity_control() {
+  local planted="$PWD/target/rendered-fixtures/emit_parity_lit_true.toml"
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed "0,/^text = 'true'\$/s//text = 'false'/" specs/registry/effect_language_golden_v0.toml > "$planted" || return 1
+  if cmp -s "$planted" specs/registry/effect_language_golden_v0.toml; then echo "control not planted: no text = 'true' case"; return 1; fi
+  effect_emit_parity "$planted"
+}
+# SPR-017 T-08: the fuzz's control runs it against a reference copy whose fixed-point products round
+# half up; it must report MISMATCH.
+effect_fuzz_control() {
+  local planted="$PWD/target/rendered-fixtures/effect_ref_half_up.py"
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed 's/^        return fx_from_fraction(a.ty, fx_value(a) \* fx_value(b))$/        return Fx(a.ty, sat((fx_value(a) * fx_value(b) * (1 << FRAC_BITS[a.ty]) + Fraction(1, 2)).__floor__(), *q_range(a.ty)))/' \
+    specs/registry/effect_ref.py > "$planted" || return 1
+  if cmp -s "$planted" specs/registry/effect_ref.py; then echo "control not planted: the fixed-point product line was not found"; return 1; fi
+  "$PY" -I bin/effect_fuzz.py --seeds 1-4 --rust-bin "$RH_CLI_RELEASE" --out target/fuzz_control --ref "$planted"
+}
 
 # SPR-009 T-02a: the instruction-count gate (V-PERF-04) and its controls. The gate measures benches 7
 # and 8 under callgrind (bin/perf_gate.py) and compares them with the committed baseline; a second
@@ -1041,6 +1156,17 @@ perf_local_control() {
     --baseline "$PERF_RUN" --measured "$PERF_RUN" --base-file "$PERF_FIXTURES/base.txt"
 }
 
+# SPR-038 S16: a quiet instant allocates nothing (the instant bench's teardown reads the arena's bump offset). Its
+# control plants one allocation in the quiet drain; the bench must fail at its first quiet case, by name.
+instant_alloc_control() {
+  local home
+  home="$(mktemp -d)" || return 2
+  IAI_CALLGRIND_HOME="$home" cargo bench --locked --quiet -p rh-bench --bench instant \
+    --features arena-alloc,instant-alloc-control
+  local rc=$?
+  rm -rf "$home"
+  return $rc
+}
 # SPR-009 T-05: V-PERF-11, the smoke world's heap allocations per steady-state tick (bin/perf_gate.py
 # alloc-*). The budget is the recorded count and any increase fails (ruling 5); counts are exact (R-8).
 ALLOC_BASELINE=crates/rh-bench/baselines/allocations_v1.txt
@@ -1075,6 +1201,8 @@ golden_vitals_run() {
     --require-parallel "$PARALLEL_FLOOR" --vitals --out "$GOLDEN/smoke_yearly_tN.ladder")" || { echo "$out"; return 1; }
   echo "$out" | grep -v '^vitals: system '
   grep -q '^vitals: tip .* | pace .* ticks/s | serial .* | state ' <<<"$out" || { echo "no vitals line"; return 1; }
+  # SPR-014 T-03: the ledger-less smoke world drops nothing over 1,000 years (dropped{} is empty).
+  grep -q '^vitals: dropped nothing' <<<"$out" || { echo "the smoke world dropped commands or timers"; return 1; }
 }
 
 # The debug workspace run leaves out the test binaries a by-name gate runs (review 2a): each is run
@@ -1086,11 +1214,16 @@ BY_NAME_TESTS="rh-snapshot::hash rh-snapshot::golden rh-snapshot::journal rh-sna
   rh-ids::fork_trees rh-ids::stream_independence rh-sample::golden rh-sample::stats
   rh-core::determinism rh-core::registration rh-registry::real_specs rh-core::phase_table
   rh-core::time_properties rh-core::system_id_golden rh-core::engine_contract
-  rh-core::agenda rh-core::agenda_events rh-core::invariants rh-core rh-events
+  rh-core::agenda rh-core::agenda_events rh-core::invariants rh-core rh-events rh-core::envelope_emit
   rh-sys-smoke::smoke rh-sys-demography::schedule_golden rh-sys-demography::draws_golden rh-worldgen::genesis
-  rh-worldgen::keyframe rh-worldgen::m2_system rh-golden::golden
+  rh-worldgen::keyframe rh-worldgen::m2_system rh-worldgen::death_path rh-snapshot::lifecycle
+  rh-contracts::drift rh-contracts::consumer rh-golden::golden
   rh-golden::solo rh-golden::stream rh-stream::canonical rh-stream::writer rh-stream::parquet_props
-  rh-cli::kill rh-golden::tail rh-cli::tail_live rh-sifter::sift rh-golden::sift rh-golden::replay rh-golden::rungs"
+  rh-cli::kill rh-golden::tail rh-cli::tail_live rh-golden::envelope_world rh-sifter::sift rh-golden::sift rh-golden::replay rh-golden::rungs
+  rh-manifest::effect_golden
+  rh-snapshot::per_instant_cache rh-sys-demography::invariants_oracle rh-core::per_instant
+  rh-protocol::golden rh-protocol::method_table rh-protocol::round_trip rh-stream::live rh-cli::serve
+  rh-cli::channel_c rh-cli::vstr rh-cli::run_dir rh-cli::memory"
 workspace_tests() {
   local id filter=""
   for id in $BY_NAME_TESTS; do filter="${filter:+$filter | }binary_id($id)"; done
@@ -1203,6 +1336,8 @@ run "lint_arch positive control: unsafe outside the allow-listed file must FAIL 
 run "lint_arch positive control: rh-protocol depending on a workspace crate must FAIL (protocol-leaf; SPR-026)" "fail:VIOLATION [protocol-leaf] rh-protocol: depends on workspace crate rh-core" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/protocol_depends_on_plane_a/Cargo.toml &&
 run "lint_arch positive control: rh-protocol depending on tokio must FAIL (protocol-leaf allow-list; SPR-026 R7)" "fail:VIOLATION [protocol-leaf] rh-protocol: depends on third-party crate tokio" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/protocol_third_party/Cargo.toml &&
 run "lint_arch positive control: plane A -> rh-protocol must FAIL (plane-A closure; SPR-026)" "fail:VIOLATION [plane-A-closure] rh-stream: plane-A crate depends on plane-\"tool\" crate rh-protocol" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/plane_a_to_protocol/Cargo.toml &&
+run "Test hooks: no --test-* flag in a baseline or golden rh-cli run command line (SPR-026; the poison ruling)" "pass:test hooks: none of --test-pace-ms, --test-poison, --test-stall, --test-wait-viewer in" "$PY" -I bin/check_test_hooks.py &&
+run "Test hooks positive control: --test-poison planted in regen_baseline.sh's solo run must FAIL (SPR-026)" "fail:--test-poison" "$PY" -I bin/check_test_hooks.py --plant &&
 run "lint_arch positive control: system -> system must FAIL" "fail:VIOLATION [V-INSP-03]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/system_to_system/Cargo.toml &&
 run "lint_arch positive control: system -> rh-snapshot must FAIL" "fail:VIOLATION [V-INSP-03]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/system_to_disallowed/Cargo.toml &&
 run "lint_arch positive control: system -> rh-snapshot as a build-dependency must FAIL" "fail:VIOLATION [V-INSP-03] rh-sys-a: depends on rh-snapshot (as a build-dependency)" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/system_build_dependency/Cargo.toml &&
@@ -1317,6 +1452,9 @@ run "lint_odd neutral positive control: an enum neutral outside the column's cod
 run "lint_odd neutral control: a frozen substrate reading a non-substrate's column as identity warns and passes; the rule is advisory, registration enforces it (REV-EVO-001 R12, R16)" "pass:WARN  M3.agriculture.odd.toml: a substrate reads title.holder from M7.dynasty as identity" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/substrate_identity &&
 run "lint_odd neutral positive control: an identity read carrying a neutral must FAIL (REV-EVO-001 R12)" "fail:ERROR M3.agriculture.odd.toml: read person.alive from M2.demography is an identity read, which requires its owner and declares no neutral" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/identity_neutral &&
 run "lint_odd neutral control: a draft spec's rate read of an absent owner with no neutral warns and passes (EVO-001)" "pass:WARN  M3.agriculture.odd.toml: read polity.exec_constraint from M6.polity needs a neutral value" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/draft_missing &&
+run "lint_odd [commands] positive control: a ScheduleDeath with a tick parameter must FAIL, naming M2's [[applies]] (SPR-017 T-06)" "fail:differ from M2.demography.odd.toml's [[applies]] ScheduleDeath payload" "$PY" -I specs/systems/lint_odd.py --commands tests/lint_fixtures/registry_commands/tick.toml &&
+run "lint_odd [commands] positive control: an [[applies]] with no Registry [commands] entry must FAIL (SPR-017 T-06)" "fail:ERROR M2.demography.odd.toml: [[applies]] Marry has no Registry [commands] entry" "$PY" -I specs/systems/lint_odd.py --commands tests/lint_fixtures/registry_commands/no_entry.toml &&
+run "lint_odd [commands] positive control: a cause_event typed int must FAIL (SPR-017 T-06)" "fail:parameter cause_event must be typed event, not int" "$PY" -I specs/systems/lint_odd.py --commands tests/lint_fixtures/registry_commands/cause_event_int.toml &&
 run "lint_odd observes control: an [[observes]] entry naming a Registry verb, its emitter and a same_instant read of the emitter passes (EVO-002)" "pass:PASS: 9 system specs linted" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_observes/ok &&
 run "lint_odd observes positive control: an observed kind that is not a Registry verb must FAIL (EVO-002)" "fail:ERROR M3.agriculture.odd.toml: [[observes]] NOT_A_VERB is not a Registry verb" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_observes/unknown_kind &&
 run "lint_odd observes positive control: an observed kind whose owner is not its emitter must FAIL (EVO-002)" "fail:[[observes]] DEATH: owner M7.dynasty is not its emitter; the Registry gives DEATH to M2.demography" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_observes/wrong_owner &&
@@ -1327,7 +1465,7 @@ run "lint_odd observes positive control: a kind observed twice must FAIL (EVO-00
 run "lint_odd observes positive control: a system observing its own kind must FAIL (EVO-002; T-00a MIN-8)" "fail:[[observes]] X_FIXTURE_FORMED: a system does not observe its own kind" odd_observes_control own &&
 run "lint_odd observes positive control: an observer bound only before its emitter's phase must FAIL (EVO-002; T-00a MIN-8)" "fail:[[observes]] DEATH: M3.agriculture binds no phase at or after one M2.demography binds" odd_observes_control phase &&
 run "lint_odd observes positive control: an entry that is not a table must FAIL (EVO-002; T-00a MIN-8)" "fail:an [[observes]] entry must be a table" odd_observes_control table &&
-run "System specs, next version: the M2 F1 draft supersedes the frozen rung-0 slice and preserves it (lint_odd --next; SPR-015)" "pass:self-check (next of M2.demography): 46 planted changes rejected (3 of them by the amendments lock), 45 amendments recorded and locked, the clean next version kept" "$PY" -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml &&
+run "System specs, next version: the M2 F1 draft supersedes the frozen rung-0 slice and preserves it (lint_odd --next; SPR-015)" "pass:self-check (next of M2.demography): 46 planted changes rejected (3 of them by the amendments lock), 46 amendments recorded and locked, the clean next version kept" "$PY" -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml &&
 run "lint_odd next positive control: a next version that changes a frozen algorithm step must FAIL (SPR-015)" "fail:frozen [algorithm.mortality_rung0] changed" odd_next_control algorithm &&
 run "lint_odd next positive control: a new RNG purpose before a frozen one must FAIL (SPR-015)" "fail:frozen RNG purpose death_time must stay at position 0" odd_next_control rng &&
 run "lint_odd next positive control: a Registry overlay that moves a frozen parameter bound must FAIL (SPR-015)" "fail:replacement changes or drops parameter tfr bounds" odd_next_control bound &&
@@ -1360,6 +1498,7 @@ run "gen_skeletons positive control: a hand-edited smoke skeleton must FAIL (SPR
 run "Sifting patterns (lint_patterns)" pass "$PY" -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml specs/manifest/registry_v0.toml &&
 run "Sifting patterns: solitary_life pack, life_ends (lint_patterns; SPR-011 ruling 14)" "pass:PASS: 1 patterns linted." "$PY" -I specs/sifting/lint_patterns.py specs/sifting/patterns.solitary_life.toml specs/manifest/registry_v0.toml &&
 run "lint_patterns positive control: a [role_domains] entry of the wrong shape refuses the Registry by name (REV-SPR-020 R22, R26)" "fail:FAIL: the Registry is refused; no pattern was linted." bad_domains_control &&
+run "Registry envelope plants: lint_patterns refuses every planted [event_roles] and [role_domains] Registry by name, the real one passes (registry_envelope_plants; SPR-020 T-01)" "pass:OK: 12 planted Registries refused by lint_patterns by name" "$PY" -I specs/manifest/registry_envelope_plants.py &&
 run "lint_patterns positive control: life_ends with an unanchored read must FAIL (V-SIFT-05)" "fail:ERROR life_ends.e1: UNANCHORED state read" "$PY" -I specs/sifting/lint_patterns.py tests/lint_fixtures/sifting/life_ends_unanchored.toml specs/manifest/registry_v0.toml &&
 run "lint_patterns positive control: life_ends with a declared role that no clause binds must FAIL (VER-SPR-013-TEST GAP-4; parity with rh-sifter)" "fail:ERROR life_ends: role B is declared but no clause binds it" "$PY" -I specs/sifting/lint_patterns.py tests/lint_fixtures/sifting/life_ends_unbound_role.toml specs/manifest/registry_v0.toml &&
 run "Manifest: solo" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/solo.yaml &&
@@ -1382,6 +1521,14 @@ run "rh-stream by name: the canonical form reproduces the reference's golden lin
 run "rh-stream by name: byte-identical sealing over seeds and world sizes, contiguous seq, R4 order refused when broken, resume verification, tampered segments refused (SPR-013 T-09)" "pass:T-09 writer: 4 seeds x 3 world sizes seal byte-identical segments" cargo nextest run -p rh-stream --locked --test writer --no-capture &&
 run "V-DATA-10 subset on the envelope fixture: DuckDB reads its event_snapshot rows and typed causal_edge rows (motive, weight, evidence, cause_told) with the DDL's types and constraints, and the reference recomputes every canonical_digest from them (SPR-013 T-09; SPR-020 shape)" "pass:check_segments: 4 segments, 324 records" "$PY" -I specs/stream/check_segments.py "$TARGET_DIR/tmp/rh-stream/envelope_fixture" &&
 run "rh-stream by name: the pinned Parquet writer properties in every file, no float column, the golden segment's bytes pinned (SPR-013 T-09; the Architect's parquet review)" "pass:T-09 golden segment bytes: xxh3-128 8f0799bae0b2c24ded75efec76e95a82 over 16 files" cargo nextest run -p rh-stream --locked --test parquet_props --no-capture &&
+run "rh-protocol by name: every golden frame, refusal, dispatch answer and the Catchup transcript of golden/wire_v1.txt (SPR-026 T-01)" "pass:wire_v1 conformance: 15 dispatch answers byte for byte on a fresh connection; 7 close it (C16), 8 keep it open" cargo nextest run -p rh-protocol --locked --test golden --no-capture &&
+run "rh-protocol by name: the method table is exactly the three stream.* reads, every other method the read-only refusal (SPR-026 T-01; wire_v1.md §4.5)" "pass:method table: exactly stream.status, stream.subscribe and stream.unsubscribe" cargo nextest run -p rh-protocol --locked --test method_table --no-capture &&
+run "rh-protocol positive control: a dispatcher with a fourth method (stream.pace) must FAIL the method-table test (SPR-026 T-01)" "fail:method table broken" cargo nextest run -p rh-protocol --locked --features mutant-pace-method --test method_table --no-fail-fast --no-capture &&
+run "rh-protocol positive control: a decoder that accepts a nonzero flag must FAIL its golden refuse line (SPR-026 T-01)" "fail:refuse flag_1: accepted" cargo nextest run -p rh-protocol --locked --features mutant-accept-flags --test golden --no-fail-fast --no-capture &&
+run "rh-stream LiveEdge by name: probe (b), the seal race, the copy race, the window bounds, headless = (a) = (b) sealed bytes, the resumed start, abort (SPR-026 T-02; wire_v1.md §6, §9)" "pass:probe (b): 10 sim-years appended and sealed on the seal thread while a reader was frozen" cargo nextest run -p rh-stream --locked --test live --no-capture &&
+run "LiveEdge positive control: a window that moves before the dropped year is on disk must FAIL with I1 broken (SPR-026 T-02)" "fail:I1 broken" cargo nextest run -p rh-stream --locked --features mutant-window-gap --test live --no-fail-fast --no-capture &&
+run "LiveEdge positive control: bytes() counting only the window must FAIL the accounting test (DEF-2)" "fail:ACCOUNTING MISMATCH: bytes does not include queued bytes" cargo nextest run -p rh-stream --locked --features mutant-bytes-window-only --test live -E "test(deterministic_accounting)" --no-fail-fast --no-capture &&
+run "LiveEdge positive control: queue counted as canonical text must FAIL the accounting test (DEF-2)" "fail:ACCOUNTING MISMATCH: queued_bytes does not match record::allocated" cargo nextest run -p rh-stream --locked --features mutant-bytes-queue-canonical --test live -E "test(deterministic_accounting)" --no-fail-fast --no-capture &&
 run "rh-sifter by name: the golden channel-A segment sifts to the golden life_ends matches and MatchIds; several targets give several matches; what v0 cannot honour is refused (SPR-013 T-11)" "pass:T-11: the golden segment sifts to the golden life_ends matches" cargo nextest run -p rh-sifter --locked --test sift --no-capture &&
 run "Rust: unit tests (cargo nextest), less the binaries the by-name gates run (SPR-009 review 2a)" "pass:left to the by-name gates" workspace_tests &&
 run "Workspace tests positive control: a by-name entry that names no test binary must FAIL (SPR-009 review 2a)" "fail:no binary IDs matched" workspace_tests_typo_control &&
@@ -1398,6 +1545,24 @@ run "V-DET-09 at opt-level 3: rh-sample golden vectors under --release (SPR-003 
 run "V-DET-09 positive control: one altered sampler golden vector must FAIL (SPR-003)" "fail:golden vector differs" env RH_SAMPLE_GOLDEN="$PWD/tests/lint_fixtures/golden/altered_samplers_v1.txt" cargo nextest run -p rh-sample --locked --test golden --no-capture &&
 run "rh-core gates by name: V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes (SPR-005)" "pass:V-DET-01: 600 monthly states equal at 1, 2, 4 and 8 threads" cargo nextest run -p rh-core -p rh-registry --locked --test determinism --test registration --test real_specs --test phase_table --test time_properties --test system_id_golden --test engine_contract --no-capture &&
 run "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants and crash replay (SPR-006)" "pass:V-DET-12: golden event log of 196 events checked" cargo nextest run -p rh-core -p rh-events --locked --test agenda --test agenda_events --test invariants --lib --no-capture &&
+run "rh-core envelope by name: emit's refusals by name, the canonical cast and snapshot order, V-DATA-08 in miniature, absent sources counted (SPR-020 T-03)" "pass:V-DATA-08 miniature: 24 pre-act snapshots equal the oracle; 24 late controls caught" cargo nextest run -p rh-core --locked --test envelope_emit --no-capture &&
+run "SPR-014 V-DET-21 delivery: a command reaches only its owner's draining binding, within the instant or at its next run, in key order, equal at 1, 2, 4 and 8 threads (T-01)" "pass:V-DET-21 delivery: " cargo nextest run -p rh-core --locked --test agenda_events --no-capture v_det_21_delivery &&
+run "SPR-014 V-DET-21 slots: every EventRef an owner sees is its sender's merged id; integers in event slots and out-of-type fields refused by name (T-02)" "pass:V-DET-21 slots: " cargo nextest run -p rh-core --locked --test agenda_events --no-capture lifecycle_queues::slots &&
+run "SPR-014 keyframes and the drop counter: queued event slots, timer causes and inserted rows round-trip; a planted drop changes no state_hash (T-02, T-03, T-05)" "pass:T-02 keyframes: queued EventRef fields and timer causes round-trip in 9 worlds" cargo nextest run -p rh-snapshot --locked --test lifecycle --no-capture &&
+run "SPR-014 V-INV-15: the dead-person drop at take, the owner's drops, the dead timer, key = any; queue-no-stale-command and the non-idempotent death as controls (T-03)" "pass:V-INV-15: dead_key, dead and the dead timer counted" cargo nextest run -p rh-core --locked --test agenda_events --no-capture lifecycle_queues::stale &&
+run "SPR-014 V-INV-04 on stub systems: dropped rate and mode reads give their typed neutrals, sends to an absent owner discarded and counted, identity reads refused (T-04)" "pass:V-INV-04 stubs: q16_16 and enum neutrals served" cargo nextest run -p rh-core --locked --test agenda_events --no-capture lifecycle_queues::owners &&
+run "SPR-014 V-INV-04 on the real specs: {M2}, {M2, M7}, {M2, T1} refused by name, {M2, M7, T1} (T-04; REV-P1a NEW-4, NEW-6)" "pass:V-INV-04 real specs: " cargo nextest run -p rh-registry --locked --test real_specs --no-capture v_inv_04 &&
+run "SPR-014 DRAINS: a skeleton's drain that differs from its spec, or a spec drain the code leaves out, is refused by name under rule spec (T-01; NIT-10)" "pass:DRAINS: a drain that differs" cargo nextest run -p rh-registry --locked --test real_specs --no-capture a_drain &&
+run "SPR-014 the ledger row insert: sorted, aligned, defaults, read the same instant, duplicates refused, over 48 random worlds (T-05)" "pass:row insert: " cargo nextest run -p rh-core --locked --test agenda_events --no-capture lifecycle_queues::insert &&
+run "SPR-014 V-INV-03 subset: commanded deaths from two test-only senders take M2's single death path; same-slot deaths; the sender's re-sample (T-05)" "pass:V-INV-03: commanded deaths take the single death path" cargo nextest run -p rh-worldgen --locked --test death_path --no-capture &&
+run "SPR-014 rh-contracts v0: every M2 accessor matches the spec; a reader beside the real M2 reads through the crate (T-06)" "pass:rh-contracts drift: 19 M2 accessors match the spec" cargo nextest run -p rh-contracts --locked --test drift --test consumer --no-capture &&
+run "SPR-014 rh-contracts positive control: a spec with person.sex's values reordered must FAIL naming the column (T-06)" "fail:DRIFT in person.sex" env RH_CONTRACTS_M2_SPEC="$PWD/tests/lint_fixtures/contracts/M2_sex_reordered.odd.toml" cargo nextest run -p rh-contracts --locked --test drift --no-capture &&
+run "SPR-014 A-50: a draw of the wrong entity kind is refused by name (T-07)" "pass:A-50: a draw of the wrong entity kind is refused by name" cargo nextest run -p rh-core --locked --test engine_contract --no-capture a_draw &&
+# SPR-038 stage A in part core: exactness (the differential test against Gating::Off, the planted violations, the
+# O(N + L) oracles) and the cache (about 25 s together; the plan's CI-gates table, X10).
+run "SPR-038 exactness: the gated engine equals Gating::Off after every instant on random worlds (3 sizes x 8 seeds), and every planted violation fails by name at the same instant gated and off (per_instant; T-03, S12)" "pass:gated = Gating::Off after each of" cargo nextest run -p rh-core --locked --features reference-gating-off --test per_instant --no-capture &&
+run "SPR-038 the cached plane hash equals the full hash after every instant of random ledger worlds (per_instant_cache; S11, T4)" "pass:S11: cached = full after each of" cargo nextest run -p rh-snapshot --locked --test per_instant_cache --no-capture &&
+run "SPR-038 M2's O(N + L) invariants give the oracle's results, names and texts on random and planted tables (invariants_oracle; T-03)" "pass:M2's invariants equal the oracle on" cargo nextest run -p rh-sys-demography --locked --test invariants_oracle --no-capture &&
 run "rh-sys-smoke gates by name: registration against the smoke specs, coverage, re-sampling, small-scale V-DET-01/02 (SPR-008 T-01)" "pass:SMOKE: 6 yearly states" cargo nextest run -p rh-sys-smoke --locked --test smoke --no-capture &&
 run "T-05 M2 schedule in fixed point: bit-equal to the exact reference, K = 1 at the standard's e0, Table 19, e0 within 0.06 years, the q(15) band (SPR-012)" "pass:T-05: " cargo nextest run -p rh-sys-demography --locked --test schedule_golden --no-capture &&
 run "T-05 positive control: one altered schedule vector must FAIL (SPR-012)" "fail:K at e0 bits 1966080" env RH_M2_SCHEDULE_GOLDEN="$PWD/tests/lint_fixtures/golden/altered_m2_schedule_v1.txt" cargo nextest run -p rh-sys-demography --locked --test schedule_golden --no-capture &&
@@ -1419,6 +1584,14 @@ run "Doctest count gate positive control: one typed-ID case missing must FAIL" "
 run "V-WC-04 manifest parity: Rust loader agrees with manifest_v0.py (SPR-004)" "pass:PARITY: all" "$PY" -I bin/manifest_parity.py --rust-bin "$RH_CLI" specs/manifest/examples/*.yaml tests/manifest_parity/*.yaml &&
 run "V-WC-04 parity positive control: drifted Registry must FAIL" "fail:PARITY MISMATCH specs/manifest/examples/invalid_draft_style.yaml" "$PY" -I bin/manifest_parity.py --rust-bin "$RH_CLI" --rust-registry tests/lint_fixtures/parity/registry_drift.toml specs/manifest/examples/invalid_draft_style.yaml &&
 run "V-WC-04 parity positive control: message-only drift must FAIL (GAP-3)" "fail:PARITY MISMATCH specs/manifest/examples/invalid_draft_style.yaml" "$PY" -I bin/manifest_parity.py --rust-bin "$RH_CLI" --rust-registry tests/lint_fixtures/parity/registry_drift_message.toml specs/manifest/examples/invalid_draft_style.yaml &&
+run "Effect programs: every Registry program compiles against the real environment (rh-cli effect check; SPR-017 T-06)" "pass:EFFECT PROGRAMS: PASS (7 laws, 21 programs)" "$RH_CLI" effect check &&
+run "Effect programs positive control: a Registry whose seniority has no order must FAIL (SPR-017 T-06)" "fail:succession_laws.seniority: no order program (§7.3)" effect_programs_control &&
+run "Effect enums: the Registry's keyed tables in the Rust loader's order equal tomllib's (check_key_order; SPR-017 T-06)" "pass:KEY ORDER: PASS" "$PY" -I bin/check_key_order.py --rust-bin "$RH_CLI" &&
+run "check_key_order positive control: every keyed table in sorted order must FAIL (SPR-017 T-06)" "fail:MISMATCH [opinion_modifiers]" key_order_control &&
+run "V-WC-10 data-only extension: the fixture Registry's 8 laws compile against the real environment (rh-cli effect check, tests/registry_effect; SPR-017 T-09)" "pass:EFFECT PROGRAMS: PASS (8 laws, 24 programs)" "$RH_CLI" effect check --registry tests/registry_effect/registry_absolute_primogeniture.toml &&
+run "V-WC-10 data-only extension positive control: the law's id without its programs must FAIL by name (SPR-017 T-09)" "fail:succession_laws.absolute_primogeniture: no programs" extension_control &&
+run "V-WC-10 data-only extension: absolute_primogeniture's lines on dynasty and deep reproduce in the reference (effect_ref --check; SPR-017 T-09)" "pass:EFFECT LANGUAGE v0.5.1: PASS (2 cases reproduce absolute_primogeniture_cases.toml)" "$PY" -I specs/registry/effect_ref.py --check --golden tests/registry_effect/absolute_primogeniture_cases.toml &&
+run "V-WC-10 data-only extension: absolute_primogeniture's lines on dynasty and deep reproduce in the Rust evaluator (rh-manifest effect_golden; SPR-017 T-09)" "pass:EFFECT LANGUAGE v0.5.1 (rust): PASS (2 cases)" env RH_EFFECT_GOLDEN="$PWD/tests/registry_effect/absolute_primogeniture_cases.toml" cargo nextest run -p rh-manifest --locked --test effect_golden --no-capture &&
 run "Ownership lint: single writer from specs/systems (SPR-004 T-03)" "pass:0 violations" "$RH_CLI" ownership &&
 run "Ownership lint positive control: unowned write must FAIL" "fail:VIOLATION [single-writer] S5.daily_life: writes person.alive, which M2.demography owns" "$RH_CLI" ownership tests/lint_fixtures/ownership/unowned_write.access.toml &&
 run "Ownership lint positive control: a write declared twice must FAIL (SPR-005 DEF-3)" "fail:VIOLATION [duplicate] M2.demography: declares a write to person.alive twice" "$RH_CLI" ownership tests/lint_fixtures/ownership/duplicate_write.access.toml &&
@@ -1450,6 +1623,7 @@ run "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden
 run "gen_rng_golden positive control: stale golden file must FAIL" "fail:STALE:" "$PY" -I bin/gen_rng_golden.py --check --golden tests/lint_fixtures/golden/stale_rh_ids_v2.txt &&
 run "Golden vectors: rh-snapshot plane hashes match the independent reference (gen_hash_golden --check; SPR-007 T-01)" "pass:OK:" "$PY" -I bin/gen_hash_golden.py --check &&
 run "gen_hash_golden positive control: one changed hash must FAIL" "fail:STALE:" hash_golden_control &&
+run "gen_hash_golden positive control: one changed event digest v2 must FAIL (SPR-020 T-02)" "fail:STALE: target/rendered-fixtures/stale_event_digest_v2.txt differs" event_digest_golden_control &&
 run "Canonical text form v0: round trip, refusals and golden lines with digests (canonical_v0 --check; SPR-013 T-09)" "pass:OK:" "$PY" -I specs/stream/canonical_v0.py --check &&
 run "Canonical differential: rh-stream's parser and canonical_v0.py give every generated, golden, planted and mutated line, and every planted and header-mutated file, the same verdict (canonical_v0.md §3; REV-SPR-013 MAJ-1)" "pass:differential: rh-stream and the reference agree on" "$PY" -I specs/stream/differential_v0.py --rust-bin "$RH_CLI" &&
 run "Canonical differential positive control: a reference with its header domain check relaxed must FAIL (REV-SPR-013 MAJ-1)" "fail:DIFFERENTIAL DISAGREES" "$PY" -I specs/stream/differential_v0.py --rust-bin "$RH_CLI" --control relax-header &&
@@ -1457,8 +1631,12 @@ run "canonical_v0 positive control: a stale golden digest must FAIL" "fail:STALE
 run "Sampler reference: exact distributions are current (gen_sampler_reference --check; SPR-003)" pass "$PY" -I bin/gen_sampler_reference.py --check &&
 run "gen_sampler_reference positive control: stale reference must FAIL" "fail:STALE:" "$PY" -I bin/gen_sampler_reference.py --check --output tests/lint_fixtures/golden/stale_sampler_reference.txt &&
 run "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)" pass "$PY" -I bin/gen_fixed_vectors.py --check &&
-run "Golden cases: effect language v0 reference reproduces effect_language_golden_v0.toml (effect_ref --check; SPR-017)" "pass:EFFECT LANGUAGE v0.5.0: PASS" "$PY" -I specs/registry/effect_ref.py --check &&
+run "Golden cases: effect language v0 reference reproduces effect_language_golden_v0.toml (effect_ref --check; SPR-017)" "pass:EFFECT LANGUAGE v0.5.1: PASS" "$PY" -I specs/registry/effect_ref.py --check &&
 run "effect_ref positive control: one altered expected value must FAIL (SPR-017)" "fail:FAIL lit_true" effect_golden_control &&
+run "V-WC-10 effect language: the Rust evaluator reproduces every golden case in debug (rh-manifest effect_golden; SPR-017 T-05)" "pass:EFFECT LANGUAGE v0.5.1 (rust): PASS (610 cases)" cargo nextest run -p rh-manifest --locked --test effect_golden --no-capture &&
+run "V-WC-10 positive control: the golden file with one expected value altered must FAIL the Rust test (SPR-017 T-05)" "fail:FAIL lit_true" effect_golden_rust_control &&
+run "Effect emit parity: effect_ref --emit and rh-cli effect eval print the same line for every golden case (SPR-017 T-08)" "pass:EMIT PARITY: 610 cases" effect_emit_parity &&
+run "Effect emit parity positive control: one case's program altered on the Rust side must FAIL (SPR-017 T-08)" "fail:EMIT PARITY: FAIL" effect_emit_parity_control &&
 run "Authored numbers: rh-manifest's exact-decimal vectors are the decimal reference's (gen_decimal_vectors --check; SPR-011 T-04)" pass "$PY" -I bin/gen_decimal_vectors.py --check &&
 run "gen_decimal_vectors positive control: one altered vector must FAIL (SPR-011 T-04)" "fail:STALE:" "$PY" -I bin/gen_decimal_vectors.py --check --output tests/lint_fixtures/golden/stale_decimal_vectors.txt &&
 run "Fixed-point exp and ln v0: constants, convergence, faithful rounding, refusals, golden vectors (exp_ln_v0 --check; 05.1 §6 item 4 v1.10; SPR-016)" "pass:OK:" "$PY" -I specs/numerics/exp_ln_v0.py --check &&
@@ -1569,6 +1747,7 @@ run "selftest_annals positive control: a template that reads world state must FA
 run "selftest_annals positive control: a network module imported during the render must FAIL (V-NAR-07; REV-SPR-029 F16)" "fail:was imported during the render" "$PY" -I specs/annals/selftest_annals_v0.py --check --control network-import &&
 run "selftest_annals positive control: a stale golden annal must FAIL (SPR-029)" "fail:STALE:" annals_golden_control &&
 run "selftest_annals positive control: a golden file no rendered group owns must FAIL as an orphan (REV-SPR-029 R39)" "fail:STALE: orphan target/rendered-fixtures/annals_orphan/ashcombe_line-1.txt: no rendered group owns it" annals_orphan_control &&
+run "selftest_annals positive control: a two-segment cut of solitary's chronicle with one #segment digest altered must FAIL the fold (annals_v0.md §9.1; AN-0)" "fail:altered.txt:4: segment y000003 (records on lines 5-7): its #segment line says canonical_digest=00000000000000000000000000000000; its records recompute to" annals_fold_control &&
 run "Annals template lint: every slot resolves to a declared role, snapshot, payload slot, motive or edge; every in-scope kind has a template and every out-of-scope kind a label (lint_templates; SPR-029)" "pass:PASS: 29 templates linted" "$PY" -I specs/annals/lint_templates.py &&
 run "lint_templates positive control: a slot naming a role the kind does not declare must FAIL (SPR-029)" "fail:slot 'instrument' is not a role DEATH declares in [[emits]]" annals_lint_control undeclared_role &&
 run "lint_templates positive control: a snapshot slot the kind does not declare must FAIL (SPR-029)" "fail:slot 'snapshot.stress.actor' is not a snapshot BIRTH declares" annals_lint_control undeclared_snapshot &&
@@ -1589,6 +1768,14 @@ run "lint_templates positive control: a prologue template with an unknown id mus
 run "lint_templates positive control: a control character in a template text must FAIL (REV-SPR-029 R27)" "fail:text carries a control character U+0007" annals_lint_control control_char &&
 part golden &&
 run "Required tools present (golden part)" pass require_tools golden &&
+# SPR-014 mutant controls in part golden: each rebuilds its crate with a mutant feature (D1 about 6 s; part core's 12-minute target, Architect ruling 2026-10-17)
+run "SPR-014 V-DET-21 positive control: an engine that hands an owner's inbox to every job (EVO-001 option D1) must FAIL (T-01)" "fail:delivered to a non-draining job" cargo nextest run -p rh-core --locked --features mutant-deliver-every-job --test agenda_events --no-capture v_det_21_delivery &&
+run "SPR-014 R15 positive control: a timer encoder that writes u8 0 for an absent cause must FAIL the hash golden at agenda.timers (T-02)" "fail:root: engine_table rh-core/agenda.timers" cargo nextest run -p rh-snapshot --locked --features mutant-cause-u8-zero --test golden --no-capture &&
+# SPR-038 stage A's mutant controls in part golden: each rebuilds rh-core with its planted feature (about 6-10 s each).
+run "SPR-038 positive control: positional compaction that keeps the old versions must FAIL the per-instant cache test (mutant-compact-keeps-version; S11)" "fail:the cached plane hash differs from the full hash" cargo nextest run -p rh-snapshot --locked --features rh-core/mutant-compact-keeps-version --test per_instant_cache --no-capture &&
+run "SPR-038 positive control: a put-back that ignores person.alive's written flag must FAIL: a dead row survives (mutant-unmarked-put-back; T-03)" "fail:invariant ledger-no-dead-row of rh-core violated" cargo nextest run -p rh-core --locked --features reference-gating-off,mutant-unmarked-put-back --test per_instant --no-capture -E "test(the_gated_engine_equals_gating_off_after_every_instant)" &&
+run "SPR-038 positive control: a guard pre-image taken after the step must FAIL the entry-field refusal (mutant-late-pre-image; T-03)" "fail:an exit field written on an open entry must be refused" cargo nextest run -p rh-core --locked --features mutant-late-pre-image --test agenda_events --no-capture lifecycle_queues::guard &&
+run "SPR-038 positive control: a lagged column never copied again must FAIL the differential test's lagged reader (mutant-stale-lagged-snapshot; T-03)" "fail:the gated engine differs from Gating::Off" cargo nextest run -p rh-core --locked --features reference-gating-off,mutant-stale-lagged-snapshot --test per_instant --no-capture -E "test(the_gated_engine_equals_gating_off_after_every_instant)" &&
 # SPR-030 CRN pairing in part golden: pure Python, about 28 s (REV-SPR-030 R27: part core passed 12 minutes on PR #79's CI, 12:13).
 # The PR tier takes the first VALID seed of 1 to 4 (seed 1 today); the nightly tier searches until two are VALID (BCK-002 A-62, the review's E4).
 run "Golden vectors: CRN pairing v0, the V-DET-17 worked computation on twin_vales, the PR tier (the first VALID seed of 1 to 4), with its five controls on the same run A (SPR-030; REV-SPR-030 R3, R4, R10; BCK-002 A-62)" "pass:CRN PAIRING: PASS (tier pr," "$PY" -I specs/determinism/selftest_crn_pairing.py --tier pr --controls &&
@@ -1613,6 +1800,7 @@ run "T-02b wall-clock harness: criterion benches 7 and 8 at a smoke size, median
 run "T-02b wall-clock control: a median 25% above the trend is an ALERT that --gate fails (SPR-009)" "fail:wall-clock ALERT above +10% (gating)" wall_control slower &&
 run "T-02b wall-clock control: another CPU model must report machine changed, never compare (RUN-002 §5)" "fail:machine changed: new trend baseline required" wall_control machine &&
 run "T-02b wall-clock positive control: a NaN median must be refused, never compared (SPR-009 DEF-3)" "fail:not a rehoboam/rh-bench/wall/v1 line" wall_control nan &&
+run "SPR-038 positive control: one allocation planted in the quiet drain must FAIL the instant bench's zero-allocation assertion (instant-alloc-control; S16)" "fail:allocated on a quiet instant" instant_alloc_control &&
 run "V-PERF-11 allocation budget: smoke-world steady-state ticks within the recorded budget at 1 and 4 threads (SPR-009 T-05)" "pass:V-PERF-11 PASS" "$PY" -I bin/perf_gate.py alloc-gate --out "$ALLOC_RUN" &&
 run "V-PERF-11 repeatability: a second run on the same commit gives identical allocation counts (SPR-009 T-05)" "pass:identical allocation counts in two runs" alloc_repeat &&
 run "V-PERF-11 baseline integrity: a changed allocation baseline equals the tool's output exactly (SPR-009 ruling 3, R-8)" pass "$PY" -I bin/perf_gate.py integrity --exact --baseline "$ALLOC_BASELINE" --measured "$ALLOC_RUN" &&
@@ -1621,6 +1809,10 @@ run "V-PERF-11 toolchain control: an allocation baseline from another rustc must
 run "V-PERF-11 positive control: a system that zero-fills a buffer in its tick (vec![0; n]) must FAIL (SPR-009 T-05)" "fail:OVER BUDGET threads 1 allocations" "$PY" -I bin/perf_gate.py alloc-gate --control --out artifacts/perf/allocations_control.txt &&
 # Golden runs (SPR-008)
 run "Rust: build rh-cli in release for the golden runs (SPR-008 T-02)" pass cargo build --release --locked --quiet -p rh-cli &&
+run "V-WC-10 effect language: the Rust evaluator reproduces every golden case in release (SPR-017 T-05)" "pass:EFFECT LANGUAGE v0.5.1 (rust): PASS (610 cases)" cargo nextest run -p rh-manifest --locked --release --test effect_golden --no-capture &&
+run "V-WC-10 effect language: twelve planted mutants each fail their sentinel cases with the predicted wrong value, and Mutant::None passes (SPR-017 T-05)" "pass:mutant PrefixLast: killed" cargo nextest run -p rh-manifest --locked --release --features mutant-effect --test effect_mutants --no-capture &&
+run "V-WC-10 differential fuzz: effect_ref.py and the Rust evaluator agree on 16 SplitMix64 seeds, with every code, invariant, relation, builtin, aggregate and kind covered (bin/effect_fuzz.py; SPR-017 T-08)" "pass:EFFECT FUZZ: PASS" "$PY" -I bin/effect_fuzz.py --seeds 1-16 --rust-bin "$RH_CLI_RELEASE" --out target/fuzz --assert-coverage &&
+run "effect_fuzz positive control: a reference copy whose fixed-point products round half up must FAIL with MISMATCH (SPR-017 T-08)" "fail:MISMATCH seed" effect_fuzz_control &&
 run "Golden run: smoke, 1,000 sim-years, yearly ladder, 1 thread, parallel levels at least 5% (SPR-008 T-02, DEF-2)" "pass:smoke: 1000 yearly rungs to year 1000 at 1 thread(s)" "$RH_CLI_RELEASE" run smoke --years 1000 --threads 1 --ladder yearly --require-parallel "$PARALLEL_FLOOR" --out "$GOLDEN/smoke_yearly_t1.ladder" &&
 run "Golden run: smoke, 1,000 sim-years, yearly ladder, N threads, parallel levels at least 5%, with the T-03 vitals observer attached (SPR-008 T-02, DEF-2; SPR-009 T-03)" "pass:smoke: 1000 yearly rungs to year 1000 at $GOLDEN_THREADS thread(s)" golden_vitals_run &&
 run "Golden ladders: 1 thread = N threads, byte for byte (rh-cli ladder compare; V-DET-01)" "pass:LADDERS EQUAL: 1000 rungs" "$RH_CLI_RELEASE" ladder compare "$GOLDEN/smoke_yearly_t1.ladder" "$GOLDEN/smoke_yearly_tN.ladder" &&
@@ -1646,6 +1838,8 @@ run "Golden resume positive control: a --years past the journal's last input mus
 run "Golden resume control: past the journal's last input with --extend passes, and the header names the journal (VER-SPR-008 DEF-1)" "pass:journal 24 " def1_resume 30 --extend &&
 run "Golden resume control: the journal's own horizon with --until passes (VER-SPR-008 DEF-1)" "pass:until 18" def1_resume 24 --until 18 &&
 run "Golden run: solo, 200 sim-years, yearly ladder, 1 thread, the history tuple and the built and not-built systems in its header, streaming into its run directory (SPR-012 T-08; rulings 3, 16; SPR-013 T-09)" "pass:solo: 200 yearly rungs to year 200 at 1 thread(s)" solo_stream_run &&
+run "rh-golden envelope world by name: a stub world's full envelope through the admission bitset and event_body, canonical round trip, cause_told across a kill and a resume, V-STR-01 (SPR-020 T-06)" "pass:T-06 cause_told: 180 untold edges to refused causes of a year before; a resumed writer seals the unbroken run's bytes" cargo nextest run -p rh-golden --locked --release --test envelope_world --no-capture &&
+run "V-DATA-10 subset on the envelope world: DuckDB reads the engine's snapshot, role and typed edge rows with the DDL's types and constraints, and the reference recomputes every canonical_digest (SPR-020 T-06)" "pass:check_segments: 3 segments, 2700 records" "$PY" -I specs/stream/check_segments.py "$TARGET_DIR/tmp/rh-golden/envelope_world" &&
 run "Golden run: household, the six-person rung, 200 sim-years, yearly ladder, 1 thread, serial (--expect-serial), its committed input re-sampling founder 0's pending death, streaming into its run directory (SPR-013 T-13)" "pass:household: 200 yearly rungs to year 200 at 1 thread(s)" world_golden_run household &&
 run "Golden run: household, 200 sim-years, yearly ladder, N threads, serial (SPR-013 T-13)" "pass:household: 200 yearly rungs to year 200 at $GOLDEN_THREADS thread(s)" "$RH_CLI_RELEASE" run household --years 200 --threads "$GOLDEN_THREADS" --ladder yearly --expect-serial --out "$GOLDEN/household_yearly_tN.ladder" &&
 run "Golden ladders: household at 1 thread = N threads, byte for byte (V-DET-01/02; SPR-013 T-13)" "pass:LADDERS EQUAL: 200 rungs" "$RH_CLI_RELEASE" ladder compare "$GOLDEN/household_yearly_t1.ladder" "$GOLDEN/household_yearly_tN.ladder" &&
@@ -1663,7 +1857,7 @@ run "Golden baseline positive control: a hand-edited solo baseline must FAIL (SP
 run "Golden baseline positive control: a regenerated solo baseline in a PR not marked [C3] must FAIL (SPR-012 T-08; SPR-008 ruling 6)" "fail:BASELINE CHANGED in a PR not marked [C3]" baseline_control solo --changed yes --title "SPR-012: walking skeleton B" &&
 run "Golden run positive control: --strict refuses solo, whose manifest names systems this build lacks (SPR-011 ruling 3; SPR-012 T-08)" "fail:--strict refuses solo: the manifest names systems this build lacks (M1.regions, M3.agriculture, M4.economy, S5.daily_life)" "$RH_CLI_RELEASE" run solo --strict --years 2 --out "$TARGET_DIR/rendered-fixtures/solo_strict.ladder" &&
 run "rh-cli build-info: this build compiles in no mutant-* feature (BCK-002 A-52)" "pass:mutants: none" "$RH_CLI_RELEASE" build-info &&
-run "A-52 positive control: rh-cli run in a build with a mutant-* feature compiled in must FAIL" "fail:MUTANT BUILD: this build has the planted control feature(s) mutant-resample-hit-k1 compiled in" mutant_build_control &&
+run "A-52 positive control: rh-cli run in a build with a mutant-* feature compiled in must FAIL" "fail:MUTANT BUILD: this build has the planted control feature(s) mutant-resample-hit-k1, reference-gating-off compiled in" mutant_build_control &&
 run "V-SCALE-03: solo's 1,000-year wall time, reported (SPR-012 T-08)" "pass:V-SCALE-03: solo, 1,000 sim-years at 1 thread in" solo_scale_run &&
 run "rh-golden gates by name: solo resume = continuous through 10-year keyframes, thread invariance, the manifest pin, Ada at genesis, the input's re-sample of her pending death (SPR-012 T-08)" "pass:T-08: solo's input re-samples Ada's pending death (a miss)" cargo nextest run -p rh-golden --release --locked --test solo --no-capture &&
 # BCK-002 A-63: the release-mode M2 and guard gates, moved from part core to the part that builds in release
@@ -1684,10 +1878,22 @@ run "rh-golden by name: V-STR-01 on solo and the 60-person hamlet (byte-identica
 run "rh-golden by name: tail prints every record once in seq order from any cursor, its canonical output digests to each segment's canonical_digest, it never writes to the run directory, and the display form matches its snapshots (SPR-013 T-10)" "pass:T-10: the display form matches its 4 snapshots" cargo nextest run -p rh-golden --release --locked --test tail --no-capture &&
 run "kill -9 by name: a kill during sealing leaves no partial segment and the resume reseals the same bytes; a mid-year kill re-emits no seq below the first unsealed year (SPR-013 T-09; GOV-002 tier 15; wire_v1.md §11)" "pass:verified years 10-14, resealed 15-59 to the unbroken run's bytes; run.ladder whole; REPLAY EQUAL" cargo nextest run -p rh-cli --locked --release --test kill --no-capture &&
 run "tail by name: a tail started before a run's first seal and following it prints the after-run tail's lines, display and canonical, solo and hamlet (SPR-013 T-10; V-STR-05 sealed)" "pass:printed a sealed segment before the run ended, prints the after-run tail's lines" cargo nextest run -p rh-cli --locked --release --test tail_live --no-capture &&
+# SPR-026: the live-edge gates that take more than 5 s run here, in release (the Architect's CI ruling, 2026-10-17)
+run "rh-protocol by name: SplitMix64 round trips of frames from 0 bytes to 1 MiB, RECORDS payloads and control messages, every split point of a frame stream (SPR-026 T-01)" "pass:round trips:" cargo nextest run -p rh-protocol --locked --release --test round_trip --no-capture &&
+run "rh-cli serve by name: A.sock read-only, the corrupt-frame fuzz, the cap, abort, the lock, the path limit, probe (c) on solo and hamlet (SPR-026 T-03)" "pass:read-only: five act methods refused, the ladder is the baseline, REPLAY EQUAL" cargo nextest run -p rh-cli --locked --release --test serve --no-capture &&
+run "rh-cli channel C live by name: C.sock beside the run, empty years announced, lines = tail --channel C, follow = batch, sifted_through bounded (SPR-026 T-04)" "pass:channel C live:" cargo nextest run -p rh-cli --locked --release --test channel_c --no-capture &&
+run "rh-cli run directory by name: no kill during creation leaves an unusable directory, a resume keeps run.toml's rung, a torn keyframe rung is refused, replay names a running writer (BCK-002 A-58)" "pass:DEF-3: a kill at each of the 5 creation steps leaves a usable run directory" cargo nextest run -p rh-cli --locked --release --test run_dir --no-capture &&
+run "V-STR-01, V-STR-03 and V-STR-05 by name in release: four viewers change no stream byte (solo, hamlet), a sleeper catches up, a jumper jumps to live, a viewer survives kill -9 with a seal in flight (SPR-026 T-05)" "pass:V-STR-05 resume: future_seq" cargo nextest run -p rh-cli --locked --release --test vstr --no-capture &&
+run "GAP-1 by name in release: the host's VmHWM over headless stays within 2 x peak LiveEdge::bytes() (the window and the seal queue as allocated) + 2 MiB, solo 1,500 years at full speed (SPR-026; VER-SPR-026-TEST GAP-1)" "pass:GAP-1: solo 1500 years at full speed" cargo nextest run -p rh-cli --locked --release --test memory --no-capture &&
+run "V-PERF-09 ingredients: the host's live bytes under the counting allocator against LiveEdge::bytes() and the per-viewer frame cap, solo and hamlet (SPR-026 T-05; no gate, SPR-030's)" "pass:V-PERF-09 ingredients hamlet" cargo bench --locked --quiet -p rh-bench --features count-alloc --bench live_edge &&
+run "Live edge overhead (C1; reported): solo 3,000 years monthly headless vs --socket" "pass:live edge overhead:" live_edge_overhead &&
 run "Sift: solo's run, downstream of the engine: one channel-C segment per channel-A segment (SPR-013 T-11; ruling 14)" "pass:sift: 1 matches of solitary_life in 200 channel-C segments" "$RH_CLI_RELEASE" sift "$GOLDEN/solo_run" &&
 run "V-SIFT-01 on solo: the SQL twin of life_ends = rh-sifter's channel C (match ids, bindings, event ids, closing seqs) and channel C's chain of channel-A digests (SPR-013 T-11)" "pass:twin_check: V-SIFT-01: 1 matches of solitary_life" "$PY" -I specs/sifting/twin_check.py "$GOLDEN/solo_run" &&
 run "twin_check positive control: a twin missing its last match must FAIL (SPR-013 T-11)" "fail:TWIN DIFFERS: 0 twin matches, 1 sifted" "$PY" -I specs/sifting/twin_check.py "$GOLDEN/solo_run" --control drop-last &&
 run "twin_check positive control: a twin expecting another status (a column the match id does not cover) must FAIL (REV-SPR-013 MIN-2)" "fail:TWIN DIFFERS: 1 twin matches, 1 sifted" "$PY" -I specs/sifting/twin_check.py "$GOLDEN/solo_run" --control other-status &&
+run "twin_check positive control: a match record's seq off by one must FAIL (BCK-002 A-58 GAP-10)" "fail:RECORDS DIFFER: (timeline_id, seq, kind)" "$PY" -I specs/sifting/twin_check.py "$GOLDEN/solo_run" --control other-seq &&
+run "twin_check positive control: a pattern row the packs do not give must FAIL (BCK-002 A-58 GAP-10)" "fail:PATTERN DIFFERS: y000000" "$PY" -I specs/sifting/twin_check.py "$GOLDEN/solo_run" --control other-pattern &&
+run "twin_check positive control: a segment column channel A does not give must FAIL (BCK-002 A-58 GAP-10)" "fail:SEGMENT DIFFERS: y000000" "$PY" -I specs/sifting/twin_check.py "$GOLDEN/solo_run" --control other-segment &&
 run "V-SIFT-01 on household: sift its golden run, the twin = rh-sifter (SPR-013 T-11, T-13)" "pass:twin_check: V-SIFT-01: 6 matches of solitary_life" sift_twin "$GOLDEN/household_run" &&
 run "V-SIFT-01 on hamlet: sift its golden run, the twin = rh-sifter (SPR-013 T-11, T-13)" "pass:twin_check: V-SIFT-01: 60 matches of solitary_life" sift_twin "$GOLDEN/hamlet_run" &&
 run "rh-golden by name: V-SCALE-04 PR subset: household and hamlet each reach zero population with one EXTINCTION, nothing but digests and keyframes after it, and their chronicle, tail, sift and replay stay consistent past it; one rh-cli build runs rungs 0, 1 and 2 (SPR-013 T-13)" "pass:T-13 V-SCALE-04: hamlet" cargo nextest run -p rh-golden --release --locked --test rungs --no-capture &&

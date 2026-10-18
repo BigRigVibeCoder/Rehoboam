@@ -64,6 +64,11 @@ jobs:
       RH_PUSH_BEFORE: ${{ github.event_name == 'push' && github.event.before || '' }}
       RH_PUSH_AFTER: ${{ github.event_name == 'push' && github.sha || '' }}
     steps:
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/hostedtoolcache/CodeQL /usr/local/.ghcup 2>/dev/null || true
+          df -h /
+
       - uses: actions/checkout@v5
         with:
           # Full history: a push needs before..after for the C3 rule and the bisect (SPR-008 MAJ-1,

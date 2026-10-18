@@ -2,7 +2,7 @@
 id: SPR-028
 title: "The M9 validation harness v0 in two stages: (A) the harness contract and its reviewed reference, censoring-aware estimators, 32-seed ensembles, the demography bands as gates on the seed-mean r, V-GOLD-03's CRN-paired comparison and the run report; (B) the isolation harness (V-SF-22) for M2, M7 and T1.minds under typed forcing, the dynasty report from channel A, and coverage (A-15) (P1.10)"
 type: how-to
-status: PLANNING
+status: APPROVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, validation, testing]

@@ -122,6 +122,22 @@ fn every_golden_line_reproduces() {
                     "{line}"
                 );
             }
+            "engine_cause_table" => {
+                let tables = rh_snapshot::state::engine_tables(&synthetic_state_cause());
+                let (_, rows) = tables
+                    .iter()
+                    .find(|(n, _)| *n == f[1])
+                    .unwrap_or_else(|| panic!("no engine table {}", f[1]));
+                assert_eq!(rows.len(), f[2].parse::<usize>().unwrap(), "{line}");
+                check_table(line, &TableDigest::of(f[1], rows.as_slice()), &f[3..]);
+            }
+            "engine_cause" => {
+                assert_eq!(
+                    rh_snapshot::state_hash(&synthetic_state_cause()),
+                    hex64(f[1]),
+                    "{line}"
+                );
+            }
             other => panic!("unknown golden record {other:?}"),
         }
     }
@@ -133,6 +149,25 @@ fn every_golden_line_reproduces() {
     assert_eq!(counts.get("plane"), Some(&6));
     assert_eq!(counts.get("engine_table"), Some(&8));
     assert_eq!(counts.get("engine"), Some(&1));
+    assert_eq!(counts.get("engine_cause_table"), Some(&1));
+    assert_eq!(counts.get("engine_cause"), Some(&1));
+}
+
+/// The synthetic state with causes on two timers (`SYNTHETIC_STATE_CAUSE`; SPR-014 T-02): the
+/// first timer's cause is event 18, the third's event 0.
+fn synthetic_state_cause() -> rh_core::state::EngineState {
+    use rh_events::EventRef;
+    use rh_ids::EventId;
+    let mut state = synthetic_state();
+    for (entry, cause) in state
+        .agenda
+        .entries
+        .iter_mut()
+        .zip([Some(18), None, Some(0)])
+    {
+        entry.1.cause = cause.map_or(EventRef::None, |c| EventRef::Known(EventId::from_raw(c)));
+    }
+    state
 }
 
 /// The synthetic engine state of `bin/gen_hash_golden.py` (`SYNTHETIC_STATE`, `SYNTHETIC_WORLD`),
@@ -143,12 +178,17 @@ fn every_golden_line_reproduces() {
 )]
 fn synthetic_state() -> rh_core::state::EngineState {
     use rh_core::agenda::{AgendaKey, AgendaState, Timer, TimerId};
-    use rh_core::command::{Command, CommandQueuesState, QueuedCommand};
+    use rh_core::command::{Arg, Command, CommandQueuesState, QueuedCommand};
     use rh_core::engine::MaterialInput;
     use rh_core::phase::Phase;
     use rh_core::time::SimTime;
-    use rh_events::{DraftRef, Event, EventLogState};
-    use rh_ids::{EntityKind, EntityRef, EventId, PersonId, PurposeId, SystemId, TimelineId};
+    use rh_events::{
+        DraftRef, Edge, EdgeKind, Event, EventLogState, EventRef, Origin, RoleId, RoleRow, Secrecy,
+        Snapshot,
+    };
+    use rh_ids::{
+        EntityKind, EntityRef, EventId, PersonId, PlaceId, PurposeId, SystemId, TimelineId,
+    };
     const DAY: i64 = 1_440;
     let e = EntityRef::new;
     let t = SimTime::from_minutes;
@@ -165,22 +205,25 @@ fn synthetic_state() -> rh_core::state::EngineState {
                 purpose: PurposeId::from_raw(purpose),
                 kind,
                 payload,
+                cause: EventRef::None,
             },
         )
     };
-    let command = |person, seq, sender, cause, args: Vec<i64>, draft| QueuedCommand {
-        tick: t(DAY),
-        phase: Phase::ALL[3],
-        seq,
-        sender,
-        cause,
-        command: Command {
-            kind: "Inherit",
-            person: PersonId::from_raw(person),
-            args,
-            cause: draft,
-        },
-    };
+    let command =
+        |person, seq, sender, cause: Option<EventId>, args: Vec<i64>, draft| QueuedCommand {
+            tick: t(DAY),
+            phase: Phase::ALL[3],
+            seq,
+            sender,
+            cause,
+            cause_draft: draft,
+            command: Command {
+                kind: "Inherit",
+                person: PersonId::from_raw(person),
+                args: args.into_iter().map(Arg::Int).collect(),
+                cause: cause.map_or(EventRef::None, EventRef::Known),
+            },
+        };
     let mut world = WorldTables::new();
     world.insert("pop.count", column(21, 5));
     world.insert("vital.alive", column(22, 1030));
@@ -208,7 +251,7 @@ fn synthetic_state() -> rh_core::state::EngineState {
                         "X1.vital",
                         Some(EventId::from_raw(12)),
                         vec![1, -2],
-                        Some(DraftRef(0)),
+                        Some(DraftRef::from_index(0)),
                     ),
                     command(8, 8, "X5.war", None, vec![], None),
                 ],
@@ -244,8 +287,23 @@ fn synthetic_state() -> rh_core::state::EngineState {
                     phase: 4,
                     emitter: "X1.vital",
                     kind: "DEATH",
-                    subjects: vec![e(EntityKind::Person, 7)],
-                    causes: vec![EventId::from_raw(3)],
+                    place: None,
+                    magnitude: 0,
+                    secrecy: Secrecy::Public,
+                    origin: Origin::Sim,
+                    admitted: true,
+                    roles: vec![RoleRow {
+                        role: RoleId::TARGET,
+                        entity: e(EntityKind::Person, 7),
+                    }],
+                    snapshots: vec![],
+                    causes: vec![Edge {
+                        cause: EventId::from_raw(3),
+                        kind: EdgeKind::Triggered,
+                        motive: None,
+                        weight: 0,
+                        evidence: 256,
+                    }],
                     payload: vec![1],
                 },
                 Event {
@@ -254,8 +312,51 @@ fn synthetic_state() -> rh_core::state::EngineState {
                     phase: 9,
                     emitter: "X4.census",
                     kind: "CENSUS",
-                    subjects: vec![],
-                    causes: vec![],
+                    place: Some(PlaceId::from_raw(12)),
+                    magnitude: -7,
+                    secrecy: Secrecy::Faction,
+                    origin: Origin::Oracle,
+                    admitted: false,
+                    roles: vec![
+                        RoleRow {
+                            role: RoleId::ACTOR,
+                            entity: e(EntityKind::Person, 9),
+                        },
+                        RoleRow {
+                            role: RoleId::WITNESS,
+                            entity: e(EntityKind::Household, 3),
+                        },
+                    ],
+                    snapshots: vec![
+                        Snapshot {
+                            attr: "stress",
+                            entity: e(EntityKind::Person, 9),
+                            partner: None,
+                            value: 18_000,
+                        },
+                        Snapshot {
+                            attr: "trust",
+                            entity: e(EntityKind::Person, 9),
+                            partner: Some(e(EntityKind::Person, 7)),
+                            value: -300,
+                        },
+                    ],
+                    causes: vec![
+                        Edge {
+                            cause: EventId::from_raw(3),
+                            kind: EdgeKind::MotivatedBy,
+                            motive: Some("GRIEF_FOR"),
+                            weight: -120,
+                            evidence: 40,
+                        },
+                        Edge {
+                            cause: EventId::from_raw(18),
+                            kind: EdgeKind::Triggered,
+                            motive: None,
+                            weight: 0,
+                            evidence: 256,
+                        },
+                    ],
                     payload: vec![-1, 40],
                 },
             ],

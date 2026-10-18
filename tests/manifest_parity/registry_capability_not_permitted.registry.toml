@@ -1,4 +1,5 @@
 # Fixture Registry for the parity corpus (SPR-004 GAP-3): registry_v0.toml plus the change named below. Never a contract.
+# SPR-020 T-01: [role_domains] and its ten bool attributes copied from registry_v0.toml, which the typed loader requires.
 # Changed: apex_predator may fly but not bond.
 # Mechanics Registry v0, a minimal illustrative subset.
 # The Registry is the closed vocabulary that manifests may reference (ADR-0010, docs/05_architecture/05.5).
@@ -225,6 +226,24 @@ ids = ["actor", "target", "witness", "instrument"]   # instrument: the S6 artifa
 [motive_edges]         # typed motive edges: refinements of motivated_by that point to the inciting event; plane A
 ids = ["RETALIATION_FOR", "JEALOUSY_OF", "VOW_OF", "AMBITION_FOR", "FEAR_OF", "LOYALTY_TO", "GRIEF_FOR", "GREED_FOR", "CORRUPTION_BY"]
 
+[role_domains]         # a pattern role's domain ([roles]) as an anchored bool attribute, captured as a snapshot at emission (SPR-020,
+                       # envelope_v0.md §1, R1): `A = "authority"` compiles to holds_title(A)@e1 == true at A's anchor, the first clause
+                       # whose cast binds A (R16); a relational domain names its partner variable (`S = "successor of A"` ->
+                       # is_successor(S, A)@e1). owner: the system that owns the source column (or "life_course": the ledger's rows;
+                       # "none": no source yet, so the domain is absent and lint_patterns.py warns); column: the column, algorithm or
+                       # log the attribute is read from. Any emitter that reads the column may declare the snapshot. Plane C reads it.
+authority    = { attribute = "holds_title",    relational = false, owner = "M7.dynasty",  column = "title.holder" }
+successor    = { attribute = "is_successor",   relational = true,  owner = "M7.dynasty",  column = "claim.rank" }
+kin          = { attribute = "is_self_or_kin", relational = true,  owner = "life_course", column = "life_course" }
+ally         = { attribute = "is_ally",        relational = true,  owner = "none", column = "none" }
+rival        = { attribute = "is_rival",       relational = true,  owner = "none", column = "none" }
+subordinate  = { attribute = "is_subordinate", relational = true,  owner = "none", column = "none" }
+member       = { attribute = "is_member",      relational = true,  owner = "none", column = "none" }
+host         = { attribute = "is_host",        relational = false, owner = "none", column = "none" }
+guest        = { attribute = "is_guest",       relational = false, owner = "none", column = "none" }
+investigator = { attribute = "is_investigator", relational = false, owner = "none", column = "none" }
+suspect      = { attribute = "is_suspect",     relational = false, owner = "none", column = "none" }
+
 [mental_breaks]        # T1.minds (ADR-0035): volatile acts a stressed named actor may commit; relief is the stress removed
 ASSASSINATION_ATTEMPT = { act_classes = ["harm"], relief = 60.0 }          # relief in stress points (0-100 scale)
 FLIGHT                = { act_classes = ["flee"], relief = 50.0 }          # the actor becomes a fugitive (SAGA-14)
@@ -338,6 +357,16 @@ frontier = "agrarian"            # last era the engine build supports; reaching 
 # Anchored attributes readable by patterns as `name(args)@eN`. Stored in event_snapshot.value as INTEGER:
 #   q8_8 = fixed-point (value/256); bool = 0/1; enum = index into `values`; int = raw.
 [attributes]
+holds_title               = { type = "bool", args = ["actor"] }                 # the actor holds any title at the event (authority)
+is_successor              = { type = "bool", args = ["actor", "partner"] }      # the actor is the partner's legal heir at the event
+is_ally                   = { type = "bool", args = ["actor", "partner"] }      # no source yet (P1b: S7 vows, M6 factions)
+is_rival                  = { type = "bool", args = ["actor", "partner"] }      # no source yet (feud rows are T1's: a P1b declaration)
+is_subordinate            = { type = "bool", args = ["actor", "partner"] }      # no source yet (M7 liege and vassal, next version)
+is_member                 = { type = "bool", args = ["actor", "partner"] }      # no source yet (factions, P4)
+is_host                   = { type = "bool", args = ["actor"] }                 # no source yet (S5 daily life, P1b)
+is_guest                  = { type = "bool", args = ["actor"] }                 # no source yet
+is_investigator           = { type = "bool", args = ["actor"] }                 # no source yet (M5 contagion, P1b)
+is_suspect                = { type = "bool", args = ["actor"] }                 # no source yet
 fear                      = { type = "q8_8", args = ["actor"] }
 trust                     = { type = "q8_8", args = ["actor", "partner"] }
 suspicion                 = { type = "q8_8", args = ["actor", "partner"] }

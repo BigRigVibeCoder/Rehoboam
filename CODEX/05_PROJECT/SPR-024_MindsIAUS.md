@@ -2,7 +2,7 @@
 id: SPR-024
 title: "Minds v0, part b, in two stages: event-driven IAUS with the typed considerations and response curves and same-instant agenda semantics (024a); marry, seek office, press a claim and feud, and M7 and T1 in the build (024b) (P3.2a, part b)"
 type: how-to
-status: PLANNING
+status: APPROVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, simulation]

@@ -2,7 +2,7 @@
 id: SPR-021
 title: "M7 F1 (a), as SPR-021a and SPR-021b: titles, succession law and immediate succession through the death path (V-SAGA-19); house membership at birth; the promotion of M7; the instant log's events and the core genealogy index (P1.7, part a)"
 type: how-to
-status: PLANNING
+status: APPROVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, simulation]
