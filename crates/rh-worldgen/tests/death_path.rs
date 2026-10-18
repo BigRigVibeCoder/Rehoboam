@@ -228,11 +228,7 @@ impl SystemModel for Sender {
     }
     fn roles(&self) -> &'static [(&'static str, RoleId)] {
         static ROLES: [(&str, RoleId); 1] = [("target", RoleId::TARGET)];
-        if self.id == "X1.minds" {
-            &ROLES
-        } else {
-            &[]
-        }
+        if self.id == "X1.minds" { &ROLES } else { &[] }
     }
     fn step(
         &self,
@@ -247,8 +243,9 @@ impl SystemModel for Sender {
         }
         let who = PersonId::from_raw(plan[1].cast_unsigned());
         let (cause, purpose_is_murder) = if self.id == "X1.minds" {
-            let draft =
-                c.emit(EventDraft::new("MURDER_ATTEMPT").role(RoleId::TARGET, EntityRef::person(who)))?;
+            let draft = c.emit(
+                EventDraft::new("MURDER_ATTEMPT").role(RoleId::TARGET, EntityRef::person(who)),
+            )?;
             (EventRef::Draft(draft), false)
         } else {
             (EventRef::None, true)
@@ -507,7 +504,11 @@ fn v_inv_03_commanded_deaths_take_the_single_death_path() {
             .find(|ev| ev.kind == "MURDER_ATTEMPT")
             .unwrap();
         assert_eq!(
-            deaths_of(&events, v1)[0].causes.iter().map(|e| (e.cause, e.kind)).collect::<Vec<_>>(),
+            deaths_of(&events, v1)[0]
+                .causes
+                .iter()
+                .map(|e| (e.cause, e.kind))
+                .collect::<Vec<_>>(),
             [(attempt.id, EdgeKind::Triggered)],
             "DEATH <- MURDER_ATTEMPT"
         );

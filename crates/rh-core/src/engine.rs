@@ -1728,7 +1728,10 @@ impl Engine {
             );
         }
         for (snapshot, owner) in out.dropped {
-            *self.dropped_snapshots.entry((e.id, snapshot, owner)).or_default() += 1;
+            *self
+                .dropped_snapshots
+                .entry((e.id, snapshot, owner))
+                .or_default() += 1;
         }
         for mut command in out.commands {
             let Some(decl) = self.registered.commands.get(command.kind) else {
