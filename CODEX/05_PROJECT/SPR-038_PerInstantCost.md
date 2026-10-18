@@ -9,7 +9,7 @@ tags: [sprint, determinism]
 related: [BCK-002, PRJ-002, REV-WAVE5, REV-WAVE6, SPR-007, SPR-009, SPR-011, SPR-014, SPR-015, SPR-016, SPR-018, SPR-019, SPR-020, SPR-021, SPR-030, ADR-0006, ADR-0007, ADR-0024, ADR-0025]
 created: 2026-10-18
 updated: 2026-10-18
-version: 0.3.2
+version: 0.3.3
 ---
 
 > **BLUF:** Removes the fixed per-instant engine overhead that SPR-014 exposed when it bound M2's `Day`/`Vital` drain to every day start (BCK-002 A-60: about 360 instants a year where there were 12–14), and the costs that grow with the life-course log, **in two stages in one plan, as SPR-019 has. Each stage is its own PR, Tester pass and audit.**
@@ -394,6 +394,7 @@ Each gate is in exactly one part. A time is a gate-time estimate on one runner, 
     - It is filled at the serial merges: (a) `PersonId`s by a sorted insert at each row insert; (b) `PersonId`s, ascending across the instant, by a sorted insert from a scan of `person.alive` at each merge where the write set shows it written. A newborn who dies in the same instant stays in (a) and enters (b).
     - It is cleared at the instant's end, and is in no `EngineState`.
     - It has the `05.1` §2 rule 2 sentences (the Architect's, to EVO-002's text if EVO-002 has merged): what the log holds, that it is filled at the merges, read-only to steps, cleared at the instant's end and outside every hash, keyframe and journal, and that EVO-002 adds (c).
+  - **The no-re-entry refusal** (EVO-002 §2; T-00a review MIN-4, Architect, 85%; +0.1 day): an insert of a person who exited this instant is refused by name at the merge. Its test is a stub that inserts at Bookkeeping after compaction. The `05.1` §2 rule-2 text is conformed to as T-00a amended it, not rewritten.
   - **Two consumer tests:**
     - for `inserted()`, a stub selector of S3's shape (a `Day`/`Vital` binding after the inserter by a `same_instant` edge, with a `debug_assert_eq!` against the zero-marked scan);
     - for `exited()`, a stub of T1's shape that reads the instant's exits in a later phase (`Agenda`) and records them in a column of its own;
