@@ -8,7 +8,7 @@
 >   - `GOV-011`: ownership, independence, records and handoffs.
 >
 >   §9 below applies them to this handoff. `CLAUDE.md` binds every agent whatever its vendor; `GEMINI.md` points here.
-> - **main:** `3824601` (the merge of PR #90, 2026-10-18); check it with `git ls-remote origin main`.
+> - **main:** `6b1970d` (the merge of PR #109, 2026-10-18); check it with `git ls-remote origin main`.
 > - **Priority (the director's D62, binding):**
 >   - **P1:** the engine core (P1a "Bloodlines", gate G1a), which wins every contention for CI minutes, review time and merge slots.
 >   - **P2:** the voxel viewer lane.
@@ -62,16 +62,18 @@
 | #84 | **SPR-020**: Event Envelope in Engine (`sprint/SPR-020-envelope`). Merged `16a8559` |
 | #82 | **SPR-026**: World Stream v1 Live Edge (`sprint/SPR-026-stream-v1`). Merged `fbfa53b` |
 | #90 | **SPR-017**: Registry Effect Language v0 (`sprint/SPR-017-effect-language`). Merged `3824601` |
+| #105 | Ratify Director decisions D58, D59, D61, D63. Merged `2fc58c3` |
+| #106 | **AN-0**: Multi-Segment Chronicle Fold (`arch/AN-0-annals-fold`; REV-AN0 CLOSED). Merged `1a412f8` |
+| #108 | **AN-1**: Annals Fixtures for M7 F1 (`arch/AN-1-annals-m7-fixtures`; REV-AN1 CLOSED). Merged `d50f1af` |
+| #109 | **T-00b**: M7 0.6.0 Amendments for SPR-022 (`arch/M7-0.6-T-00b`; REV-T00b CLOSED). Merged `6b1970d` |
 
 ## 3. Active Branches & Sprints
 
 | Branch @ head | Role / Owner | State | Next action |
 |---|---|---|---|
-| `sprint/SPR-015-births-f1` | Developer (Exuberant), `AGT-002-CORE` | Provisioned from `main` (`3824601`). Work order in `docs/handoff/2026-10-18/exuberant_work_order.md`. | T-01..T-03 (Stage A), then checkpoint |
+| `sprint/SPR-015-births-f1` | Developer (Exuberant), `AGT-002-CORE` | Active (Draft PR #107 open; head `a61e919`). T-02 trait objects & registry delta merged. | T-01..T-03 (Stage A), then checkpoint |
 | `sprint/SPR-016-mortality-f1` @ `da6c74d` | Developer, `AGT-002-CORE` | Stage 1 (exp/ln Q32_32, F1 schedule) Tester PASS; stage 2 held until SPR-015 merges | After SPR-015 |
-| `arch/AN-0-annals-fold` @ `cfe5961` | Drafter / Architect | Multi-segment annals fold; review findings R1–R11 in `an0_rulings.md` | Apply rulings, verify, merge |
-| `arch/AN-1-annals-m7-fixtures` @ `733960b` | Drafter / Architect | Annals fixtures for M7 F1 | Merge after AN-0 |
-| `arch/M7-0.6-T-00b` @ `8a5b1ea` | Drafter / Architect | M7 amendments for SPR-022 | Finish draft before SPR-021a |
+| `sprint/SPR-021a-dynasty-f1` | Developer, `AGT-002-CORE` | Unblocked (T-00b merged, M7 0.6.0 amendments locked). | T-01 promotion of M7 0.6.0 |
 
 ## 4. Records you will need (all in the repo)
 
