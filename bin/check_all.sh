@@ -910,6 +910,16 @@ key_order_control() {
   "$PY" -I bin/check_key_order.py --rust-output "$planted"
 }
 
+# SPR-017 T-09 (V-WC-10, EVO-1): the data-only extension's control drops the law's programs from its
+# fixture Registry, keeping its id: the Registry must be refused by name.
+extension_control() {
+  local planted="$PWD/target/rendered-fixtures/registry_extension_without_programs.toml"
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed '/^\[succession_laws.absolute_primogeniture\]$/,/^order /d' tests/registry_effect/registry_absolute_primogeniture.toml > "$planted" || return 1
+  if cmp -s "$planted" tests/registry_effect/registry_absolute_primogeniture.toml; then echo "control not planted: the law's table was not found"; return 1; fi
+  "$RH_CLI" effect check --registry "$planted"
+}
+
 # SPR-017 T-08: effect_ref.py --emit and rh-cli effect eval print the same line for every case of a
 # golden-format file (the reference reads the golden file; the Rust side reads $1, the file itself or
 # a planted copy).
@@ -1420,6 +1430,10 @@ run "Effect programs: every Registry program compiles against the real environme
 run "Effect programs positive control: a Registry whose seniority has no order must FAIL (SPR-017 T-06)" "fail:succession_laws.seniority: no order program (§7.3)" effect_programs_control &&
 run "Effect enums: the Registry's keyed tables in the Rust loader's order equal tomllib's (check_key_order; SPR-017 T-06)" "pass:KEY ORDER: PASS" "$PY" -I bin/check_key_order.py --rust-bin "$RH_CLI" &&
 run "check_key_order positive control: every keyed table in sorted order must FAIL (SPR-017 T-06)" "fail:MISMATCH [opinion_modifiers]" key_order_control &&
+run "V-WC-10 data-only extension: the fixture Registry's 8 laws compile against the real environment (rh-cli effect check, tests/registry_effect; SPR-017 T-09)" "pass:EFFECT PROGRAMS: PASS (8 laws, 24 programs)" "$RH_CLI" effect check --registry tests/registry_effect/registry_absolute_primogeniture.toml &&
+run "V-WC-10 data-only extension positive control: the law's id without its programs must FAIL by name (SPR-017 T-09)" "fail:succession_laws.absolute_primogeniture: no programs" extension_control &&
+run "V-WC-10 data-only extension: absolute_primogeniture's lines on dynasty and deep reproduce in the reference (effect_ref --check; SPR-017 T-09)" "pass:EFFECT LANGUAGE v0.5.1: PASS (2 cases reproduce absolute_primogeniture_cases.toml)" "$PY" -I specs/registry/effect_ref.py --check --golden tests/registry_effect/absolute_primogeniture_cases.toml &&
+run "V-WC-10 data-only extension: absolute_primogeniture's lines on dynasty and deep reproduce in the Rust evaluator (rh-manifest effect_golden; SPR-017 T-09)" "pass:EFFECT LANGUAGE v0.5.1 (rust): PASS (2 cases)" env RH_EFFECT_GOLDEN="$PWD/tests/registry_effect/absolute_primogeniture_cases.toml" cargo nextest run -p rh-manifest --locked --test effect_golden --no-capture &&
 run "Ownership lint: single writer from specs/systems (SPR-004 T-03)" "pass:0 violations" "$RH_CLI" ownership &&
 run "Ownership lint positive control: unowned write must FAIL" "fail:VIOLATION [single-writer] S5.daily_life: writes person.alive, which M2.demography owns" "$RH_CLI" ownership tests/lint_fixtures/ownership/unowned_write.access.toml &&
 run "Ownership lint positive control: a write declared twice must FAIL (SPR-005 DEF-3)" "fail:VIOLATION [duplicate] M2.demography: declares a write to person.alive twice" "$RH_CLI" ownership tests/lint_fixtures/ownership/duplicate_write.access.toml &&

@@ -372,6 +372,14 @@ REQUIRED_GATES = (
     "V-WC-04 manifest parity: Rust loader agrees with manifest_v0.py (SPR-004)",
     "V-WC-04 parity positive control: drifted Registry must FAIL",
     "V-WC-04 parity positive control: message-only drift must FAIL (GAP-3)",
+    "V-WC-10 data-only extension positive control: the law's id without its programs must "
+    "FAIL by name (SPR-017 T-09)",
+    "V-WC-10 data-only extension: absolute_primogeniture's lines on dynasty and deep "
+    "reproduce in the Rust evaluator (rh-manifest effect_golden; SPR-017 T-09)",
+    "V-WC-10 data-only extension: absolute_primogeniture's lines on dynasty and deep "
+    "reproduce in the reference (effect_ref --check; SPR-017 T-09)",
+    "V-WC-10 data-only extension: the fixture Registry's 8 laws compile against the real "
+    "environment (rh-cli effect check, tests/registry_effect; SPR-017 T-09)",
     "V-WC-10 differential fuzz: effect_ref.py and the Rust evaluator agree on 16 SplitMix64 "
     "seeds, with every code, invariant, relation, builtin, aggregate and kind covered "
     "(bin/effect_fuzz.py; SPR-017 T-08)",
