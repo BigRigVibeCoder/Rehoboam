@@ -2,7 +2,7 @@
 id: SPR-019
 title: "Population synthesis v0 and the dynastic back-fill: the anonymous rest of a people from the compiled schedule, couples by fixed-point IPF, dependent children and households; each dynasty's pre-epoch genealogy and tenure log by its succession law; the M2 fold (0.3.2) and the back-fill table in the unpromoted M7 draft (P1.2)"
 type: how-to
-status: PLANNING
+status: APPROVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, simulation]

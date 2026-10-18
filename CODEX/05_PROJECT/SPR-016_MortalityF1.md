@@ -2,7 +2,7 @@
 id: SPR-016
 title: "M2 F1 mortality: fixed-point exp and ln, Brass at any (alpha, beta), the infant sub-schedule, the old-age tail and the density modifier; the 0.3.1 bump (P1.3, part b)"
 type: how-to
-status: PLANNING
+status: APPROVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
