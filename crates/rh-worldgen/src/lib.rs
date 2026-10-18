@@ -53,26 +53,44 @@ pub const SEX_FEMALE: i64 = 1;
 pub const ORIGIN_FOUNDER: i64 = 1;
 
 /// Every column genesis writes, with its value per founder (the M2 spec's `[initialization]`).
-const COLUMNS: [&str; 19] = [
+const COLUMNS: [&str; 33] = [
+    // person.* ledger columns (M2.demography owns them all).
+    "person.id",
+    "person.birth_tick",
+    "person.sex",
+    "person.alive",
+    "person.death_tick",
+    "person.death_cause",
+    "person.mother",
+    "person.father",
+    "person.spouse",
+    "person.household",
+    "person.parity",
+    "person.last_birth_tick",
+    "person.conceived_tick",
+    "person.unborn_father",
+    // household.* table (SPR-015; initially empty at genesis).
+    "household.id",
+    "household.head",
+    "household.formed_tick",
+    "household.dissolved_tick",
+    // marriage.* table (SPR-015; initially empty at genesis).
+    "marriage.husband",
+    "marriage.wife",
+    "marriage.start_tick",
+    "marriage.end_tick",
+    "marriage.source",
+    // life_course.* columns.
+    "life_course.person_id",
+    "life_course.origin",
+    "life_course.mother",
+    "life_course.father",
+    "life_course.sex",
     "life_course.birth_tick",
-    "life_course.death_cause",
     "life_course.entry_tick",
     "life_course.exit_kind",
     "life_course.exit_tick",
-    "life_course.father",
-    "life_course.mother",
-    "life_course.origin",
-    "life_course.person_id",
-    "life_course.sex",
-    "person.alive",
-    "person.birth_tick",
-    "person.death_cause",
-    "person.death_tick",
-    "person.father",
-    "person.id",
-    "person.mother",
-    "person.sex",
-    "person.spouse",
+    "life_course.death_cause",
 ];
 
 /// Why genesis refused a world.
@@ -318,8 +336,21 @@ pub fn write_columns(
             "person.birth_tick" | "life_course.birth_tick" => births.clone(),
             "person.alive" => vec![1; n],
             "person.death_tick" | "life_course.exit_tick" => vec![i64::MAX; n],
+            "person.conceived_tick" | "person.last_birth_tick" => vec![i64::MIN; n],
             "life_course.origin" => vec![ORIGIN_FOUNDER; n],
-            // mother, father, spouse, death_cause none, entry_tick 0, exit_kind open.
+            "life_course.entry_tick" => vec![0; n],
+            // household.* and marriage.* tables are empty at genesis.
+            "household.id"
+            | "household.head"
+            | "household.formed_tick"
+            | "household.dissolved_tick"
+            | "marriage.husband"
+            | "marriage.wife"
+            | "marriage.start_tick"
+            | "marriage.end_tick"
+            | "marriage.source" => vec![],
+            // mother, father, spouse, death_cause none, exit_kind open,
+            // household, parity, unborn_father zero.
             _ => vec![0; n],
         };
         tables.insert(column, values);

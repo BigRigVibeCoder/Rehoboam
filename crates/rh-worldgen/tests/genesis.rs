@@ -271,6 +271,11 @@ fn random_worlds_have_sorted_aligned_rows_and_ages_in_range() {
         let t = genesis(&spec, &specs).unwrap();
         let n = spec.founders.len();
         for c in t.names() {
+            // household.* and marriage.* are empty at genesis (SPR-015 H2).
+            if c.starts_with("household.") || c.starts_with("marriage.") {
+                assert_eq!(t.get(c).unwrap().len(), 0, "case {case}: {c}");
+                continue;
+            }
             assert_eq!(t.get(c).unwrap().len(), n, "case {case}: {c}");
         }
         let ids = col(&t, "person.id");
