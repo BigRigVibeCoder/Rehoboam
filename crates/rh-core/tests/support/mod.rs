@@ -218,6 +218,17 @@ impl Stub {
         self
     }
 
+    /// Declares an applied command outcome-carrying in its spec (`outcome = true`; EVO-001 R9).
+    pub fn outcome(mut self, command: &str) -> Self {
+        let a = self
+            .apply_specs
+            .iter_mut()
+            .find(|a| a.command == command)
+            .unwrap_or_else(|| panic!("{} does not apply {command}", self.id));
+        a.outcome = true;
+        self
+    }
+
     /// Declares, in its spec, how it uses a read: `rate` or `mode` with a typed neutral, or
     /// `identity` (`neutral` `None`).
     pub fn uses(mut self, column: &str, usage: &str, neutral: Option<i64>) -> Self {
