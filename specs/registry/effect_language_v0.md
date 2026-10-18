@@ -551,6 +551,6 @@ Each decision is the Architect's recommendation with a confidence; the director 
 ## 13. Conformance
 
 - The golden file is the contract's test: every grammar rule, every row of §4.3, every relation and accessor of §5.3, every aggregate, every program kind, the seven laws and the four extensions on the fixture, the deep world, the rota world and the uncle–niece world, the lineage bound on generated fan trees, both invariants, and every error class, each with an expected value or code.
-- `python -I specs/registry/effect_ref.py --check` exits 0 iff every golden case reproduces (580 cases at v0.5.1); `bin/check_all.sh` runs it, with a positive control (an altered expected value must fail).
+- `python -I specs/registry/effect_ref.py --check` exits 0 iff every golden case reproduces (610 cases at v0.5.1); `bin/check_all.sh` runs it, with a positive control (an altered expected value must fail).
 - SPR-017's Rust evaluator (`rh-registry`, V-WC-10) reads the same file and must reproduce every case bit for bit, in debug and release builds, as `rh-sample`'s golden vectors do at both optimisation levels.
 - The Python reference is standard-library only, exact (`fractions.Fraction`), and shares no code with the engine.

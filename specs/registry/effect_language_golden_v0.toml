@@ -5856,3 +5856,4329 @@ system = "T1.minds"
 bind = { x = "person:9" }
 text = 'opinion.source_event(x)'
 expect = "error:E_UNKNOWN_NAME"
+
+# ============================================================================= the Tester's rows (AGT-003, VER-SPR-017-TEST GAP-1 to GAP-3)
+[worlds.tw]
+now = 0
+days_per_year = 360
+
+[worlds.tw.params."M7.dynasty"]
+dormancy_degrees = 3
+majority_age = "16.0"
+interregnum_max_days = 90
+
+[worlds.tw.params."T1.minds"]
+iaus_top_k = 3
+marriage_min_age = "16.0"
+
+[worlds.tw.draws]
+"sortition/person:53/700" = "1000"
+"sortition/person:59/700" = "200"
+"sortition/person:61/700" = "1000"
+"sortition/person:53/0" = "9000000000000000000"
+"sortition/person:59/0" = "0"
+"sortition/person:61/0" = "18446744073709551615"
+"sortition/person:53/1" = "7"
+"sortition/person:53/7" = "11"
+"sortition/person:54/0" = "108"
+"sortition/person:58/0" = "116"
+"sortition/person:62/0" = "124"
+"sortition/person:63/0" = "126"
+"sortition/person:64/0" = "128"
+"sortition/person:65/0" = "130"
+"sortition/person:67/0" = "134"
+"sortition/person:62/1" = "5"
+"sortition/person:62/2" = "124"
+"break_outcome/person:53/59" = "0"
+"break_outcome/person:54/59" = "0"
+"break_outcome/person:61/59" = "0"
+"break_outcome/person:53/54" = "0"
+"sortition/person:50/0" = "281474976710655"
+"sortition/person:52/0" = "281474976710656"
+"sortition/person:53/2" = "106"
+"sortition/person:54/2" = "108"
+"sortition/person:58/2" = "116"
+"sortition/person:61/2" = "122"
+"sortition/person:63/2" = "126"
+"sortition/person:64/2" = "128"
+"sortition/person:65/2" = "130"
+"sortition/person:67/2" = "134"
+
+[[worlds.tw.life_course]]
+id = 9000
+person_id = 67
+mother = 0
+father = 51
+birth_tick = -18144000
+sex = "male"
+death_cause = "natural"
+[[worlds.tw.life_course]]
+id = 9003
+person_id = 66
+mother = 0
+father = 65
+birth_tick = -2592000
+sex = "male"
+death_cause = "none"
+[[worlds.tw.life_course]]
+id = 9006
+person_id = 65
+mother = 0
+father = 51
+birth_tick = -15552000
+sex = "male"
+death_cause = "natural"
+[[worlds.tw.life_course]]
+id = 9009
+person_id = 64
+mother = 0
+father = 51
+birth_tick = -8294399
+sex = "male"
+death_cause = "none"
+[[worlds.tw.life_course]]
+id = 9012
+person_id = 63
+mother = 0
+father = 51
+birth_tick = -10368000
+sex = "male"
+death_cause = "none"
+[[worlds.tw.life_course]]
+id = 9015
+person_id = 62
+mother = 52
+father = 51
+birth_tick = -7776000
+sex = "female"
+death_cause = "none"
+[[worlds.tw.life_course]]
+id = 9018
+person_id = 61
+mother = 52
+father = 51
+birth_tick = -8294400
+sex = "male"
+death_cause = "none"
+[[worlds.tw.life_course]]
+id = 9021
+person_id = 59
+mother = 0
+father = 0
+birth_tick = -31104000
+sex = "male"
+death_cause = "none"
+[[worlds.tw.life_course]]
+id = 9024
+person_id = 58
+mother = 0
+father = 51
+birth_tick = -10368000
+sex = "female"
+death_cause = "none"
+[[worlds.tw.life_course]]
+id = 9027
+person_id = 57
+mother = 54
+father = 0
+birth_tick = -1555200
+sex = "male"
+death_cause = "none"
+[[worlds.tw.life_course]]
+id = 9030
+person_id = 56
+mother = 0
+father = 50
+birth_tick = -23328000
+sex = "male"
+death_cause = "none"
+[[worlds.tw.life_course]]
+id = 9033
+person_id = 55
+mother = 52
+father = 0
+birth_tick = -7257600
+sex = "male"
+death_cause = "none"
+[[worlds.tw.life_course]]
+id = 9036
+person_id = 54
+mother = 0
+father = 51
+birth_tick = -12960000
+sex = "female"
+death_cause = "none"
+[[worlds.tw.life_course]]
+id = 9039
+person_id = 53
+mother = 0
+father = 51
+birth_tick = -10368000
+sex = "male"
+death_cause = "none"
+[[worlds.tw.life_course]]
+id = 9042
+person_id = 52
+mother = 0
+father = 50
+birth_tick = -28512000
+sex = "female"
+death_cause = "none"
+[[worlds.tw.life_course]]
+id = 9045
+person_id = 51
+mother = 0
+father = 50
+birth_tick = -25920000
+sex = "male"
+death_cause = "natural"
+[[worlds.tw.life_course]]
+id = 9048
+person_id = 50
+mother = 0
+father = 0
+birth_tick = -41472000
+sex = "male"
+death_cause = "natural"
+[[worlds.tw.person]]
+id = 66
+alive = true
+sex = "male"
+birth_tick = -2592000
+death_tick = 0
+death_cause = "none"
+mother = 0
+father = 65
+spouse = 0
+house = 1
+vocation = "none"
+named = false
+residence = 1
+[[worlds.tw.person]]
+id = 64
+alive = true
+sex = "male"
+birth_tick = -8294399
+death_tick = 0
+death_cause = "none"
+mother = 0
+father = 51
+spouse = 0
+house = 1
+vocation = "none"
+named = false
+residence = 1
+[[worlds.tw.person]]
+id = 63
+alive = true
+sex = "male"
+birth_tick = -10368000
+death_tick = 0
+death_cause = "none"
+mother = 0
+father = 51
+spouse = 0
+house = 1
+vocation = "none"
+named = false
+residence = 1
+[[worlds.tw.person]]
+id = 62
+alive = true
+sex = "female"
+birth_tick = -7776000
+death_tick = 0
+death_cause = "none"
+mother = 52
+father = 51
+spouse = 0
+house = 1
+vocation = "none"
+named = false
+residence = 1
+[[worlds.tw.person]]
+id = 61
+alive = true
+sex = "male"
+birth_tick = -8294400
+death_tick = 0
+death_cause = "none"
+mother = 52
+father = 51
+spouse = 0
+house = 1
+vocation = "none"
+named = false
+residence = 1
+[[worlds.tw.person]]
+id = 59
+alive = true
+sex = "male"
+birth_tick = -31104000
+death_tick = 0
+death_cause = "none"
+mother = 0
+father = 0
+spouse = 0
+house = 1
+vocation = "none"
+named = false
+residence = 1
+[[worlds.tw.person]]
+id = 58
+alive = true
+sex = "female"
+birth_tick = -10368000
+death_tick = 0
+death_cause = "none"
+mother = 0
+father = 51
+spouse = 0
+house = 1
+vocation = "none"
+named = false
+residence = 1
+[[worlds.tw.person]]
+id = 57
+alive = true
+sex = "male"
+birth_tick = -1555200
+death_tick = 0
+death_cause = "none"
+mother = 54
+father = 0
+spouse = 0
+house = 1
+vocation = "none"
+named = false
+residence = 1
+[[worlds.tw.person]]
+id = 56
+alive = true
+sex = "male"
+birth_tick = -23328000
+death_tick = 0
+death_cause = "none"
+mother = 0
+father = 50
+spouse = 0
+house = 1
+vocation = "none"
+named = false
+residence = 1
+[[worlds.tw.person]]
+id = 55
+alive = true
+sex = "male"
+birth_tick = -7257600
+death_tick = 0
+death_cause = "none"
+mother = 52
+father = 0
+spouse = 0
+house = 1
+vocation = "none"
+named = false
+residence = 1
+[[worlds.tw.person]]
+id = 54
+alive = true
+sex = "female"
+birth_tick = -12960000
+death_tick = 0
+death_cause = "none"
+mother = 0
+father = 51
+spouse = 0
+house = 1
+vocation = "none"
+named = false
+residence = 1
+[[worlds.tw.person]]
+id = 53
+alive = true
+sex = "male"
+birth_tick = -10368000
+death_tick = 0
+death_cause = "none"
+mother = 0
+father = 51
+spouse = 0
+house = 1
+vocation = "none"
+named = false
+residence = 1
+[[worlds.tw.person]]
+id = 52
+alive = true
+sex = "female"
+birth_tick = -28512000
+death_tick = 0
+death_cause = "none"
+mother = 0
+father = 50
+spouse = 0
+house = 1
+vocation = "none"
+named = false
+residence = 1
+[[worlds.tw.title]]
+id = 700
+tier = "sovereign"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 51
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.tw.title]]
+id = 701
+tier = "minor"
+liege = 700
+polity = 1
+law = "primogeniture"
+holder = 53
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.tw.title]]
+id = 702
+tier = "major"
+liege = 700
+polity = 1
+law = "primogeniture"
+holder = 61
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.tw.office]]
+id = 900
+title = 700
+kind = "chancellor"
+holder = 61
+[[worlds.tw.office]]
+id = 901
+title = 700
+kind = "marshal"
+holder = 59
+[[worlds.tw.claim]]
+id = 950
+claimant = 53
+title = 700
+status = "active"
+pressed = false
+[[worlds.tw.claim]]
+id = 951
+claimant = 53
+title = 701
+status = "renounced"
+pressed = false
+[[worlds.tw.tenure]]
+id = 800
+title = 700
+holder = 50
+start = 0
+end = 1000
+[[worlds.tw.tenure]]
+id = 801
+title = 700
+holder = 51
+start = 1000
+end = 9223372036854775807
+[[worlds.tw.tenure]]
+id = 802
+title = 702
+holder = 59
+start = 2000
+end = 3000
+[[worlds.tw.tenure]]
+id = 803
+title = 702
+holder = 53
+start = 3000
+end = 4000
+[[worlds.tw.tenure]]
+id = 804
+title = 702
+holder = 59
+start = 4000
+end = 5000
+[[worlds.tw.tenure]]
+id = 805
+title = 702
+holder = 0
+start = 5000
+end = 6000
+[[worlds.tw.tenure]]
+id = 806
+title = 702
+holder = 53
+start = 6000
+end = 7000
+[[worlds.tw.tenure]]
+id = 807
+title = 702
+holder = 61
+start = 7000
+end = 9223372036854775807
+[[worlds.tw.polity]]
+id = 1
+exec_constraint = "0.0"
+
+[worlds.wide]
+now = 0
+days_per_year = 360
+
+[[worlds.wide.title]]
+id = 1
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 1
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 2
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 1
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 3
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 1
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 4
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 1
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 5
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 1
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 6
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 1
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 7
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 1
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 8
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 1
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 9
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 1
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 10
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 1
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 11
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 1
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 12
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 1
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 13
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 1
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 14
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 1
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 15
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 1
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 16
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 1
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 17
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 1
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 18
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 1
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 19
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 1
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 20
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 1
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 21
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 2
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 22
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 2
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 23
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 2
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 24
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 2
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 25
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 2
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 26
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 2
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 27
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 2
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 28
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 2
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 29
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 2
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 30
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 2
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 31
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 2
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 32
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 2
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 33
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 2
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 34
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 2
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 35
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 2
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 36
+tier = "minor"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 2
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1000
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 9
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1001
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 3
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1002
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 4
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1003
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 5
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1004
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 6
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1005
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 7
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1006
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 8
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1007
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 9
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1008
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 3
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1009
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 4
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1010
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 5
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1011
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 6
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1012
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 7
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1013
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 8
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1014
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 9
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1015
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 3
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1016
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 4
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1017
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 5
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1018
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 6
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1019
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 7
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1020
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 8
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1021
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 9
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1022
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 3
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1023
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 4
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1024
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 5
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1025
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 6
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1026
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 7
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1027
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 8
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1028
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 9
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1029
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 3
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1030
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 4
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1031
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 5
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1032
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 6
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1033
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 7
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1034
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 8
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1035
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 9
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1036
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 3
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1037
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 4
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1038
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 5
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1039
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 6
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1040
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 7
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1041
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 8
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1042
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 9
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1043
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 3
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1044
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 4
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1045
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 5
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1046
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 6
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1047
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 7
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1048
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 8
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1049
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 9
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1050
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 3
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1051
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 4
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1052
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 5
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1053
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 6
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1054
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 7
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1055
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 8
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1056
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 9
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1057
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 3
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1058
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 4
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1059
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 5
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1060
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 6
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1061
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 7
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1062
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 8
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1063
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 9
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1064
+tier = "minor"
+liege = 5000
+polity = 1
+law = "primogeniture"
+holder = 3
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1100
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 4
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1101
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 5
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1102
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 6
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1103
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 7
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1104
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 8
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1105
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 9
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1106
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 3
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1107
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 4
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1108
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 5
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1109
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 6
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1110
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 7
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1111
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 8
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1112
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 9
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1113
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 3
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1114
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 4
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1115
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 5
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1116
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 6
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1117
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 7
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1118
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 8
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1119
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 9
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1120
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 3
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1121
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 4
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1122
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 5
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1123
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 6
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1124
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 7
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1125
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 8
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1126
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 9
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1127
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 3
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1128
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 4
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1129
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 5
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1130
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 6
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1131
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 7
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1132
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 8
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1133
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 9
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1134
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 3
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1135
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 4
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1136
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 5
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1137
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 6
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1138
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 7
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1139
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 8
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1140
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 9
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1141
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 3
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1142
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 4
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1143
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 5
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1144
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 6
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1145
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 7
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1146
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 8
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1147
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 9
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1148
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 3
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1149
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 4
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1150
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 5
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1151
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 6
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1152
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 7
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1153
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 8
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1154
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 9
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1155
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 3
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1156
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 4
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1157
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 5
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1158
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 6
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1159
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 7
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1160
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 8
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1161
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 9
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1162
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 3
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.title]]
+id = 1163
+tier = "minor"
+liege = 5001
+polity = 1
+law = "primogeniture"
+holder = 4
+state = "held"
+held_since = 0
+regent = 0
+[[worlds.wide.office]]
+id = 1
+title = 5000
+kind = "steward"
+holder = 1
+[[worlds.wide.office]]
+id = 2
+title = 5000
+kind = "steward"
+holder = 1
+[[worlds.wide.office]]
+id = 3
+title = 5000
+kind = "steward"
+holder = 1
+[[worlds.wide.office]]
+id = 4
+title = 5000
+kind = "steward"
+holder = 1
+[[worlds.wide.office]]
+id = 5
+title = 5000
+kind = "steward"
+holder = 1
+[[worlds.wide.office]]
+id = 6
+title = 5000
+kind = "steward"
+holder = 1
+[[worlds.wide.office]]
+id = 7
+title = 5000
+kind = "steward"
+holder = 1
+[[worlds.wide.office]]
+id = 8
+title = 5000
+kind = "steward"
+holder = 1
+[[worlds.wide.office]]
+id = 9
+title = 5000
+kind = "steward"
+holder = 1
+[[worlds.wide.office]]
+id = 10
+title = 5000
+kind = "steward"
+holder = 1
+[[worlds.wide.office]]
+id = 11
+title = 5000
+kind = "steward"
+holder = 1
+[[worlds.wide.office]]
+id = 12
+title = 5000
+kind = "steward"
+holder = 1
+[[worlds.wide.office]]
+id = 13
+title = 5000
+kind = "steward"
+holder = 1
+[[worlds.wide.office]]
+id = 14
+title = 5000
+kind = "steward"
+holder = 1
+[[worlds.wide.office]]
+id = 15
+title = 5000
+kind = "steward"
+holder = 1
+[[worlds.wide.office]]
+id = 16
+title = 5000
+kind = "steward"
+holder = 1
+[[worlds.wide.office]]
+id = 17
+title = 5000
+kind = "steward"
+holder = 1
+[[worlds.wide.office]]
+id = 100
+title = 5001
+kind = "steward"
+holder = 2
+[[worlds.wide.office]]
+id = 101
+title = 5001
+kind = "steward"
+holder = 2
+[[worlds.wide.office]]
+id = 102
+title = 5001
+kind = "steward"
+holder = 2
+[[worlds.wide.office]]
+id = 103
+title = 5001
+kind = "steward"
+holder = 2
+[[worlds.wide.office]]
+id = 104
+title = 5001
+kind = "steward"
+holder = 2
+[[worlds.wide.office]]
+id = 105
+title = 5001
+kind = "steward"
+holder = 2
+[[worlds.wide.office]]
+id = 106
+title = 5001
+kind = "steward"
+holder = 2
+[[worlds.wide.office]]
+id = 107
+title = 5001
+kind = "steward"
+holder = 2
+[[worlds.wide.office]]
+id = 108
+title = 5001
+kind = "steward"
+holder = 2
+[[worlds.wide.office]]
+id = 109
+title = 5001
+kind = "steward"
+holder = 2
+[[worlds.wide.office]]
+id = 110
+title = 5001
+kind = "steward"
+holder = 2
+[[worlds.wide.office]]
+id = 111
+title = 5001
+kind = "steward"
+holder = 2
+[[worlds.wide.office]]
+id = 112
+title = 5001
+kind = "steward"
+holder = 2
+[[worlds.wide.office]]
+id = 113
+title = 5001
+kind = "steward"
+holder = 2
+[[worlds.wide.office]]
+id = 114
+title = 5001
+kind = "steward"
+holder = 2
+[[worlds.wide.office]]
+id = 115
+title = 5001
+kind = "steward"
+holder = 2
+[[worlds.wide.office]]
+id = 1000
+title = 6000
+kind = "steward"
+holder = 2000
+[[worlds.wide.office]]
+id = 1001
+title = 6000
+kind = "steward"
+holder = 2001
+[[worlds.wide.office]]
+id = 1002
+title = 6000
+kind = "steward"
+holder = 2002
+[[worlds.wide.office]]
+id = 1003
+title = 6000
+kind = "steward"
+holder = 2003
+[[worlds.wide.office]]
+id = 1004
+title = 6000
+kind = "steward"
+holder = 2004
+[[worlds.wide.office]]
+id = 1005
+title = 6000
+kind = "steward"
+holder = 2005
+[[worlds.wide.office]]
+id = 1006
+title = 6000
+kind = "steward"
+holder = 2006
+[[worlds.wide.office]]
+id = 1007
+title = 6000
+kind = "steward"
+holder = 2007
+[[worlds.wide.office]]
+id = 1008
+title = 6000
+kind = "steward"
+holder = 2008
+[[worlds.wide.office]]
+id = 1009
+title = 6000
+kind = "steward"
+holder = 2009
+[[worlds.wide.office]]
+id = 1010
+title = 6000
+kind = "steward"
+holder = 2010
+[[worlds.wide.office]]
+id = 1011
+title = 6000
+kind = "steward"
+holder = 2011
+[[worlds.wide.office]]
+id = 1012
+title = 6000
+kind = "steward"
+holder = 2012
+[[worlds.wide.office]]
+id = 1013
+title = 6000
+kind = "steward"
+holder = 2013
+[[worlds.wide.office]]
+id = 1014
+title = 6000
+kind = "steward"
+holder = 2014
+[[worlds.wide.office]]
+id = 1015
+title = 6000
+kind = "steward"
+holder = 2015
+[[worlds.wide.office]]
+id = 1016
+title = 6000
+kind = "steward"
+holder = 2016
+[[worlds.wide.office]]
+id = 1017
+title = 6000
+kind = "steward"
+holder = 2017
+[[worlds.wide.office]]
+id = 1018
+title = 6000
+kind = "steward"
+holder = 2018
+[[worlds.wide.office]]
+id = 1019
+title = 6000
+kind = "steward"
+holder = 2019
+[[worlds.wide.office]]
+id = 1020
+title = 6000
+kind = "steward"
+holder = 2020
+[[worlds.wide.office]]
+id = 1021
+title = 6000
+kind = "steward"
+holder = 2021
+[[worlds.wide.office]]
+id = 1022
+title = 6000
+kind = "steward"
+holder = 2022
+[[worlds.wide.office]]
+id = 1023
+title = 6000
+kind = "steward"
+holder = 2023
+[[worlds.wide.office]]
+id = 1024
+title = 6000
+kind = "steward"
+holder = 2024
+[[worlds.wide.office]]
+id = 1025
+title = 6000
+kind = "steward"
+holder = 2025
+[[worlds.wide.office]]
+id = 1026
+title = 6000
+kind = "steward"
+holder = 2026
+[[worlds.wide.office]]
+id = 1027
+title = 6000
+kind = "steward"
+holder = 2027
+[[worlds.wide.office]]
+id = 1028
+title = 6000
+kind = "steward"
+holder = 2028
+[[worlds.wide.office]]
+id = 1029
+title = 6000
+kind = "steward"
+holder = 2029
+[[worlds.wide.office]]
+id = 1030
+title = 6000
+kind = "steward"
+holder = 2030
+[[worlds.wide.office]]
+id = 1031
+title = 6000
+kind = "steward"
+holder = 2031
+[[worlds.wide.office]]
+id = 1032
+title = 6000
+kind = "steward"
+holder = 2032
+[[worlds.wide.office]]
+id = 1033
+title = 6000
+kind = "steward"
+holder = 2033
+[[worlds.wide.office]]
+id = 1034
+title = 6000
+kind = "steward"
+holder = 2034
+[[worlds.wide.office]]
+id = 1035
+title = 6000
+kind = "steward"
+holder = 2035
+[[worlds.wide.office]]
+id = 1036
+title = 6000
+kind = "steward"
+holder = 2036
+[[worlds.wide.office]]
+id = 1037
+title = 6000
+kind = "steward"
+holder = 2037
+[[worlds.wide.office]]
+id = 1038
+title = 6000
+kind = "steward"
+holder = 2038
+[[worlds.wide.office]]
+id = 1039
+title = 6000
+kind = "steward"
+holder = 2039
+[[worlds.wide.office]]
+id = 1040
+title = 6000
+kind = "steward"
+holder = 2040
+[[worlds.wide.office]]
+id = 1041
+title = 6000
+kind = "steward"
+holder = 2041
+[[worlds.wide.office]]
+id = 1042
+title = 6000
+kind = "steward"
+holder = 2042
+[[worlds.wide.office]]
+id = 1043
+title = 6000
+kind = "steward"
+holder = 2043
+[[worlds.wide.office]]
+id = 1044
+title = 6000
+kind = "steward"
+holder = 2044
+[[worlds.wide.office]]
+id = 1045
+title = 6000
+kind = "steward"
+holder = 2045
+[[worlds.wide.office]]
+id = 1046
+title = 6000
+kind = "steward"
+holder = 2046
+[[worlds.wide.office]]
+id = 1047
+title = 6000
+kind = "steward"
+holder = 2047
+[[worlds.wide.office]]
+id = 1048
+title = 6000
+kind = "steward"
+holder = 2048
+[[worlds.wide.office]]
+id = 1049
+title = 6000
+kind = "steward"
+holder = 2049
+[[worlds.wide.office]]
+id = 1050
+title = 6000
+kind = "steward"
+holder = 2050
+[[worlds.wide.office]]
+id = 1051
+title = 6000
+kind = "steward"
+holder = 2051
+[[worlds.wide.office]]
+id = 1052
+title = 6000
+kind = "steward"
+holder = 2052
+[[worlds.wide.office]]
+id = 1053
+title = 6000
+kind = "steward"
+holder = 2053
+[[worlds.wide.office]]
+id = 1054
+title = 6000
+kind = "steward"
+holder = 2054
+[[worlds.wide.office]]
+id = 1055
+title = 6000
+kind = "steward"
+holder = 2055
+[[worlds.wide.office]]
+id = 1056
+title = 6000
+kind = "steward"
+holder = 2056
+[[worlds.wide.office]]
+id = 1057
+title = 6000
+kind = "steward"
+holder = 2057
+[[worlds.wide.office]]
+id = 1058
+title = 6000
+kind = "steward"
+holder = 2058
+[[worlds.wide.office]]
+id = 1059
+title = 6000
+kind = "steward"
+holder = 2059
+[[worlds.wide.office]]
+id = 1060
+title = 6000
+kind = "steward"
+holder = 2060
+[[worlds.wide.office]]
+id = 1061
+title = 6000
+kind = "steward"
+holder = 2061
+[[worlds.wide.office]]
+id = 1062
+title = 6000
+kind = "steward"
+holder = 2062
+[[worlds.wide.office]]
+id = 1063
+title = 6000
+kind = "steward"
+holder = 2063
+[[worlds.wide.office]]
+id = 1064
+title = 6000
+kind = "steward"
+holder = 2064
+[[worlds.wide.office]]
+id = 1065
+title = 6000
+kind = "steward"
+holder = 2065
+[[worlds.wide.office]]
+id = 1066
+title = 6000
+kind = "steward"
+holder = 2066
+[[worlds.wide.office]]
+id = 1067
+title = 6000
+kind = "steward"
+holder = 2067
+[[worlds.wide.office]]
+id = 1068
+title = 6000
+kind = "steward"
+holder = 2068
+[[worlds.wide.office]]
+id = 1069
+title = 6000
+kind = "steward"
+holder = 2069
+[[worlds.wide.office]]
+id = 1070
+title = 6000
+kind = "steward"
+holder = 2070
+[[worlds.wide.office]]
+id = 1071
+title = 6000
+kind = "steward"
+holder = 2071
+[[worlds.wide.office]]
+id = 1072
+title = 6000
+kind = "steward"
+holder = 2072
+[[worlds.wide.office]]
+id = 1073
+title = 6000
+kind = "steward"
+holder = 2073
+[[worlds.wide.office]]
+id = 1074
+title = 6000
+kind = "steward"
+holder = 2074
+[[worlds.wide.office]]
+id = 1075
+title = 6000
+kind = "steward"
+holder = 2075
+[[worlds.wide.office]]
+id = 1076
+title = 6000
+kind = "steward"
+holder = 2076
+[[worlds.wide.office]]
+id = 1077
+title = 6000
+kind = "steward"
+holder = 2077
+[[worlds.wide.office]]
+id = 1078
+title = 6000
+kind = "steward"
+holder = 2078
+[[worlds.wide.office]]
+id = 1079
+title = 6000
+kind = "steward"
+holder = 2079
+[[worlds.wide.office]]
+id = 1080
+title = 6000
+kind = "steward"
+holder = 2080
+[[worlds.wide.office]]
+id = 1081
+title = 6000
+kind = "steward"
+holder = 2081
+[[worlds.wide.office]]
+id = 1082
+title = 6000
+kind = "steward"
+holder = 2082
+[[worlds.wide.office]]
+id = 1083
+title = 6000
+kind = "steward"
+holder = 2083
+[[worlds.wide.office]]
+id = 1084
+title = 6000
+kind = "steward"
+holder = 2084
+[[worlds.wide.office]]
+id = 1085
+title = 6000
+kind = "steward"
+holder = 2085
+[[worlds.wide.office]]
+id = 1086
+title = 6000
+kind = "steward"
+holder = 2086
+[[worlds.wide.office]]
+id = 1087
+title = 6000
+kind = "steward"
+holder = 2087
+[[worlds.wide.office]]
+id = 1088
+title = 6000
+kind = "steward"
+holder = 2088
+[[worlds.wide.office]]
+id = 1089
+title = 6000
+kind = "steward"
+holder = 2089
+[[worlds.wide.office]]
+id = 1090
+title = 6000
+kind = "steward"
+holder = 2090
+[[worlds.wide.office]]
+id = 1091
+title = 6000
+kind = "steward"
+holder = 2091
+[[worlds.wide.office]]
+id = 1092
+title = 6000
+kind = "steward"
+holder = 2092
+[[worlds.wide.office]]
+id = 1093
+title = 6000
+kind = "steward"
+holder = 2093
+[[worlds.wide.office]]
+id = 1094
+title = 6000
+kind = "steward"
+holder = 2094
+[[worlds.wide.office]]
+id = 1095
+title = 6000
+kind = "steward"
+holder = 2095
+[[worlds.wide.office]]
+id = 1096
+title = 6000
+kind = "steward"
+holder = 2096
+[[worlds.wide.office]]
+id = 1097
+title = 6000
+kind = "steward"
+holder = 2097
+[[worlds.wide.office]]
+id = 1098
+title = 6000
+kind = "steward"
+holder = 2098
+[[worlds.wide.office]]
+id = 1099
+title = 6000
+kind = "steward"
+holder = 2099
+[[worlds.wide.office]]
+id = 1100
+title = 6000
+kind = "steward"
+holder = 2100
+[[worlds.wide.office]]
+id = 1101
+title = 6000
+kind = "steward"
+holder = 2101
+[[worlds.wide.office]]
+id = 1102
+title = 6000
+kind = "steward"
+holder = 2102
+[[worlds.wide.office]]
+id = 1103
+title = 6000
+kind = "steward"
+holder = 2103
+[[worlds.wide.office]]
+id = 1104
+title = 6000
+kind = "steward"
+holder = 2104
+[[worlds.wide.office]]
+id = 1105
+title = 6000
+kind = "steward"
+holder = 2105
+[[worlds.wide.office]]
+id = 1106
+title = 6000
+kind = "steward"
+holder = 2106
+[[worlds.wide.office]]
+id = 1107
+title = 6000
+kind = "steward"
+holder = 2107
+[[worlds.wide.office]]
+id = 1108
+title = 6000
+kind = "steward"
+holder = 2108
+[[worlds.wide.office]]
+id = 1109
+title = 6000
+kind = "steward"
+holder = 2109
+[[worlds.wide.office]]
+id = 1110
+title = 6000
+kind = "steward"
+holder = 2110
+[[worlds.wide.office]]
+id = 1111
+title = 6000
+kind = "steward"
+holder = 2111
+[[worlds.wide.office]]
+id = 1112
+title = 6000
+kind = "steward"
+holder = 2112
+[[worlds.wide.office]]
+id = 1113
+title = 6000
+kind = "steward"
+holder = 2113
+[[worlds.wide.office]]
+id = 1114
+title = 6000
+kind = "steward"
+holder = 2114
+[[worlds.wide.office]]
+id = 1115
+title = 6000
+kind = "steward"
+holder = 2115
+[[worlds.wide.office]]
+id = 1116
+title = 6000
+kind = "steward"
+holder = 2116
+[[worlds.wide.office]]
+id = 1117
+title = 6000
+kind = "steward"
+holder = 2117
+[[worlds.wide.office]]
+id = 1118
+title = 6000
+kind = "steward"
+holder = 2118
+[[worlds.wide.office]]
+id = 1119
+title = 6000
+kind = "steward"
+holder = 2119
+[[worlds.wide.office]]
+id = 1120
+title = 6000
+kind = "steward"
+holder = 2120
+[[worlds.wide.office]]
+id = 1121
+title = 6000
+kind = "steward"
+holder = 2121
+[[worlds.wide.office]]
+id = 1122
+title = 6000
+kind = "steward"
+holder = 2122
+[[worlds.wide.office]]
+id = 1123
+title = 6000
+kind = "steward"
+holder = 2123
+[[worlds.wide.office]]
+id = 1124
+title = 6000
+kind = "steward"
+holder = 2124
+[[worlds.wide.office]]
+id = 1125
+title = 6000
+kind = "steward"
+holder = 2125
+[[worlds.wide.office]]
+id = 1126
+title = 6000
+kind = "steward"
+holder = 2126
+[[worlds.wide.office]]
+id = 1127
+title = 6000
+kind = "steward"
+holder = 2127
+[[worlds.wide.office]]
+id = 1128
+title = 6000
+kind = "steward"
+holder = 2128
+[[worlds.wide.claim]]
+id = 1
+claimant = 1
+title = 5000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 2
+claimant = 1
+title = 5000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 3
+claimant = 1
+title = 5000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 4
+claimant = 1
+title = 5000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 5
+claimant = 1
+title = 5000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 6
+claimant = 1
+title = 5000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 7
+claimant = 1
+title = 5000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 8
+claimant = 1
+title = 5000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 9
+claimant = 1
+title = 5000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 10
+claimant = 1
+title = 5000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 11
+claimant = 1
+title = 5000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 12
+claimant = 1
+title = 5000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 13
+claimant = 1
+title = 5000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 14
+claimant = 1
+title = 5000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 15
+claimant = 1
+title = 5000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 16
+claimant = 1
+title = 5000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 17
+claimant = 1
+title = 5000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 18
+claimant = 2
+title = 5001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 19
+claimant = 2
+title = 5001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 20
+claimant = 2
+title = 5001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 21
+claimant = 2
+title = 5001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 22
+claimant = 2
+title = 5001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 23
+claimant = 2
+title = 5001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 24
+claimant = 2
+title = 5001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 25
+claimant = 2
+title = 5001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 26
+claimant = 2
+title = 5001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 27
+claimant = 2
+title = 5001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 28
+claimant = 2
+title = 5001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 29
+claimant = 2
+title = 5001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 30
+claimant = 2
+title = 5001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 31
+claimant = 2
+title = 5001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 32
+claimant = 2
+title = 5001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 33
+claimant = 2
+title = 5001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 34
+claimant = 300
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 35
+claimant = 301
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 36
+claimant = 302
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 37
+claimant = 303
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 38
+claimant = 304
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 39
+claimant = 305
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 40
+claimant = 306
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 41
+claimant = 307
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 42
+claimant = 308
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 43
+claimant = 309
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 44
+claimant = 310
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 45
+claimant = 311
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 46
+claimant = 312
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 47
+claimant = 313
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 48
+claimant = 314
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 49
+claimant = 315
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 50
+claimant = 316
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 51
+claimant = 317
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 52
+claimant = 318
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 53
+claimant = 319
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 54
+claimant = 320
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 55
+claimant = 321
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 56
+claimant = 322
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 57
+claimant = 323
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 58
+claimant = 324
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 59
+claimant = 325
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 60
+claimant = 326
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 61
+claimant = 327
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 62
+claimant = 328
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 63
+claimant = 329
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 64
+claimant = 330
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 65
+claimant = 331
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 66
+claimant = 332
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 67
+claimant = 333
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 68
+claimant = 334
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 69
+claimant = 335
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 70
+claimant = 336
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 71
+claimant = 337
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 72
+claimant = 338
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 73
+claimant = 339
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 74
+claimant = 340
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 75
+claimant = 341
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 76
+claimant = 342
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 77
+claimant = 343
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 78
+claimant = 344
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 79
+claimant = 345
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 80
+claimant = 346
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 81
+claimant = 347
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 82
+claimant = 348
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 83
+claimant = 349
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 84
+claimant = 350
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 85
+claimant = 351
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 86
+claimant = 352
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 87
+claimant = 353
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 88
+claimant = 354
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 89
+claimant = 355
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 90
+claimant = 356
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 91
+claimant = 357
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 92
+claimant = 358
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 93
+claimant = 359
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 94
+claimant = 360
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 95
+claimant = 361
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 96
+claimant = 362
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 97
+claimant = 363
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 98
+claimant = 364
+title = 7000
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 99
+claimant = 300
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 100
+claimant = 301
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 101
+claimant = 302
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 102
+claimant = 303
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 103
+claimant = 304
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 104
+claimant = 305
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 105
+claimant = 306
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 106
+claimant = 307
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 107
+claimant = 308
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 108
+claimant = 309
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 109
+claimant = 310
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 110
+claimant = 311
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 111
+claimant = 312
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 112
+claimant = 313
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 113
+claimant = 314
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 114
+claimant = 315
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 115
+claimant = 316
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 116
+claimant = 317
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 117
+claimant = 318
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 118
+claimant = 319
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 119
+claimant = 320
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 120
+claimant = 321
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 121
+claimant = 322
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 122
+claimant = 323
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 123
+claimant = 324
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 124
+claimant = 325
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 125
+claimant = 326
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 126
+claimant = 327
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 127
+claimant = 328
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 128
+claimant = 329
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 129
+claimant = 330
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 130
+claimant = 331
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 131
+claimant = 332
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 132
+claimant = 333
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 133
+claimant = 334
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 134
+claimant = 335
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 135
+claimant = 336
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 136
+claimant = 337
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 137
+claimant = 338
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 138
+claimant = 339
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 139
+claimant = 340
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 140
+claimant = 341
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 141
+claimant = 342
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 142
+claimant = 343
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 143
+claimant = 344
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 144
+claimant = 345
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 145
+claimant = 346
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 146
+claimant = 347
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 147
+claimant = 348
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 148
+claimant = 349
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 149
+claimant = 350
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 150
+claimant = 351
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 151
+claimant = 352
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 152
+claimant = 353
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 153
+claimant = 354
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 154
+claimant = 355
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 155
+claimant = 356
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 156
+claimant = 357
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 157
+claimant = 358
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 158
+claimant = 359
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 159
+claimant = 360
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 160
+claimant = 361
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 161
+claimant = 362
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.claim]]
+id = 162
+claimant = 363
+title = 7001
+status = "active"
+pressed = false
+[[worlds.wide.vow]]
+id = 1
+vower = 1
+kind = "GRUDGE"
+target = 5
+status = "active"
+priority = "0.1"
+conflict = "0.0"
+[[worlds.wide.vow]]
+id = 2
+vower = 1
+kind = "GRUDGE"
+target = 5
+status = "active"
+priority = "0.1"
+conflict = "0.0"
+[[worlds.wide.vow]]
+id = 3
+vower = 1
+kind = "GRUDGE"
+target = 5
+status = "active"
+priority = "0.1"
+conflict = "0.0"
+[[worlds.wide.vow]]
+id = 4
+vower = 1
+kind = "GRUDGE"
+target = 5
+status = "active"
+priority = "0.1"
+conflict = "0.0"
+[[worlds.wide.vow]]
+id = 5
+vower = 1
+kind = "GRUDGE"
+target = 5
+status = "active"
+priority = "0.1"
+conflict = "0.0"
+[[worlds.wide.vow]]
+id = 6
+vower = 1
+kind = "GRUDGE"
+target = 5
+status = "active"
+priority = "0.1"
+conflict = "0.0"
+[[worlds.wide.vow]]
+id = 7
+vower = 1
+kind = "GRUDGE"
+target = 5
+status = "active"
+priority = "0.1"
+conflict = "0.0"
+[[worlds.wide.vow]]
+id = 8
+vower = 1
+kind = "GRUDGE"
+target = 5
+status = "active"
+priority = "0.1"
+conflict = "0.0"
+[[worlds.wide.vow]]
+id = 9
+vower = 1
+kind = "GRUDGE"
+target = 5
+status = "active"
+priority = "0.1"
+conflict = "0.0"
+[[worlds.wide.vow]]
+id = 10
+vower = 2
+kind = "GRUDGE"
+target = 5
+status = "active"
+priority = "0.1"
+conflict = "0.0"
+[[worlds.wide.vow]]
+id = 11
+vower = 2
+kind = "GRUDGE"
+target = 5
+status = "active"
+priority = "0.1"
+conflict = "0.0"
+[[worlds.wide.vow]]
+id = 12
+vower = 2
+kind = "GRUDGE"
+target = 5
+status = "active"
+priority = "0.1"
+conflict = "0.0"
+[[worlds.wide.vow]]
+id = 13
+vower = 2
+kind = "GRUDGE"
+target = 5
+status = "active"
+priority = "0.1"
+conflict = "0.0"
+[[worlds.wide.vow]]
+id = 14
+vower = 2
+kind = "GRUDGE"
+target = 5
+status = "active"
+priority = "0.1"
+conflict = "0.0"
+[[worlds.wide.vow]]
+id = 15
+vower = 2
+kind = "GRUDGE"
+target = 5
+status = "active"
+priority = "0.1"
+conflict = "0.0"
+[[worlds.wide.vow]]
+id = 16
+vower = 2
+kind = "GRUDGE"
+target = 5
+status = "active"
+priority = "0.1"
+conflict = "0.0"
+[[worlds.wide.vow]]
+id = 17
+vower = 2
+kind = "GRUDGE"
+target = 5
+status = "active"
+priority = "0.1"
+conflict = "0.0"
+
+[worlds.fan64]
+now = 0
+days_per_year = 360
+fan = { fanout = 64, depth = 1 }
+
+[worlds.fan65]
+now = 0
+days_per_year = 360
+fan = { fanout = 65, depth = 1 }
+
+[worlds.fan100]
+now = 0
+days_per_year = 360
+fan = { fanout = 100, depth = 1 }
+
+[worlds.fan8x4]
+now = 0
+days_per_year = 360
+fan = { fanout = 8, depth = 4 }
+
+[[case]]
+id = "own_rej_11"
+kind = "expr"
+world = "tw"
+system = "M7.dynasty"
+text = "1 + 1"
+expect = "error:E_SYNTAX"
+[[case]]
+id = "own_draw_13"
+kind = "expr"
+world = "tw"
+system = "M7.dynasty"
+text = "draw(sortition, holder, title) + draw(sortition, holder, 7)"
+expect = "invariant:E_RNG_REUSE"
+bind = { "holder" = "person:53", "title" = "title:7" }
+[[case]]
+id = "own_trunc_children_over"
+kind = "expr"
+world = "fan100"
+system = "M7.dynasty"
+text = "count(y in children(holder))"
+expect = "int:64"
+bind = { "holder" = "person:1" }
+truncated = 1
+[[case]]
+id = "own_trunc_children_exact"
+kind = "expr"
+world = "fan64"
+system = "M7.dynasty"
+text = "count(y in children(holder))"
+expect = "int:64"
+bind = { "holder" = "person:1" }
+truncated = 0
+[[case]]
+id = "own_trunc_children_one_over"
+kind = "expr"
+world = "fan65"
+system = "M7.dynasty"
+text = "count(y in children(holder))"
+expect = "int:64"
+bind = { "holder" = "person:1" }
+truncated = 1
+[[case]]
+id = "own_trunc_children_last_kept"
+kind = "expr"
+world = "fan100"
+system = "M7.dynasty"
+text = "any(y in children(holder) where y == z)"
+expect = "bool:true"
+bind = { "holder" = "person:1", "z" = "person:65" }
+truncated = 1
+[[case]]
+id = "own_trunc_children_first_dropped"
+kind = "expr"
+world = "fan100"
+system = "M7.dynasty"
+text = "any(y in children(holder) where y == z)"
+expect = "bool:false"
+bind = { "holder" = "person:1", "z" = "person:66" }
+truncated = 1
+[[case]]
+id = "own_trunc_children_list"
+kind = "candidates"
+world = "fan100"
+system = "M7.dynasty"
+text = "children(holder)"
+expect = "relation:[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65]"
+bind = { "holder" = "person:1" }
+truncated = 1
+[[case]]
+id = "own_trunc_kin"
+kind = "expr"
+world = "fan8x4"
+system = "M7.dynasty"
+text = "count(y in kin(holder, 6))"
+expect = "int:256"
+bind = { "holder" = "person:1" }
+truncated = 1
+[[case]]
+id = "own_trunc_kin_last_kept"
+kind = "expr"
+world = "fan8x4"
+system = "M7.dynasty"
+text = "any(y in kin(holder, 6) where y == z)"
+expect = "bool:true"
+bind = { "holder" = "person:1", "z" = "person:257" }
+truncated = 1
+[[case]]
+id = "own_trunc_kin_first_dropped"
+kind = "expr"
+world = "fan8x4"
+system = "M7.dynasty"
+text = "any(y in kin(holder, 6) where y == z)"
+expect = "bool:false"
+bind = { "holder" = "person:1", "z" = "person:258" }
+truncated = 1
+[[case]]
+id = "own_trunc_descendants"
+kind = "expr"
+world = "fan8x4"
+system = "M7.dynasty"
+text = "count(y in descendants(holder, 6))"
+expect = "int:256"
+bind = { "holder" = "person:1" }
+truncated = 1
+[[case]]
+id = "own_trunc_descendants_last_kept"
+kind = "expr"
+world = "fan8x4"
+system = "M7.dynasty"
+text = "any(y in descendants(holder, 6) where y == z)"
+expect = "bool:true"
+bind = { "holder" = "person:1", "z" = "person:257" }
+truncated = 1
+[[case]]
+id = "own_trunc_descendants_first_dropped"
+kind = "expr"
+world = "fan8x4"
+system = "M7.dynasty"
+text = "any(y in descendants(holder, 6) where y == z)"
+expect = "bool:false"
+bind = { "holder" = "person:1", "z" = "person:258" }
+truncated = 1
+[[case]]
+id = "own_trunc_none_small"
+kind = "expr"
+world = "fan8x4"
+system = "M7.dynasty"
+text = "count(y in children(holder))"
+expect = "int:8"
+bind = { "holder" = "person:1" }
+truncated = 0
+[[case]]
+id = "own_trunc_titles"
+kind = "expr"
+world = "wide"
+system = "M7.dynasty"
+text = "count(y in titles(holder))"
+expect = "int:16"
+bind = { "holder" = "person:1" }
+truncated = 1
+[[case]]
+id = "own_trunc_titles_exact"
+kind = "expr"
+world = "wide"
+system = "M7.dynasty"
+text = "count(y in titles(holder))"
+expect = "int:16"
+bind = { "holder" = "person:2" }
+truncated = 0
+[[case]]
+id = "own_trunc_offices"
+kind = "expr"
+world = "wide"
+system = "M7.dynasty"
+text = "count(y in offices(holder))"
+expect = "int:16"
+bind = { "holder" = "person:1" }
+truncated = 1
+[[case]]
+id = "own_trunc_offices_exact"
+kind = "expr"
+world = "wide"
+system = "M7.dynasty"
+text = "count(y in offices(holder))"
+expect = "int:16"
+bind = { "holder" = "person:2" }
+truncated = 0
+[[case]]
+id = "own_trunc_claims_of"
+kind = "expr"
+world = "wide"
+system = "M7.dynasty"
+text = "count(y in claims_of(holder))"
+expect = "int:16"
+bind = { "holder" = "person:1" }
+truncated = 1
+[[case]]
+id = "own_trunc_claims_of_exact"
+kind = "expr"
+world = "wide"
+system = "M7.dynasty"
+text = "count(y in claims_of(holder))"
+expect = "int:16"
+bind = { "holder" = "person:2" }
+truncated = 0
+[[case]]
+id = "own_trunc_vassals"
+kind = "expr"
+world = "wide"
+system = "M7.dynasty"
+text = "count(y in vassals(t))"
+expect = "int:64"
+bind = { "t" = "title:5000" }
+truncated = 1
+[[case]]
+id = "own_trunc_vassals_exact"
+kind = "expr"
+world = "wide"
+system = "M7.dynasty"
+text = "count(y in vassals(t))"
+expect = "int:64"
+bind = { "t" = "title:5001" }
+truncated = 0
+[[case]]
+id = "own_trunc_claims_on"
+kind = "expr"
+world = "wide"
+system = "M7.dynasty"
+text = "count(y in claims_on(t))"
+expect = "int:64"
+bind = { "t" = "title:7000" }
+truncated = 1
+[[case]]
+id = "own_trunc_claims_on_exact"
+kind = "expr"
+world = "wide"
+system = "M7.dynasty"
+text = "count(y in claims_on(t))"
+expect = "int:64"
+bind = { "t" = "title:7001" }
+truncated = 0
+[[case]]
+id = "own_trunc_court"
+kind = "expr"
+world = "wide"
+system = "M7.dynasty"
+text = "count(y in court(t))"
+expect = "int:128"
+bind = { "t" = "title:6000" }
+truncated = 1
+[[case]]
+id = "own_trunc_vows_of"
+kind = "expr"
+world = "wide"
+system = "S7.vows"
+text = "count(y in vows_of(holder))"
+expect = "int:8"
+bind = { "holder" = "person:1" }
+truncated = 1
+[[case]]
+id = "own_trunc_vows_of_exact"
+kind = "expr"
+world = "wide"
+system = "S7.vows"
+text = "count(y in vows_of(holder))"
+expect = "int:8"
+bind = { "holder" = "person:2" }
+truncated = 0
+[[case]]
+id = "own_adv_paren_63"
+kind = "expr"
+world = "tw"
+system = "M7.dynasty"
+text = "(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))"
+expect = "int:1"
+[[case]]
+id = "own_adv_paren_64"
+kind = "expr"
+world = "tw"
+system = "M7.dynasty"
+text = "((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))"
+expect = "error:E_BOUND"
