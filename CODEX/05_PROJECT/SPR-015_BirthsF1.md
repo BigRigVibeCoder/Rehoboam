@@ -2,14 +2,14 @@
 id: SPR-015
 title: "M2 F1 births: age-specific fertility, partnering, households and kinship, genealogical ids at runtime, the derived per-system index, and the 0.3.0 promotion (P1.3, part a)"
 type: how-to
-status: PLANNING
+status: APPROVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
 related: [BCK-002, PRJ-002, REV-SPR-015, REV-SPR-016-FOLD, REV-EVO-001, EVO-001, REV-SPR-018, REV-SPR-019, REV-SPR-029, SPR-013, SPR-014, SPR-016, SPR-018, SPR-019, SPR-020, SPR-021, SPR-023, SPR-027, SPR-028, SPR-029, SPR-030, ADR-0006, ADR-0024, ADR-0025, ADR-0026, ADR-0033]
 created: 2026-10-17
-updated: 2026-10-17
-version: 0.2.0
+updated: 2026-10-18
+version: 0.2.1
 ---
 
 > **BLUF:** Builds the F1 births slice of the next-version M2 spec (`specs/systems/next/M2.demography.odd.toml` 0.3.0, PR #50, REV-SPR-015 closed) in `rh-core`, `rh-sys-demography`, `rh-worldgen`, `rh-ids` and `rh-contracts`:
@@ -129,6 +129,7 @@ version: 0.2.0
   - **The declaration.** `SystemModel` gains an associated derived-index type (or a boxed `DerivedIndex` the descriptor names), with `build(&WorldTables) -> Index` (construction and restore) and `apply(&mut Index, &MergedWrites)` (the step's merged writes of the system's own columns, including the core row insert and compaction).
   - **The hook.** After each level's merge, `rh-core` calls `apply` serially, in system order, on the owner's index only, with `&mut`; a step reads its index through `StepCtx` (`&`), never writes it.
   - **Outside history.** The index is in no plane hash and in no keyframe; `rh_snapshot::resume` and `Engine::new` rebuild it with `build`.
+  - **Per-instant cost (SPR-038; REV-SPR-038 ruling T6).** `MergedWrites` is built from the engine's write set (SPR-038a); M2 0.3.0's new invariants are O(N+L) in stage A's pattern, with its oracle.
   - **The invariant** (debug builds and tests): the incrementally kept index equals `build` from the columns, checked at every keyframe write and at the end of every test run; a failure names the system and the first differing entry.
   - **The `05.1` §2 rule 2 text** (the Architect's wording, in the PR): what a derived index is, when `apply` runs, that it is never hashed or keyframed, and the ban on interior mutability in a system.
   - **A planted mutant** `mutant-index-drop-update` (a feature of `rh-core`'s test harness): the hook skips one update.

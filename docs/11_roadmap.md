@@ -1,6 +1,8 @@
 # 11 — Roadmap: Phases, Gates and Work Packages
 
-*Status: Draft v1.7 (2026-10-17). Durations are **agent-assisted estimates for one director working with AI coding agents**. Treat them as planning ranges, not commitments. Every phase ends with a **gate** of verification, validation and a go / iterate / pivot decision (`09`, phase gates). Phases run in order; work inside a phase runs in parallel across agents, up to the limit the review-hours budget allows.*
+*Status: Draft v1.9 (2026-10-18). Durations are **agent-assisted estimates for one director working with AI coding agents**. Treat them as planning ranges, not commitments. Every phase ends with a **gate** of verification, validation and a go / iterate / pivot decision (`09`, phase gates). Phases run in order; work inside a phase runs in parallel across agents, up to the limit the review-hours budget allows.*
+*v1.9 (2026-10-18): D62, approved by the director: execution priorities 1-2-3 (the engine core, then the viewer lane, then era packs after G2) and a contention rule; V.1 starts when SPR-026 merges, with its scrubber after SPR-027; era packs E2–E4 may start after G2 (was G4), dated E1 1000–1500, E2 1500–1750, E3 1750–1900, E4 1900–1945.*
+*v1.8 (2026-10-17): D55, approved by the director: V.1b (style cards written offline by an LLM) joins the viewer lane after V.1; the red team's other voxel proposals are recorded as notes on V.1, P2.6, P2.7 and P5 (`docs/red_team/RT-2026-10-16-*`).*
 *v1.7 (2026-10-17): D51 (ADR-0036): a viewer lane (V.1–V.3) for `rh-view`, the voxel observation harness, after P1.17 and off every gate's critical path; the cut "street-level 3D view" becomes V.3.*
 *v1.6 (2026-10-16): rung 0 drops forks, which come with branching (P2.9); V-SAGA-15's P1a variant measures on the 10k dynastic world (D34).*
 *v1.5 (2026-10-16): G0 rulings by the director. Rung 0 is ageing and death on day boundaries: a household's food comes with M3 and M4 in P1b, and daily life at `minutes` is Later (D31). P1.18 (`S5.daily_life` F1) and P1.8 (M1 F1) move to P1b, where the columns they read have owners (D33). P1.7 inherits titles and claims only; property inheritance moves to P1.5a (D35). G1a has one test list, the same as `09` §5, with P1a variants for tests that need systems or worlds P1a does not build; V-SAGA-16's stress-accounting identity gates G1a and its break band gates G1b (D34).*
@@ -43,13 +45,25 @@ gantt
 | P4 | Deeper worlds | 16–22 weeks, then the G4 rating window (3–5 weeks) | G4 |
 | P5 | 2D diorama | 8–10 weeks | G5 |
 | **Total** | | **≈ 76–105 weeks ≈ 18–24 months** | |
-| Later / optional | 1M scale-up, M4 F2, era packs, the lo-fi street-level inhabitant | On your call | — |
+| Later / optional | 1M scale-up, M4 F2, era packs (after G2, D62), the lo-fi street-level inhabitant | On your call | — |
 | Cut (ADR-0035) | Every custom-3D, Godot and VR WP | — | — |
 
 - **P0 to the G2 decision, the thesis test, takes about 37–51 weeks (9–12 months).** It was 33–47 weeks. Minds and M7 now come before the thesis gate, because the rated items are sagas.
 - **P0 to the first season you listen to and read (G3) takes about 49–68 weeks (11–16 months).** Under v1.2 the first narrated saga came after P4, at about 19–25 months.
 - **Cross-check.** `14` estimates ≈ 140 person-weeks of build after reuse. ADR-0035 moves ≈ 20–30 pw of economy, polity, war and 3D work out of the early phases and adds ≈ 15–25 pw of saga mechanics and chronicle pipeline (estimates). At ≈ 2–3 concurrent workstreams the totals above still hold.
 - **Spikes.** SPK-2 (street from seed) runs before P5, because settlement plans drive the growth view. SPK-1 (crowds) and SPK-3 (application wallpaper) are **Cut (ADR-0035)**.
+
+## Execution priorities (D62, 2026-10-18)
+
+The backlog and the agents' work follow three priorities, in this order:
+
+| Priority | What | Gates |
+|---|---|---|
+| 1 | **The engine core:** P1a and P1b. Everything in flight belongs here, including SPR-029's family annals, because G1a reads the templated family history of three seeds | G1a, G1b |
+| 2 | **The viewer lane** (V.1, PRJ-003): the plans are commissioned now; SPR-033 starts when SPR-026 merges, and the scrubber (SPR-035) waits for SPR-027. The P2 phase's narrative work ranks behind it | None: FPS and scrub latency are reported targets on the director's P51 |
+| 3 | **Era packs** E2–E4, no earlier than G2 (continuous tracks, below) | V-ERA per pack |
+
+**Contention rule.** Where the priorities compete for CI minutes, review and audit time or merge slots, priority 1 wins.
 
 ---
 
@@ -257,7 +271,7 @@ The saga mechanics have their own "possible, not forced" test, V-SAGA-10, gated 
 | P2.3 | SQL twins + twin CI | DuckDB equivalents for every pattern; clustered recorded-chronicle fixtures |
 | P2.4 | Pattern packs v1: **saga packs** | Vow arcs (sworn → pursued → fulfilled or broken or lapsed), relic chains, revenge, betrayal, succession war, the corrupted bearer; plus famine, reversal and irony. About 25–30 patterns, each with a firing-rate budget. Bad-run metric (MOE-6) wired into the liveness gate. Gate: V-SAGA-05 |
 | P2.5 | Significance v1 | Components, per-era recompute, bounded hindsight retention, per-timeline visibility sidecar (plane C), rarity base rates |
-| P2.6 | `rh-server` v1 | Timelines (run, pause, read-only seek, fork); keyframe service (10-year permanent keyframes, yearly LRU with a RAM tier, capture at auto-pause); the IF-0 control and stream endpoint; Arrow data endpoints. No presentation serving (ADR-0035 §6) |
+| P2.6 | `rh-server` v1 | Timelines (run, pause, read-only seek, fork); keyframe service (10-year permanent keyframes, yearly LRU with a RAM tier, capture at auto-pause); the IF-0 control and stream endpoint; Arrow data endpoints. No presentation serving (ADR-0035 §6). Note (D55): a browser WebSocket feed of the World Stream belongs here; an interim read-only localhost bridge is allowed after SPR-026 |
 | P2.7 | Time-Machine harness v1 (text; ADR-0030) | Tip and scheduled inputs over `control.sock` (STR-4; moved from P1.17 by D47, 2026-10-17). `rh-tui` over the World Stream: status line (tip, pace, cursor, lag), Watch and Play styles, Time-Machine (speed bands, run-until, overview and detail lanes as text), ASCII map, causal inspector as an ancestor tree, person/place views, Annals, rating form. Cultivator mode only |
 | P2.8 | Annals and Chronicle (templated) | Extends P2.8a: grouped saga arcs (by vow, relic and house) with causal "because" clauses; episode and season texts for the audio chronicle; provenance links |
 | P2.9 | Branching | What-if forks with override inputs; material-input dependency scopes with timer cancel and re-sample; acting in the past forks (ADR-0025); timeline diff view |
@@ -367,7 +381,7 @@ The saga mechanics have their own "possible, not forced" test, V-SAGA-10, gated 
 
 ## P5 — 2D diorama (≈ 8–10 weeks; ADR-0029, ADR-0035)
 
-**Goal.** An ambient 2D view of the world to glance at: glyphs and CC0 tiles, a map, and settlements growing over centuries. It lives in `console/` and reads the stream; it never calls back into the engine.
+**Goal.** An ambient 2D view of the world to glance at: glyphs and CC0 tiles, a map, and settlements growing over centuries. It lives in `console/` and reads the stream; it never calls back into the engine. Note (D55): the red team's isometric diorama is an input to this phase, and its realm map to P2.7 and here (`docs/red_team/RT-2026-10-16-*`); world-changing commands only as journaled inputs from P2.7.
 
 | WP | Work package | Output |
 |---|---|---|
@@ -414,7 +428,8 @@ These keep their WP IDs. Each needs your decision to enter a phase.
 
 | WP | Work package | Output |
 |---|---|---|
-| V.1 | Read-only spike (after P1.17's materializer, SPR-027; SPR-033 onward, each sprint ≤ 3 agent-days) | `viewer/` workspace; terrain, regions, settlements and the route graph from worldgen-lite; households and houses from the materializer; births, deaths, marriages and successions as visual moments; a timeline scrubber (seek through keyframes plus replay); the camera director over channel C (R3D-7); fidelity by zoom. Gate: V-R3D-13, V-R3D-14 |
+| V.1 | Read-only spike (priority 2, D62: SPR-033 starts when SPR-026 merges; the scrubber, SPR-035, after P1.17's materializer, SPR-027; each sprint ≤ 3 agent-days) | `viewer/` workspace; terrain, regions, settlements and the route graph from worldgen-lite; households and houses from the materializer; births, deaths, marriages and successions as visual moments; a timeline scrubber (seek through keyframes plus replay); the camera director over channel C (R3D-7); fidelity by zoom. Gate: V-R3D-13, V-R3D-14. Notes (D55): the red team's shape grammar and voxel tiers, and the first-person camera, land here; pause and speed are SPR-027's pace command (`specs/stream/control_v1.md`). D62: 0.35 m voxels by default with a measured level-of-detail fallback; a viewer-side cache of watched history makes scrubbing within it immediate, and unwatched jumps go through the materializer; FPS and scrub latency are reported targets on the director's P51 |
+| V.1b | Style cards (D55; after V.1) | An LLM writes a regional architectural style card (materials, roof types, amenities; never coordinates) once, offline, keyed by era and biome until `S1.culture` exists. The card is reviewed and committed with the world's assets as a versioned, hashed file, and the viewer's generators read it. No LLM call at view time and no browser cache; a few cards per era, under D29's budget rule. It keeps ADR-0034 (the LLM describes, never decides) and V-R3D-13 (hashed, reproducible voxels). Default: hand-written cards |
 | V.2 | P1b's world (with P1.4, P1.5a, P1.8, P1.18) | People moving through the day (`S5.daily_life`), fields and harvests, stores and famine, settlement growth and routes in use |
 | V.3 | The street-level inhabitant (with P2.7) | Spectator roaming is V.1's free camera. Acting in the world: `PlayerAction` and `SpeechAct` journaled over `control.sock`, landing at the tip; an act in the past only as a fork (ADR-0025); reactions decided by `T1.minds`; words translated to speech acts under ADR-0034 |
 
@@ -502,17 +517,17 @@ The phase in which each requirement group in `03` becomes binding, and the WP th
 ## Continuous tracks (all phases)
 
 - **Fidelity ladder.** Gap reports and F(n) → F(n+1) upgrades run as work packages, each gated by the EVO-3 consistency tests (no ratchet: `05.1` §3).
-- **Era packs (ADR-0027; Later).** Each pack extends the technology frontier with Registry entries, era-state functions calibrated at the new range, system extensions, era-conditioned bands and a hindcast test (V-ERA). Existing worlds waiting at the frontier continue through a migration keyframe. Indicative order and timing (each about 6–10 weeks, after G4, inside the review-hours budget):
+- **Era packs (ADR-0027; Later).** Each pack extends the technology frontier with Registry entries, era-state functions calibrated at the new range, system extensions, era-conditioned bands and a hindcast test (V-ERA). Existing worlds waiting at the frontier continue through a migration keyframe. Indicative order and timing (each about 6–10 weeks, no earlier than G2 (D62; was G4), inside the review-hours budget and behind priorities 1 and 2):
 
   | Pack | Adds | Earliest start | Key sources |
   |---|---|---|---|
-  | E1 Agrarian (baseline) | Everything in P1–P4 | — | Reading list Tier A |
-  | E2 Early modern | Gunpowder and fortification, print, the fiscal-military state (excise taxes and funded debt raise revenue capacity), absolutism and early parliaments, overseas trade, policing | After G4 | Tilly 1990; Dincecco 2009; Goldstone 1991 (Ch. 3 §C); Allen 2001 (hindcast V-ERA-08: the 1500–1750 wage divergence) |
-  | E3 Industrial transition | Fossil energy, factories absorbing surplus labour, rail, steam shipping and fertiliser decoupling local grain prices from local population, telegraph, the mortality decline then the fertility decline (elite birth limitation first), urbanisation, office growth, franchise extension and power sharing | After E2 | Allen 2009; Wrigley 2010; Lee 2003; Galor & Weil 2000; Acemoglu & Robinson 2000; Goldstone 1991 (pp. 288–338, 460–461) |
-  | E4 Modern | Electrification, mass politics and media, modern medicine, industrial and total war, coups and assassination | After E3 | Archigos; Powell & Thyne 2011; Goldstone et al. 2010; Turchin 2016; Braumoeller 2019 |
+  | E1 Agrarian (baseline), 1000–1500 | Everything in P1–P4 | — | Reading list Tier A |
+  | E2 Early modern, 1500–1750 | Gunpowder and fortification, print, the fiscal-military state (excise taxes and funded debt raise revenue capacity), absolutism and early parliaments, overseas trade, policing | After G2 (D62); needs M6 F1's fiscal state | Tilly 1990; Dincecco 2009; Goldstone 1991 (Ch. 3 §C); Allen 2001 (hindcast V-ERA-08: the 1500–1750 wage divergence) |
+  | E3 Industrial transition, 1750–1900 | Fossil energy, factories absorbing surplus labour, rail, steam shipping and fertiliser decoupling local grain prices from local population, telegraph, the mortality decline then the fertility decline (elite birth limitation first), urbanisation, office growth, franchise extension and power sharing | After E2 | Allen 2009; Wrigley 2010; Lee 2003; Galor & Weil 2000; Acemoglu & Robinson 2000; Goldstone 1991 (pp. 288–338, 460–461) |
+  | E4 Modern, 1900–1945 | Electrification, mass politics and media, modern medicine, industrial and total war, coups and assassination | After E3 | Archigos; Powell & Thyne 2011; Goldstone et al. 2010; Turchin 2016; Braumoeller 2019 |
   | E5 Contemporary and beyond | Digital communication, contemporary demography; speculative and fantasy frontiers as declared Registry paths | After E4 | Per world |
 
-  **Order (director, provisional): E2 → E3 → E4.**
+  **Order (director, D62): E1 1000–1500 (the baseline) → E2 1500–1750 → E3 1750–1900 → E4 1900–1945.** E3's 1M people is a target until SPR-030's scaling measurements support it: the ceiling is time per simulated instant, not memory.
 
   **Scope guardrails.** These keep the packs from swamping the sagas.
   1. **Nothing era-specific before G2** except the P1.16 hooks (1–2 weeks). The thesis is tested on agrarian worlds only.
@@ -529,7 +544,7 @@ The phase in which each requirement group in `03` becomes binding, and the WP th
   | E2 Early modern | 8–12 weeks | Mostly new Registry entries and fiscal-military mechanisms on existing systems |
   | E3 Industrial transition | **12–20 weeks; research-grade** | The demographic transition, escape from the Malthusian regime, an energy sector and 5–30× population growth. This is the hardest single item after G4 |
   | E4 Modern | 10–16 weeks | Mass politics, media channels, modern medicine and war, collective actors |
-  | **Total** | **30–48 weeks** | Calendar after G4, on your call |
+  | **Total** | **30–48 weeks** | Calendar after G2 at the earliest (D62), on your call |
 
   The Time-Machine and the chronicle work in every era from the day a pack lands, because they read events, not art.
 - **Review-hours tracking.** Actual review time against the ≤ 6 h/week budget, reported in the weekly digest.

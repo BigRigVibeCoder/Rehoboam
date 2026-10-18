@@ -2,7 +2,7 @@
 id: SPR-027
 title: "World Stream v1, part b: the materializer, the control endpoint and the pace command, tail filters and the digest, the Textual TUI stub (P1.17, part b)"
 type: how-to
-status: PLANNING
+status: APPROVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, stream]
