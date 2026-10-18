@@ -9,7 +9,7 @@ tags: [sprint, simulation]
 related: [BCK-002, PRJ-002, EVO-001, REV-WAVE5, REV-WAVE6, REV-WAVE7, REV-M7-membership, REV-SPR-019, REV-SPR-030, SPR-014, SPR-019, SPR-021, SPR-023, SPR-024, SPR-028, SPR-029, SPR-030, SPR-038, ADR-0006, ADR-0007, ADR-0009, ADR-0024, ADR-0025, ADR-0027, ADR-0033, ADR-0035]
 created: 2026-10-18
 updated: 2026-10-18
-version: 0.2.0
+version: 0.3.0
 ---
 
 > **BLUF (the one-page brief).** M7 F1, second half, in `rh-sys-dynasty`, against M7 0.6.0 as SPR-021a froze it. It runs as two sprints (X8), and both are **C2** (X6, X12).
@@ -18,29 +18,29 @@ version: 0.2.0
 > |---|---|---|
 > | Builds | **T-01:** the exit hazards (exact u128 → Prob32, with a reference golden) and the `MURDER_DUE` timer into M2's death path. **T-02:** deposition and claims. **T-03:** regencies, the genesis minor included. **T-04:** the yearly pass: regrants, vocations at the majority date by a timer (K19), and dormancy with world-start naming by `Promote` (X4) | **T-05:** on `twin_vales` (SPR-019b), the named set at genesis against the `named_at_start` and per-house `named_full` lines of `fixture_worlds_v0.txt` for seeds 1–3, and V-INV-12's P1a variant. **T-06:** the 300-year runs, the isolation evidence, the manor band re-derived once (K21), CI and docs |
 > | Size | about 4.25 agent-days, with a checkpoint after T-02 | about 1.5 agent-days |
-> | Depends on | SPR-021b; T-00b merged | SPR-022a; SPR-019b |
+> | Depends on | SPR-021b (T-00b has merged before SPR-021a's T-01: R6) | SPR-022a; SPR-019b |
 > | Baselines | none | none |
 > | CI, one runner (×1.5) | core +22 s (+33 s), golden +40 s (+60 s), stream +15 s (+23 s) | golden +43 s (+65 s), stream +15 s (+23 s) |
 >
 > **No baseline moves.** M7 is in no golden world, `BUILT` is unchanged until SPR-024b (X6), and the Registry does not change. Under X12, each PR proves its class by its `systems` lines and `BUILT`, and **its rates are reported to the director at merge**.
 >
 > **Order:**
-> - The first real M7 + T1 world is SPR-024b's, after 022a (X5).
+> - The first real M7 + T1 world is SPR-024b's, after 022a **and SPR-019b** (X5, X13e, R5): its probes run on `manor` and `twin_vales`, whose dynasties come from the back-fill.
 > - Tests here use a test-only stub owner of `person.named` that applies `Promote` and `Demote`.
 > - SPR-030 follows 022b.
 >
 > - **Developer:** AGT-002-CORE, with AGT-002-TOOLS for the reference, the checker's new modes and the gates.
 > - **Testers:** AGT-003-DET, AGT-003-STAT (the rates, reported) and AGT-003-IF, on a different model from the Developer's.
-> - **Status:** PLANNING, revision 1. It applies REV-WAVE7's K1–K33 as the Architect ruled them, and the cross-plan X1–X12 of 2026-10-18. It needs the director's approval (D58).
+> - **Status:** PLANNING, revision 2. Revision 1 applied REV-WAVE7's K1–K33 as the Architect ruled them, and the cross-plan X1–X12 of 2026-10-18; revision 2 applies X13 and the round-2 rulings R1–R16 where they touch this plan (R5, R6, R14, R16). It needs the director's approval (D58).
 > - **Ids:** as SPR-021's plan defines them; every F-n is in SPR-021's "Contract findings".
 
 # SPR-022 — M7 F1 (b): ruler exits, claims, regencies, regrants, vocations, dormancy (WP P1.7, part b)
 
 - **Roadmap item:** `docs/11` P1.7, the second half (PRJ-002 M-3), as two sprints (X8) · **Phase / rung:** P1a. Scripted dynastic worlds (022a); `twin_vales` (022b).
 - **Depends on:**
-  - **SPR-021b merged:** M7 0.6.0 frozen (T-00a's text, the Registry defaults); `rh-sys-dynasty` with `on_death`, `arbitrate`, the indexes and the host; the scripted genesis and stub sender; `bin/check_m7_successions.py`; the rows-visited counter; the instant log's part (c); `DropReason::Ended`'s wider meaning.
-  - **T-00b merged** (X7): F-10 (a regent for a genesis minor), F-19 as K19 rules it (the vocation timer), F-20 as K12 rules it, F-25 (the deposed's exclusion). Errata after the freeze are in-place 0.6.x bumps with the Architect's approval (K20).
-  - **SPR-019b merged, for 022b** (D58 item 5). A-62 lands before SPR-015 freezes M2 0.3.0 and regenerates `fixture_worlds_v0.txt`. This plan cites that file's lines by name, never their numbers.
+  - **SPR-021b merged:** M7 0.6.0 frozen (T-00a's and T-00b's text, the Registry defaults moved from `next/registry_delta.toml`); `rh-sys-dynasty` with `on_death`, `arbitrate`, the indexes and the host; the scripted genesis and stub sender; `bin/check_m7_successions.py`; the rows-visited counter; the instant log's part (c). Through SPR-021a's own dependency, SPR-038b's one `DropReason` change (R14; `SPR-038_PerInstantCost.md:137`): the generic `Ended` ("the timer's or command's premise no longer holds"), `Deferred`, and `cancelled{system, timer kind, reason}` with `cancel_because`, consumed here with no new variant.
+  - **T-00b merged** (X7, R6), after T-00a and before SPR-021a's T-01, so frozen 0.6.0 carries it: F-10 (a regent for a genesis minor), F-19 as K19 rules it (the vocation timer, with X13h's married daughter), F-20 as K12 rules it, F-25 (the deposed's exclusion). Errata after the freeze are in-place 0.6.x bumps with the Architect's approval (K20).
+  - **SPR-019b merged, for 022b** (D58 item 5), its back-fill table folded into M7 by REV-SPR-019 R13's rule, both ways (SPR-021's System specs line). A-62 lands before SPR-015 freezes M2 0.3.0 and regenerates `fixture_worlds_v0.txt`. This plan cites that file's lines by name, never their numbers.
   - **D58 item 6** (SIM-9's text) ruled before T-04's dormancy.
   - **SPR-014's queues:** `ScheduleDeath` drained by M2 at `Day/Vital` (`M2.demography.odd.toml:214–220`); `Promote` and `Demote` drained by T1 at `Day/Agenda` (`T1.minds.odd.toml:562–574`), and discarded while T1 is absent.
 - **Binding contracts:**
@@ -49,7 +49,7 @@ version: 0.2.0
   - `docs/09` V-INV-12 (`:136`), V-INV-03, V-INV-15, V-SF-06, 06b, 06c, 06d (`:476–479`), V-SF-22 (`:501`), V-ERA-03.
   - `bin/gen_rng_golden.py` (the RNG reference), and M2's `MIN_AGE_F` 15 and `MIN_AGE_M` 18 (`next/M2:638`).
 - **System specs:** none changes, except through K20's errata route.
-- **Rulings:** X1–X12; K1–K33; D56; REV-WAVE5 W2, W3, W7, W9, W42; REV-WAVE6 X1, X5, V2, V3, Z1; REV-M7-membership R4–R6, N5–N7; REV-SPR-030 R2, R6, R7.
+- **Rulings:** X1–X13 (X13d: dormancy is 022a's; X13e: SPR-024b waits for SPR-019b; X13h: the married daughter); K1–K33; R1–R16 where they touch wave 7; D56; REV-WAVE5 W2, W3, W7, W9, W42; REV-WAVE6 X1, X5, V2, V3, Z1; REV-M7-membership R4–R6, N5–N7; REV-SPR-030 R2, R6, R7.
 - **Requirements covered:** SIM-9 (V-INV-12, P1a variant); SIM-3 (second half); SAGA-13's regency and deposition paths; DET-13; ADR-0027 (V-SF-06 and V-SF-06b's identity halves, reported).
 
 ## Specs this sprint needs
@@ -57,16 +57,16 @@ version: 0.2.0
 | Spec | Exists? | Gap | Architect ruling | Needed by |
 |---|---|---|---|---|
 | **The exact monthly probability** | `exit_hazards` (`:721`): `h` as the u128 product of Q16_16 factors; `p = h × D_m / D`, rounded down once to Prob32 | Which reference pins it | **Proposed (8/10):** `bin/gen_m7_hazard_reference.py` (stdlib, `Fraction`) writes `crates/rh-sys-dynasty/tests/golden/m7_hazards_v1.txt`: `p_m` and `p_d` for each law × `predecessor_exit` × `exec_constraint` in {0, ½, 1} × the Registry's corners and `twin_vales`'s values, on 360- and 365-day calendars. `--check` runs in part core, and an altered copy is STALE (the `gen_m2_reference.py` pattern) | T-01 |
-| **The draws, against the RNG reference** | `[[rng]]` `:588–603`. SPR-012's `gen_m2_draws_reference.py` precedent | — | **Proposed (7.5/10): the checker's exits mode.** At each month's first instant it re-draws every hit, day and culprit through `gen_rng_golden.py`'s H, with M7's `system_id` and purposes, and compares them with the run's `DEATH` (cause murder, `actor` the culprit) and `DEPOSED`. The world is 24 sovereigns under seniority at the Registry's upper bounds (`murder_hazard_base` 0.03, `deposition_hazard_ref` 0.05, `seniority_hr` 2.6); a probe asserts at least 100 of each event | T-01 |
+| **The draws, against the RNG reference** | `[[rng]]` `:588–603`. SPR-012's `gen_m2_draws_reference.py` precedent | — | **Proposed (7.5/10): the checker's exits mode.** At each month's first instant it re-draws every hit, day and culprit through `gen_rng_golden.py`'s H, with M7's `system_id` and purposes, and compares them with the run's `DEATH` (cause murder, `actor` the culprit) and `DEPOSED`. The world is 24 sovereigns under seniority with `murder_hazard_base`, `deposition_hazard_ref` and `seniority_hr` at the upper bounds of their ranges, which the test reads from `registry_v0.toml:100` (none is typed); a probe asserts at least 100 of each event | T-01 |
 | **A murder and a deposition in one month** | "the earlier day wins (murder on a tie)" (`:599`) | Too rare to observe in a run (about 6 months in 86,400 have both hits) | **Proposed (9/10):** a pure resolver, tested exhaustively over every day pair of 28- to 31-day months; its mutant is killed there | T-01 |
-| **The vocation draw** (K19) | The 0.5.0 Year step draws for "majority this year" (`:579`, `:753`). M2 draws brides from 15 and grooms from 18 (`next/M2:638`), and `twin_vales`'s `majority_age` is 16 | A yearly draw can come after a marriage | **Ruled (K19), T-00b:** the draw happens at the majority date, from a timer `on_birth` schedules (and the world-start pass, for living members under majority), at that day's start in `Polity`. The timer is kept on re-sample (F-9's rule), and the draw is keyed (the person, `t` = the fire). For a son, the draw precedes M2's earliest groom age at the manifests' values. **Proposed (6/10), T-00b:** a daughter married between `MIN_AGE_F` and her majority draws no vocation. The alternative is a draw at min(`majority_age`, `MIN_AGE_F`) | T-04 |
+| **The vocation draw** (K19) | The 0.5.0 Year step draws for "majority this year" (`:579`, `:753`). M2 draws brides from 15 and grooms from 18 (`next/M2:638`), and `twin_vales`'s `majority_age` is 16 | A yearly draw can come after a marriage | **Ruled (K19), T-00b:** the draw happens at the majority date, from a timer `on_birth` schedules (and the world-start pass, for living members under majority), at that day's start in `Polity`. The timer is kept on re-sample (F-9's rule), and the draw is keyed (the person, `t` = the fire). For a son, the draw precedes M2's earliest groom age at the manifests' values. **Ruled (X13h, R16), T-00b's text:** a daughter already married at her majority date draws no vocation (the draw at min(`majority_age`, `MIN_AGE_F`) was not adopted) | T-04 |
 | **The Year pass at a year's first instant** (K12) | `Year/Polity` runs before `Day/Polity` (`schedule.rs:22–27`). `on_birth`: "a holder who dies this instant still holds here" (`:725`) | — | **Ruled (K12), T-00b:** one rule. A holder who died in this instant's `Vital` still holds for the Year pass; `on_death` arbitrates in `Day/Polity` afterwards. A fixture pins it | T-04 |
 | **The deposed's exclusion** | F-25, T-00b: for the arbitration that follows the deposition only | — | Built here | T-02 |
 | **Regency without a regent** | `arbitrate`'s rule (`:733`): the living adult mother, else the nearest adult kin, else the steward. Offices are vacant at genesis (`:642`) | — | **Proposed (7/10):** with none of the three, `regent = 0`, counted and reported; the yearly pass names a regent once a steward is granted | T-03 |
 | **World-start naming** (X4) | M7's dormancy pass "at world start" (`:757`); T1 0.3.3 says world creation names (`T1.minds.odd.toml:804`) | Two routes | **Ruled (X4):** M7's route only. Tick 0's `Year/Polity` pass sends `Promote`, and genesis names only the cast. T-00a reconciles M7's `[initialization]`, and the T1-A spec PR reconciles T1's | T-04 |
 | **Observing dormancy without T1** | `Promote` and `Demote` are T1's (`T1.minds.odd.toml:562–574`); without T1, M7 reads `person.named` as `false` | — | **Proposed (8/10):** a test-only stub owner of `person.named`, registered as `T1.minds` against a test spec table, that applies `Promote` and `Demote` at `Day/Agenda`. The real integration is SPR-024b's (X5) | T-04, T-05 |
 | **The named set at genesis** | `fixture_worlds_v0.txt` per seed: the `named_at_start` line (`narrow`, `full`) and each house line's `named_narrow`, `named_full` and `line`, with the heir and second as k and distance. The 0.5.0 widenings change no genesis line (`M7_membership.md:97`). A-62 regenerates the file | Needs `twin_vales`'s genesis (SPR-019b) | **Proposed (8/10), 022b:** after tick 0, `person.named` (through the stub) gives each seed's `named_at_start full` count, every house's `named_full`, and each title's heir and second, as the file then on `main` states them. Nothing is copied into the plan or the tests. The narrow-reading mutant is killed at each seed whose line has `narrow ≠ full`, and the test asserts that at least one such seed exists among 1–3. If none does, the mutant is killed by T-04's A-57 fixtures alone, and the test says so | T-05 |
-| **The manor's population band** (K21) | SPR-019 0.3.1 T-07: the nightly manor soak asserts a band projected for M1, M2 and S3 (`SPR-019_PopulationSynthesis.md:183–189`) | With M7 registered, M2's elite read and holy orders change the manor's growth | **Ruled (K21):** SPR-019's assertion applies only when the registered systems are M1, M2 and S3 (one line in SPR-019's T-07; this PR). The band is re-derived once, in 022b T-06, with M7 registered, by the projection SPR-019 names | T-06 |
+| **The manor's population band** (K21) | SPR-019 0.3.1 T-07: the nightly manor soak asserts a band projected for M1, M2 and S3 (`SPR-019_PopulationSynthesis.md:184–190`) | With M7 registered, M2's elite read and holy orders change the manor's growth | **Ruled (K21):** SPR-019's assertion applies only when the registered systems are M1, M2 and S3 (one line in SPR-019's T-07; this PR). The band is re-derived once, in 022b T-06, with M7 registered, by the projection SPR-019 names | T-06 |
 | **CI** (X10, K22) | PR #89 (`arch/ci-third-job` `a4be717`): parts core, golden and stream | — | **Ruled (X10, K22):** gates by role per part; about +90–150 s on golden and stream together, +20–30 s on core; ×1.5; the base is #89's first run | T-06 |
 
 ## Compliance (every task)
@@ -103,7 +103,7 @@ version: 0.2.0
     - on a murder hit: `murder_culprit` among the title's living claimants (else 0), and a `MURDER_DUE` timer at (that day's start, `Vital`) about the ruler;
     - on a deposition hit: a deposition timer at (that day's start, `Polity`);
     - `title.exit_timer := 1`.
-  - **`murder_due`,** in `Vital`'s timer pass: if the ruler is alive and holds the title, `ScheduleDeath {ruler, murder, culprit, None}`, drained by M2 in the same `Vital`; a dead ruler → `drop_timer(dead)`; a ruler who lost the title → `drop_timer(ended)` (SPR-021's widened meaning; K11 (d), K23).
+  - **`murder_due`,** in `Vital`'s timer pass: if the ruler is alive and holds the title, `ScheduleDeath {ruler, murder, culprit, None}`, drained by M2 in the same `Vital`; a dead ruler → `drop_timer(dead)`; a ruler who lost the title → `drop_timer(ended)`, SPR-038b's generic `Ended`, "the timer's or command's premise no longer holds" (R14; K11 (d), K23).
   - **`resample_timer`:** `MURDER_DUE` by `:590`; the deposition timer by F-9.
   - **INV-M7-04** at each draw.
   - **The reference and its golden; the checker's exits mode.**
@@ -139,7 +139,7 @@ version: 0.2.0
   - **Fixtures:**
     - a deposition with no claimant;
     - one with a pressed claimant who succeeds, so the heir is passed over and gains a claim;
-    - the deposed's pressed claim at the next succession, at 0.6 against 1.0 under margin 0.5, gives a crisis (`fixture_worlds.md` §2.3, route 2).
+    - the deposed's pressed claim at the next succession, at the scores and lead `fixture_worlds.md:75` states (§2.3, route 2: a lead under `contest_margin`), gives a crisis.
   - The checker's deposition mode reproduces every `DEPOSED`, its `SUCCEED` and its `CLAIM_CREATED`, with their edges.
   - **Mutants:** `mutant-deposed-stays-excluded` fails the second-succession fixture; `mutant-deposed-no-claim` fails INV-M7-05 and the `CLAIM_CREATED` line.
   - **Checkpoint:** the Tester's interim pass is recorded before T-03 lands.
@@ -166,7 +166,7 @@ version: 0.2.0
     - a holder who died in this instant still holds (K12).
   - **`vocation`** (K19):
     - the `VOCATION_DUE` timer, scheduled by `on_birth` for each great-house member, and by tick 0's pass for living members under majority;
-    - at its fire: a later child (an elder child of the same father alive), not first or second in any line, holding nothing, and not married (T-00b's proposal) draws `holy_orders`, `mercenary` or `household`;
+    - at its fire: a later child (an elder child of the same father alive), not first or second in any line, holding nothing, and not already married at the fire (X13h, ruled; T-00b's text) draws `holy_orders`, `mercenary` or `household`;
     - holy orders leaves every line, and M2's lagged read is live.
   - **`dormancy`** (`:756–758`):
     - at tick 0's `Year/Polity` (world-start naming, X4) and yearly;
@@ -184,9 +184,9 @@ version: 0.2.0
 - **Acceptance:**
   - **Regrant fixtures:** a seat to a petitioner, else to kin; an office granted, after which the marshal and steward terms are live; no candidate, so the liege keeps the seat; **a holder dead in the year's first `Vital`**, whose demesne titles the Year pass treats as still his (K12).
   - **Vocation fixtures:**
-    - the draw fires at the majority date, once per life;
-    - a son draws before 18;
-    - a daughter married at 15 draws nothing;
+    - **the majority-date fixture:** a son whose majority date is not a year's first day draws once, and `person.vocation` is written at that day's start (`Polity`), the tick the test asserts;
+    - a son draws before `MIN_AGE_M` (`next/M2:638`);
+    - a daughter married at `MIN_AGE_F`, so already married at her majority date, draws nothing (X13h);
     - the eldest living child is exempt even when the first-born is dead;
     - the second in a line is exempt;
     - holy orders is excluded by `arbitrate` and eligible for a chaplaincy only.
@@ -196,7 +196,7 @@ version: 0.2.0
     - a houseless holder is named under (a), and demoted when the seat is lost;
     - a dormant member is re-promoted when the seat moves near him;
     - the world-start pass names exactly the members meeting a criterion (X4).
-  - **Each mutant fails its fixture by name.** `mutant-vocation-yearly` fails the married-daughter fixture.
+  - **Each mutant fails its fixture by name.** **`mutant-vocation-yearly`'s kill condition** (R16): it writes `person.vocation` at a year's first instant (the Year pass) instead of at the majority date's start, so the majority-date fixture's tick assertion fails. The married-daughter and before-`MIN_AGE_M` fixtures do not kill it (she is married at both instants, and the yearly draw also falls before `MIN_AGE_M` at `majority_age` 16), and the test says so.
   - **Without the stub,** the world-start `Promote`s are discarded `absent_owner` and counted, one per person meeting a criterion.
 - **Status:** [ ] not started
 
@@ -263,20 +263,23 @@ version: 0.2.0
 |---|---|---|
 | AGT-003-DET | 022a, from 0.6.0's `exit_hazards`, `exit`, `regency`, `regrant`, `vocation`, `dormancy`, `[[rng]]` and ADR-0025:<ul><li>at the checkpoint: their own re-draw of the exits on a world of their own;</li><li>the seventeen 022a mutants where stated, plus three of their own;</li><li>keyframes with a murder, a regency and a vocation timer pending.</li></ul>022b: the named set at genesis re-derived from the rule's text at one seed of their own choice | `VER-SPR-022a-TEST`, `VER-SPR-022b-TEST` |
 | AGT-003-STAT | 022b's reports: Poisson and Clopper–Pearson intervals; INSUFFICIENT stated; nothing tuned | As above |
-| AGT-003-IF | The stub owners' registration; `Promote` and `Demote` (`key_field` `person`; discarded and counted without T1); `ScheduleDeath`'s payload; the `ended` drop | As above |
+| AGT-003-IF | The stub owners' registration; `Promote` and `Demote` (`key_field` `person`; discarded and counted without T1); `ScheduleDeath`'s payload; the `ended` drop, under SPR-038b's generic meaning (R14) | As above |
 
 ## Merge route
 
 - **C2 in both stages,** merged by the Architect after the Tester pass and the audit, with the rates reported at merge (X12). Not in the one-C3 slot.
-- **Order (X9):** 022a after SPR-021b and T-00b; 022b after 022a and SPR-019b; SPR-024b after 022a; SPR-028 and SPR-030 after 022b.
+- **Order (X9, R5, R6):** 022a after SPR-021b (T-00a, then T-00b, merged before SPR-021a's T-01); 022b after 022a and SPR-019b; **SPR-024b after 022a and SPR-019b** (X13e); SPR-028 and SPR-030 after 022b.
 
 ```mermaid
 flowchart LR
-  S021b[SPR-021b C2] --> S022a[SPR-022a C2]
-  T00b[T-00b] --> S022a
+  T00a[T-00a C2] --> T00b[T-00b C2]
+  T00b -->|before T-01| S021a[SPR-021a C2]
+  S021a --> S021b[SPR-021b C2]
+  S021b --> S022a[SPR-022a C2]
   S022a --> S024b[SPR-024b C3: M7 and T1 join BUILT]
+  S019b[SPR-019b] --> S024b
   S022a --> S022b[SPR-022b C2]
-  S019b[SPR-019b] --> S022b
+  S019b --> S022b
   S022b --> S028[SPR-028]
   S022b --> S030[SPR-030]
 ```
@@ -296,7 +299,7 @@ flowchart LR
 
 | # | Blocker | Status |
 |---|---|---|
-| 1 | SPR-021b; T-00b | Open |
+| 1 | SPR-021b (T-00a, then T-00b, merged before SPR-021a's T-01: R6) | Open |
 | 2 | SPR-019b (022b only) | Open |
 | 3 | SIM-9's text (D58 item 6) | Open; before T-04 |
 | 4 | The director's approval (D58) | Open |
