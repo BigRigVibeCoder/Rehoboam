@@ -341,6 +341,15 @@ SPECIALISED = {
     ("params", "default"), ("applies", "payload"),
 }
 TABLES = ("system", "purpose", "scales", "design", "initialization", "input_data", "isolation", "verification")
+# Additive keys allowed on frozen entries without an [[amends]] record (BCK-002 A-69; specs/systems/next/README.md)
+ALLOWED_ADDED_FIELDS = {
+    ("params", "default"),  # draft Registry defaults (K3, R3; test_lint_odd_frozen_default.py)
+    ("input_data", "constants"),  # run constants compiled at load (M7 0.6.0; MIN-11)
+}
+ALLOWED_ADDED_PATHS = {
+    "params.interregnum_max_days.type",  # grandfathered M7 0.6.0 additions before A-69 (F-6; next/README.md)
+    "params.dormancy_degrees.type",
+}
 
 
 def leaf_text(value):
@@ -365,6 +374,22 @@ def generic_text_at(spec, path):
             return None if entry is None or field not in entry else leaf_text(entry[field])
     table = spec.get(sec, {})
     return leaf_text(table[rest]) if rest in table else None
+
+
+def generic_entry_exists(spec, path):
+    """Whether the entry or table named by generic amendment ``path`` exists in ``spec`` (even if the field does not)."""
+    m = GENERIC_PATH.match(path)
+    if m is None:
+        return False
+    sec, rest = m.group("sec"), m.group("rest")
+    if sec in KEYED or sec in PAIR_KEYED:
+        key, _, _field = rest.rpartition(".")
+        return keyed_entry(spec.get(sec, []), sec, key) is not None
+    for sub in SUBKEYED:
+        if rest.startswith(sub + "."):
+            key, _, _field = rest[len(sub) + 1:].rpartition(".")
+            return keyed_entry(spec.get(sec, {}).get(sub, []), sub, key) is not None
+    return sec in TABLES and sec in spec
 
 
 def entry_key(x, sec):
@@ -425,6 +450,46 @@ def frozen_leaves(fs):
     return out
 
 
+def added_frozen_leaves(fs, ns):
+    """Every generic path of an added field on an existing frozen entry or table in ns (deny by default, A-69):
+    each field of each existing keyed entry that was not in fs, and each field of each table that was not in fs,
+    minus key fields, EXEMPT, SPECIALISED, and ALLOWED_ADDED_FIELDS."""
+    out = []
+    for sec in list(KEYED) + list(PAIR_KEYED):
+        frozen_entries = dict(keyed_paths(fs.get(sec, []), sec))
+        for key, x in keyed_paths(ns.get(sec, []), sec):
+            if key not in frozen_entries:
+                continue
+            f_val = frozen_entries[key]
+            for field in x:
+                if field in f_val:
+                    continue
+                if field in key_fields(sec) or (sec, field) in EXEMPT or (sec, field) in SPECIALISED:
+                    continue
+                if (sec, field) in ALLOWED_ADDED_FIELDS:
+                    continue
+                out.append(f"{sec}.{key}.{field}")
+    for sec in TABLES:
+        f_tab = fs.get(sec, {})
+        n_tab = ns.get(sec, {})
+        for field, value in n_tab.items():
+            if (sec, field) in EXEMPT or (sec, field) in SPECIALISED or (sec, field) in ALLOWED_ADDED_FIELDS:
+                continue
+            if field in SUBKEYED:
+                f_sub = dict(keyed_paths(f_tab.get(field, []), field))
+                for key, x in keyed_paths(value, field):
+                    if key not in f_sub:
+                        continue
+                    f_val = f_sub[key]
+                    for f2 in x:
+                        if f2 not in f_val and f2 != SUBKEYED[field]:
+                            out.append(f"{sec}.{field}.{key}.{f2}")
+            else:
+                if field not in f_tab:
+                    out.append(f"{sec}.{field}")
+    return out
+
+
 def values_prefix_problems(fs, ns, p):
     """An enum column's codes are its values' indexes: a next version may append a value, never rename or move one."""
     out = []
@@ -466,6 +531,8 @@ def amendments(fs, ns, p, errs):
         if not a.get("reason"):
             errs.append(f"{p}: [[amends]] {of} needs a reason")
         was, now = resolve_text(fs, of), resolve_text(ns, of)
+        if was is None and generic_entry_exists(fs, of):
+            was = ""
         if was is None:
             errs.append(f"{p}: [[amends]] {of}: the frozen spec has no text there")
         elif a.get("frozen") != was:
@@ -722,7 +789,7 @@ def lint_next(frozen, specs, errs):
                 errs.append(f"{p}: frozen default of {x.get('name')} changed: {x.get('default')} -> {n.get('default')}")
             if n is not None and n.get("meaning") != x.get("meaning") and f"params.{x.get('name')}.meaning" not in amended:
                 errs.append(f"{p}: frozen parameter {x.get('name')} changed its meaning without an [[amends]] record")
-        # deny by default (PR #79's review R3, N4): every other frozen leaf, equal or amended; enum codes append only
+        # deny by default (PR #79's review R3, N4; A-69): every other frozen leaf, equal or amended; enum codes append only
         errs.extend(values_prefix_problems(fs, ns, p))
         for of, was in frozen_leaves(fs).items():
             now = generic_text_at(ns, of)
@@ -730,6 +797,9 @@ def lint_next(frozen, specs, errs):
                 errs.append(f"{p}: frozen {of} is missing from the next version (a frozen entry keeps its fields)")
             elif now != was and of not in amended:
                 errs.append(f"{p}: frozen {of} changed without an [[amends]] record (deny by default, R3 of PR #79's review)")
+        for of in added_frozen_leaves(fs, ns):
+            if of not in ALLOWED_ADDED_PATHS and of not in amended:
+                errs.append(f"{p}: frozen {of} added without an [[amends]] record (deny by default, A-69)")
         # REV-SPR-015 round 3 NIT-5: the frozen verification tests and couplings are part of the slice
         next_tests = set(ns.get("verification", {}).get("tests", []))
         for t in fs.get("verification", {}).get("tests", []):
