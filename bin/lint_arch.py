@@ -351,6 +351,18 @@ CLIPPY_CONFIG_FIXTURES = frozenset(
 )
 # The only directories the crawl skips, and only at the workspace root (GAP-13).
 SKIPPED_ROOT_DIRS = frozenset({"target", ".git"})
+# Agent worktrees under .claude/worktrees/ are skipped (BCK-002 A-73).
+SKIPPED_WORKTREE_PARTS = (".claude", "worktrees")
+
+
+def is_agent_worktree(path: Path, root: Path) -> bool:
+    """Return whether ``path`` is under an agent worktree (.claude/worktrees/)."""
+    try:
+        parts = path.relative_to(root).parts
+    except ValueError:
+        parts = path.parts
+    return any(parts[i : i + 2] == SKIPPED_WORKTREE_PARTS for i in range(len(parts) - 1))
+
 
 # The [lints] declaration of a crate that takes the workspace's lints and nothing else (rule lints).
 INHERITED_LINTS = ("workspace",)
@@ -965,12 +977,15 @@ def _sources(crate: Crate) -> list[Path]:
     Only the first component below the crate's directory is tested, as lint_forbidden does: a
     checkout under a directory named `target` is scanned (SPR-009 review 4), and so is a source
     directory named `target` inside the crate, such as `src/target/` (VER-SPR-009-TEST GAP-21).
+    Agent worktrees (.claude/worktrees/) are skipped (BCK-002 A-73).
     """
     directory = crate.directory
     if directory is None:
         return []
     return sorted(
-        p for p in directory.rglob("*.rs") if p.relative_to(directory).parts[0] != "target"
+        p
+        for p in directory.rglob("*.rs")
+        if p.relative_to(directory).parts[0] != "target" and not is_agent_worktree(p, directory)
     )
 
 
@@ -1264,16 +1279,22 @@ def check_engine_purity(
 def clippy_configs(root: Path) -> list[str]:
     """Return every clippy.toml or .clippy.toml under ``root``, relative and sorted.
 
-    Only the root's own target/ and .git/ are skipped; symlinked directories are not entered
-    (os.walk's default), which is why ``member_clippy_configs`` exists.
+    Only the root's own target/ and .git/ and agent worktrees (.claude/worktrees/) are skipped;
+    symlinked directories are not entered (os.walk's default), which is why
+    ``member_clippy_configs`` exists.
     """
     found: list[str] = []
     for directory, subdirectories, files in os.walk(root):
-        if Path(directory) == root:
+        dir_path = Path(directory)
+        if dir_path == root:
             subdirectories[:] = [d for d in subdirectories if d not in SKIPPED_ROOT_DIRS]
+        # Ignore agent worktrees under .claude/worktrees/ (BCK-002 A-73)
+        subdirectories[:] = [d for d in subdirectories if not is_agent_worktree(dir_path / d, root)]
         subdirectories.sort()
+        if is_agent_worktree(dir_path, root):
+            continue
         found += [
-            (Path(directory) / name).relative_to(root).as_posix()
+            (dir_path / name).relative_to(root).as_posix()
             for name in files
             if name in CLIPPY_CONFIG_NAMES
         ]
