@@ -1,0 +1,113 @@
+# forcing_v0.toml: typed synthetic forcing definitions for system isolation runs (SPR-028)
+# Governed by: CODEX/05_PROJECT/SPR-028_ValidationHarness.md, docs/09 V-SF-22
+
+[schema]
+format = "rehoboam/validation/forcing/v0"
+version = "0.1.0"
+
+[[forcing]]
+system = "M2.demography"
+input = "person.named"
+series = "constant:0"
+spec_line = "specs/systems/M2.demography.odd.toml:423"
+note = "no T1: M2 marries everyone"
+
+[[forcing]]
+system = "M2.demography"
+input = "person.vocation"
+series = "constant:none"
+spec_line = "specs/systems/M2.demography.odd.toml:424"
+note = "no M7: nobody in holy orders"
+
+[[forcing]]
+system = "M2.demography"
+input = "house_member.person"
+series = "constant:0"
+spec_line = "specs/systems/M2.demography.odd.toml:425"
+note = "no M7: no house members"
+
+[[forcing]]
+system = "M2.demography"
+input = "person.residence"
+series = "constant:0"
+spec_line = "specs/systems/M2.demography.odd.toml:426"
+note = "no S3: one pool"
+
+[[forcing]]
+system = "M7.dynasty"
+input = "polity.exec_constraint"
+series = "step:0->1@year500"
+spec_line = "specs/systems/M7.dynasty.odd.toml:842"
+note = "0 (reference) for 500 years, then 1 (an assembly) for 500 years"
+
+[[forcing]]
+system = "M7.dynasty"
+input = "person.named"
+series = "constant:false"
+spec_line = "specs/systems/M7.dynasty.odd.toml:843"
+note = "false throughout: T1 stubbed"
+
+[[forcing]]
+system = "M7.dynasty"
+input = "person.death_cause"
+series = "historical:fixture_regicides"
+file = "specs/validation/forcing/fixture_regicides.toml"
+spec_line = "specs/systems/M7.dynasty.odd.toml:844"
+note = "scripted runs of consecutive murdered predecessors"
+
+[[forcing]]
+system = "S3.migration"
+input = "region.land_cells"
+series = "constant:equal"
+spec_line = "specs/systems/S3.migration.odd.toml:241"
+note = "equal land cells in every region"
+
+[[forcing]]
+system = "S5.daily_life"
+input = "region.conditions"
+series = "step:normal->siege@day100"
+spec_line = "specs/systems/S5.daily_life.odd.toml:167"
+note = "normal, then siege from day 100"
+
+[[forcing]]
+system = "S6.artifacts"
+input = "mind.honesty_humility"
+series = "step:0->-80@year20"
+spec_line = "specs/systems/S6.artifacts.odd.toml:373"
+note = "one bearer line on fixture"
+
+[[forcing]]
+system = "S7.vows"
+input = "mind.conscientiousness"
+series = "constant:0"
+spec_line = "specs/systems/S7.vows.odd.toml:361"
+note = "three runs: C = -80, 0, +80"
+
+[[forcing]]
+system = "S7.vows"
+input = "region.conditions"
+series = "step:normal->famine@year10"
+spec_line = "specs/systems/S7.vows.odd.toml:362"
+note = "normal, then famine from year 10"
+
+[[forcing]]
+system = "T1.minds"
+input = "vow.conflict"
+series = "step:0->0.5@year10"
+spec_line = "specs/systems/T1.minds.odd.toml:1025"
+note = "conflict 0 for 10 years, then 0.5"
+
+[[forcing]]
+system = "T1.minds"
+input = "artifact.rumour_reach"
+series = "step:0->3@year10"
+spec_line = "specs/systems/T1.minds.odd.toml:1026"
+note = "reach 0, then 3 hops from year 10"
+
+[[forcing]]
+system = "T1.minds"
+input = "person.alive"
+series = "historical:court_deaths"
+file = "specs/validation/forcing/court_deaths.toml"
+spec_line = "specs/systems/T1.minds.odd.toml:1027"
+note = "scripted deaths on a fixture court: sovereign murdered at year 50"

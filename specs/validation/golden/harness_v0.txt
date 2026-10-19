@@ -1,0 +1,51 @@
+format: rehoboam/validation/golden/v0
+test_suite: selftest_validation_harness_v0
+---
+[check:closed_form_known_answers]
+1.1 Clopper-Pearson 0/20 at 95%: diff=0.000e+00 (PASS)
+1.2 Poisson 0 count at 95%: diff=0.000e+00 (PASS)
+1.3 Kaplan-Meier uncensored empirical parity: max_diff=1.110e-16 (PASS)
+1.4a TOST identical zero-variance: EQUIVALENT [0.0, 0.0] (PASS)
+1.4b TOST constant shift d=0.02 < 0.05: EQUIVALENT [0.02, 0.02] (PASS)
+1.4c TOST constant shift d=0.06 >= 0.05: NOT_EQUIVALENT [0.06, 0.06] (PASS)
+---
+[check:r_reference_reproduction]
+2.1 Gehan 6-MP KM survival curves: max_rel_diff=9.218e-15 (PASS)
+2.2 Gehan Cox regression: beta_rel=2.943e-16, se_rel=5.421e-16 (PASS)
+2.3 Stratified Cox regression: beta_rel=1.132e-15, se_rel=3.091e-16 (PASS)
+2.4a Student-t quantiles: max_rel_diff=2.177e-16 (PASS)
+2.4b Beta quantiles: max_rel_diff=3.604e-15 (PASS)
+2.4c Chi-squared quantiles: max_rel_diff=4.856e-13 (PASS)
+---
+[check:expected_rate_and_spread]
+3.1 Stationary start r_exp: 0.001099 [stable=0.001140, transient=0.000000, log_corr=-0.000041] (PASS)
+3.2 Uniform start r_exp: 0.001057 [stable=0.001140, transient=-0.000042, log_corr=-0.000041] (PASS)
+3.3 Spread vs Simulation:
+    y= 100: formula=0.1141, sim=0.1192, ratio=0.957
+    y= 300: formula=0.1871, sim=0.1985, ratio=0.942
+    y=1000: formula=0.2867, sim=0.3104, ratio=0.923
+---
+[check:synthetic_ensemble_vsf01]
+4.1 V-SF-01.r 32-seed ensemble: PASS [mean=0.001188, 99.9% CI=[0.000996, 0.001379], band=[-0.001, 0.003]] (PASS)
+4.2 V-SF-01.pop 32-seed range: REPORT [mean_ratio=3.422, min=1.867, max=5.564, spread_exp=0.287] (REPORT)
+---
+[check:synthetic_ensemble_vsf02]
+5.1 V-SF-02 q(15) 32-seed ensemble: PASS [mean=0.4459, 99.9% CI=[0.4311, 0.4608], band=[0.35, 0.55]] (PASS)
+5.2 V-SF-02b l(65)/l(15) ensemble: PASS [mean=0.3148, 99.9% CI=[0.3133, 0.3162], tol=+/-0.03] (PASS)
+---
+[check:dynastic_reigns_vsf06b]
+6.1 V-SF-06b P1a constant-law unidentifiability: caught F-25 -> INSUFFICIENT (PASS)
+6.2 V-SF-06b identifiable stratified Cox: HR=0.654, se=0.933 (PASS)
+---
+[check:heldout_band_sealing]
+7.1 V-SF-06c held-out sealing: SEALED (PASS)
+7.2 V-SF-07 held-out sealing: SEALED (PASS)
+---
+[check:positive_controls]
+8.1 Control 'km-ignores-censoring': caught drop 0.448 -> 0.000 (FAIL as required)
+8.2 Control 'minimum-ignored': verdict=INSUFFICIENT (FAIL as required)
+8.3 Control 'heldout-printed': caught illegal numeric output in heldout band (FAIL as required)
+8.4 Control 'bootstrap-unkeyed': bit-identical bootstrap verified (FAIL as required on non-determinism)
+8.5 Control 'range-gated': 3/3 seed sets exceed [0.3, 5.0] (G10 confirmed; FAIL as required)
+---
+VALIDATION HARNESS: PASS

@@ -1,0 +1,28 @@
+# court_deaths.toml: historical scripted court deaths forcing series (SPR-028, T1)
+# Governed by: specs/systems/T1.minds.odd.toml:1027, docs/09 V-SF-22
+
+[schema]
+format = "rehoboam/validation/forcing_history/v0"
+id = "court_deaths"
+version = "0.1.0"
+
+[[events]]
+year = 10
+tick = 5184000
+target = "court:advisor"
+cause = "natural"
+note = "natural death of court elder"
+
+[[events]]
+year = 30
+tick = 15552000
+target = "court:marshall"
+cause = "natural"
+note = "natural death of marshall"
+
+[[events]]
+year = 50
+tick = 25920000
+target = "court:sovereign"
+cause = "murder"
+note = "sovereign murdered in front of court; initiates cascade scenario (V-SAGA-16b)"
