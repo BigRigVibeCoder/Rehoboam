@@ -183,7 +183,7 @@ pub fn is_host_file(path: &Path) -> bool {
         .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or_default();
-    in_timeline && ["A.sock", "A.lock", "C.sock", "C.lock"].contains(&name)
+    in_timeline && ["A.sock", "A.lock", "C.sock", "C.lock", "control.sock", "control.lock"].contains(&name)
 }
 
 /// The writer's lock file of a run directory: a run holds it exclusively for its whole length,
