@@ -2,19 +2,28 @@
 # (a fixture is literal data, and a record's fields are positional, in line order)
 """The annals fixture chronicles, derived by script from M2's and M7's rules (SPR-029; R10).
 
-Three fixture worlds, each a directory with ``chronicle_A.txt`` (channel A in the canonical text
+Four fixture worlds, each a directory with ``chronicle_A.txt`` (channel A in the canonical text
 form, printed by ``canonical_v0.py`` so every line is valid by construction), ``world.toml`` (the
-calendar), ``names.toml`` (the manifest's names) and, for the dynastic one, ``keyframe.toml`` (the
-keyframe extract: annals_v0.md §1, §6):
+calendar), ``names.toml`` (the manifest's names) and, for the dynastic ones, ``keyframe.toml`` (the
+keyframe extract, each title with its tier and liege: annals_v0.md §1, §6):
 
 - ``ashcombe``: two houses and two seats over forty years on a 360-day calendar, in the shape of
   ``specs/manifest/examples/manor.yaml``. The history follows the rules the specs state: a birth
   nine months after its conception and never from a pregnancy pending at genesis (M2 0.3.0 F9,
-  SPR-019 D-08); a posthumous birth within nine months of the father's death; a succession or an
-  interregnum in the instant a holder dies or is deposed, at the `Polity` phase (M7 0.3.4, SAGA-13);
-  a claim created only when a succession passes over the legal heir or a ruler is deposed; a
-  deposition by the leading pressed claimant, who holds an unrenounced claim; a title named in
-  every M7 payload; T1's acts with the edges and motives T1 declares (envelope_v0.md §3).
+  SPR-019 D-08); a posthumous birth within nine months of the father's death; a succession in the
+  instant a holder dies or is deposed, at the `Polity` phase, by the title's law (M7 0.6.0,
+  SAGA-13: both seats are held under the polity's male-preference cognatic primogeniture, so the
+  seat of Thorne passes through Hugh's daughter to Cedric); a claim created only when a succession
+  passes over the legal heir or a ruler is deposed; a deposition by the leading pressed claimant,
+  who holds an unrenounced claim; a title named in every M7 payload; a regrant on a year's first
+  day; T1's acts with the edges and motives T1 declares (envelope_v0.md §3).
+- ``fells``: the High Fells polity of ``specs/manifest/examples/twin_vales.yaml`` reduced to two
+  houses and two seats under tanistry (an adult agnate or no one), over its second year: the
+  chieftain dies with only a minor son, so the sovereign title falls into an interregnum; the
+  vassal lord of Carrow dies while it is open, with only a minor son, so his seat finds no
+  candidate and joins it with its own ``INTERREGNUM_CRISIS`` (REV-WAVE7 K2; M7 0.6.0 arbitrate);
+  at the resolution the chieftain's son, of age by then, succeeds, and the joined seat, still
+  without a candidate, reverts to him in demesne, its ``SUCCEED`` citing the liege's crisis.
 - ``solitary``: one person on a 365-day calendar (rung 0): a death and the extinction.
 - ``untold``: the same, with the death refused by the chronicle (``cause_told = 0`` on the
   extinction's edge; no ``DEATH`` record): the untold-cause case of annals_v0.md §3.
@@ -24,7 +33,7 @@ fallback reads as it will at G1a (REV-SPR-029 F21); they are not H64 ids and not
 by the engine. Verb ids, act classes and tellability come from the Registry plus the next-M2
 delta (``BIRTH``, ``MARRIAGE``), the dictionary the chronicle headers name as ``0.2.0+next``.
 
-Run: python -I specs/annals/fixtures/gen_fixtures.py [--check]
+Run: python -I specs/annals/fixtures/gen_fixtures.py --check | --write   (no flag also writes)
 """
 
 from __future__ import annotations
@@ -210,14 +219,16 @@ P = {
         "nell",
         "col",
         "sibby",
+        "elsa",
     )
 }
 HOUSE = {"ashcombe": pid("house:ashcombe"), "thorne": pid("house:thorne")}
 # birth years (index; negative before the epoch) of the genesis persons, and the dead's death years
 Date = tuple[int, int, int]
+Genesis = tuple[int, str | int, str | int, Date, Date | None, str | None]
 # The order is the founder order: founder k is the k-th entry, the manifest's cast first (as
 # rh-worldgen issues founder(seed, k), SPR-019 D-02; REV-SPR-029 R26), then the back-fill.
-GENESIS: dict[str, tuple[int, str | int, str | int, Date, Date | None, str | None]] = {
+GENESIS: dict[str, Genesis] = {
     # name: (sex, mother, father, birth (y, m, d), death (y, m, d) or None, house or None)
     "edric": (MALE, "ash_root_wife", "ash_root", (-38, 3, 15), None, "ashcombe"),
     "maud": (FEMALE, 0, 0, (-36, 3, 15), None, None),
@@ -248,6 +259,17 @@ GENESIS: dict[str, tuple[int, str | int, str | int, Date, Date | None, str | Non
 # named); Col walks Col -> Cedric -> Osric, two in-run rows, to a keyframe member row, House
 # Ashcombe, and never to his mother's house. Orm is a cast member who shares Edric's name (the R33
 # golden case): both bearers and every child designated through either father carry a label.
+# Elsa is the distinguishing child (SPR-029 finding F-21; REV-WAVE8 G15, A1): an in-run daughter
+# of Wynn, a daughter of House Ashcombe, by Orm, her houseless husband. Wynn is un-named from y10:
+# three degrees from the holder, Cedric, and third in the lordship's line once Wulf is born, she
+# meets no criterion at y10's dormancy pass (M7 0.6.0). The agnatic walk gives Elsa no house and a
+# cognatic fallback would give her Ashcombe, so her death, whose only cast she is, is told in
+# House Ashcombe's annal under the cognatic rule and not under M7 0.5.0's agnatic one: the goldens
+# pin the walk (Col and Bram walk the same under both rules).
+TITLES = (  # (title, tier, liege): the extract's title rows (M7 title.tier, title.liege; B1)
+    (LORDSHIP, "sovereign", 0),
+    (THORNE_SEAT, "major", LORDSHIP),
+)
 TENURES = (  # (title, holder, start (y, m, d), end (y, m, d) or None)
     (LORDSHIP, "ash_root", (-40, 1, 1), (-12, 1, 1)),
     (LORDSHIP, "edric", (-12, 1, 1), None),
@@ -256,17 +278,10 @@ TENURES = (  # (title, holder, start (y, m, d), end (y, m, d) or None)
 )
 
 
-def _ref(x: str | int) -> int:
-    return P[x] if isinstance(x, str) else x
-
-
 def ashcombe(seg: Segment) -> None:  # noqa: PLR0915  (one scripted history, in order)
     """House Ashcombe and House Thorne over forty years."""
     t = seg.tick
-    living = sorted(n for n, g in GENESIS.items() if g[4] is None)
-    for name in sorted(living, key=lambda n: P[n]):
-        sex, mother, father, birth, _, _ = GENESIS[name]
-        seg.entry(0, P[name], FOUNDER, sex, _ref(mother), _ref(father), t(*birth))
+    founder_entries(seg, ASHCOMBE)
     # y1: Osric and Ysolde marry; their first son is born nine months after the wedding.
     tk = t(1, 2, 5)
     seg.event(tk, VITAL, "MARRIAGE", roles=((ACTOR, P["osric"]), (TARGET, P["ysolde"])))
@@ -359,6 +374,11 @@ def ashcombe(seg: Segment) -> None:  # noqa: PLR0915  (one scripted history, in 
         snaps=((P["aldwin"], 55 * ONE),),
         causes=(motive(e_osric, None, 90, 40),),
     )
+    # y12: the distinguishing child (F-21): Wynn, un-named since y10, bears her houseless husband
+    # Orm a daughter, Elsa, of no house under the agnatic rule (the mother's house never passes).
+    tk = t(12, 10, 10)
+    seg.event(tk, VITAL, "BIRTH", (FEMALE, 2), ((ACTOR, P["wynn"]), (TARGET, P["elsa"])))
+    seg.entry(tk, P["elsa"], BORN, FEMALE, P["wynn"], P["orm"], tk)
     tk = t(13, 2, 2)
     e_recon = seg.event(
         tk,
@@ -379,6 +399,11 @@ def ashcombe(seg: Segment) -> None:  # noqa: PLR0915  (one scripted history, in 
         snaps=((P["giles"], 58 * ONE),),
         causes=(motive(e_recon, None, -40, 30),),
     )
+    # y15: Elsa dies in childhood. Her death has no cast but her, so it is told in no house's annal
+    # under the agnatic walk; a cognatic fallback would tell it in House Ashcombe's (F-21).
+    tk = t(15, 7, 7)
+    e_elsa = seg.event(tk, VITAL, "DEATH", (NATURAL,), ((TARGET, P["elsa"]),))
+    seg.exit(tk, P["elsa"], NATURAL, e_elsa)
     # y16: Hugh dies; Giles succeeds to the seat of Thorne in the same instant.
     tk = t(16, 11, 30)
     e_hugh = seg.event(tk, VITAL, "DEATH", (NATURAL,), ((TARGET, P["hugh"]),))
@@ -476,11 +501,15 @@ def ashcombe(seg: Segment) -> None:  # noqa: PLR0915  (one scripted history, in 
     tk = t(29, 2, 2)
     seg.event(tk, VITAL, "BIRTH", (MALE, 1), ((ACTOR, P["nell"]), (TARGET, P["col"])))
     seg.entry(tk, P["col"], BORN, MALE, P["nell"], P["cedric"], tk)
-    # y30: Ysolde dies; y31: Tilda; y32: Nell. y33: Giles dies childless: the seat of Thorne finds
-    # no clear heir (an interregnum, castless) and House Thorne is extinguished with him. No claim
-    # arises:
-    # M7 creates claims only for a passed-over heir or at a deposition (R26). y34: the
-    # interregnum resolves in Cedric's favour.
+    # y30: Ysolde dies; y31: Tilda; y32: Nell. y33: Giles dies childless and House Thorne is
+    # extinguished with him, but the seat of Thorne does not fall vacant: its law is the polity's
+    # male-preference cognatic primogeniture (manor.yaml; [algorithm.dynastic_backfill] B1), whose
+    # title-blood rule admits Hugh's daughters' sons, so Cedric, Ysolde's elder son, is the legal
+    # heir and succeeds in the instant (membership is agnatic; the law is not). Before AN-1 this
+    # instant held an INTERREGNUM_CRISIS on the seat, which M7 cannot emit for a vassal while its
+    # liege, the lordship, is held (REV-WAVE8 G15, SPR-029 F-24; the fixture-vassal-liege-held
+    # control plants it back). No claim arises: M7 creates claims only for a passed-over heir or
+    # at a deposition (R26).
     tk = t(30, 6, 6)
     e_ysolde = seg.event(tk, VITAL, "DEATH", (NATURAL,), ((TARGET, P["ysolde"]),))
     seg.exit(tk, P["ysolde"], NATURAL, e_ysolde)
@@ -492,7 +521,14 @@ def ashcombe(seg: Segment) -> None:  # noqa: PLR0915  (one scripted history, in 
     seg.exit(tk, P["nell"], NATURAL, e_nell)
     tk = t(33, 6, 6)
     e_giles = seg.event(tk, VITAL, "DEATH", (NATURAL,), ((TARGET, P["giles"]),))
-    e_inter = seg.event(tk, POLITY, "INTERREGNUM_CRISIS", (THORNE_SEAT,), causes=(told(e_giles),))
+    seg.event(
+        tk,
+        POLITY,
+        "SUCCEED",
+        (THORNE_SEAT,),
+        ((ACTOR, P["cedric"]), (TARGET, P["giles"])),
+        causes=(told(e_giles),),
+    )
     seg.event(
         tk,
         POLITY,
@@ -502,69 +538,95 @@ def ashcombe(seg: Segment) -> None:  # noqa: PLR0915  (one scripted history, in 
         causes=(told(e_giles),),
     )
     seg.exit(tk, P["giles"], NATURAL, e_giles)
+    # y34: the yearly regrant, on the year's first day (M7's Year/Polity binding): Cedric holds the
+    # seat of Thorne in demesne below his own lordship and grants it to his brother (no petitioner;
+    # Wulf and Col, kin within two degrees holding no seat or office, tie, and regrant_tie draws).
     tk = t(34, 1, 1)
-    seg.event(
-        tk,
-        POLITY,
-        "SUCCEED",
-        (THORNE_SEAT,),
-        ((ACTOR, P["cedric"]), (TARGET, P["giles"])),
-        causes=(told(e_inter),),
-    )
-    # y35: Cedric grants the vacant office of the seat to his brother.
-    tk = t(35, 2, 2)
     seg.event(
         tk, POLITY, "SEAT_GRANTED", (THORNE_SEAT,), ((ACTOR, P["cedric"]), (TARGET, P["wulf"]))
     )
 
 
-def ashcombe_keyframe(seg: Segment) -> str:
-    """The keyframe extract of the dynastic fixture (annals_v0.md §1, §6)."""
+@dataclass(frozen=True)
+class Dynasts:
+    """A dynastic fixture's genesis: persons, houses, titles with tier and liege, tenures."""
+
+    world: str
+    ids: dict[str, int]
+    genesis: dict[str, Genesis]
+    houses: dict[str, int]
+    titles: tuple[tuple[int, str, int], ...]
+    tenures: tuple[tuple[int, str, Date, Date | None], ...]
+    state_hash: str
+
+    def ref(self, x: str | int) -> int:
+        """A person's id by label (0 stays 0: no parent)."""
+        return self.ids[x] if isinstance(x, str) else x
+
+
+def founder_entries(seg: Segment, d: Dynasts) -> None:
+    """The living genesis persons' LIFE_ENTRY records at tick 0, in PersonId order."""
+    living = [n for n, g in d.genesis.items() if g[4] is None]
+    for name in sorted(living, key=lambda n: d.ids[n]):
+        sex, mother, father, birth, _, _ = d.genesis[name]
+        seg.entry(0, d.ids[name], FOUNDER, sex, d.ref(mother), d.ref(father), seg.tick(*birth))
+
+
+def keyframe(seg: Segment, d: Dynasts) -> str:
+    """The keyframe extract of a dynastic fixture (annals_v0.md §1, §6)."""
     t = seg.tick
     out = [
-        "# The keyframe extract of the ashcombe fixture (annals_v0.md §1, §6): the rows of the",
+        f"# The keyframe extract of the {d.world} fixture (annals_v0.md §1, §6): the rows of the",
         "# genesis",
         "# keyframe a house prologue reads, because the back-filled dead have no channel-A record",
         "# (REV-SPR-019 R1). `founder` is the founder index k of founder(seed, k) (SPR-019 D-02;",
-        "# the cast first), shown as `Founder #k+1` (annals_v0.md §4). GENERATED; do not edit.",
+        "# the cast first), shown as `Founder #k+1` (annals_v0.md §4). A title's `tier` and",
+        "# `liege` are M7's title.tier and title.liege, fixed at world creation (check 5; AN-1).",
+        "# GENERATED; do not edit.",
         "[extract]",
         'format = "rehoboam/annals/keyframe-extract/v0"',
         'keyframe = "kf/y000000/t000000000.arrow"   # the genesis keyframe the rows came from',
-        'state_hash = "0a5c3e1d9b7f2468"                 # its plane-A state_hash (illustrative)',
+        f'state_hash = "{d.state_hash}"                 # its plane-A state_hash (illustrative)',
         "",
     ]
-    for key in ("ashcombe", "thorne"):
-        out += ["[[house]]", f"id = {HOUSE[key]}   # {key}"]
-    for title in (LORDSHIP, THORNE_SEAT):
-        out += ["[[title]]", f"id = {title}"]
-    founders = {name: k for k, name in enumerate(GENESIS)}  # founder k: the cast first (R26)
-    for name, (sex, mother, father, birth, death, _) in sorted(
-        GENESIS.items(), key=lambda kv: P[kv[0]]
-    ):
+    for key, house_id in d.houses.items():
+        out += ["[[house]]", f"id = {house_id}   # {key}"]
+    for title, tier, liege in d.titles:
+        out += ["[[title]]", f"id = {title}", f'tier = "{tier}"', f"liege = {liege}"]
+    founders = {name: k for k, name in enumerate(d.genesis)}  # founder k: the cast first (R26)
+    by_id = sorted(d.genesis.items(), key=lambda kv: d.ids[kv[0]])
+    for name, (sex, mother, father, birth, death, _) in by_id:
         out += [
             "[[life_course]]",
-            f"person_id = {P[name]}   # {name}",
+            f"person_id = {d.ids[name]}   # {name}",
             f"founder = {founders[name]}",
             f"sex = {sex}",
-            f"mother_id = {_ref(mother)}",
-            f"father_id = {_ref(father)}",
+            f"mother_id = {d.ref(mother)}",
+            f"father_id = {d.ref(father)}",
             f"birth_tick = {t(*birth)}",
         ]
         if death is not None:
             out.append(f"exit_tick = {t(*death)}")
-    for name, (_, _, _, _, _, house) in sorted(GENESIS.items(), key=lambda kv: P[kv[0]]):
+    for name, (_, _, _, _, _, house) in by_id:
         if house is not None:
-            out += ["[[house_member]]", f"person = {P[name]}   # {name}", f"house = {HOUSE[house]}"]
-    for title, holder, start, end in TENURES:
+            out += [
+                "[[house_member]]",
+                f"person = {d.ids[name]}   # {name}",
+                f"house = {d.houses[house]}",
+            ]
+    for title, holder, start, end in d.tenures:
         out += [
             "[[tenure]]",
             f"title = {title}",
-            f"holder = {P[holder]}   # {holder}",
+            f"holder = {d.ids[holder]}   # {holder}",
             f"start = {t(*start)}",
         ]
         if end is not None:
             out.append(f"end = {t(*end)}")
     return "\n".join(out) + "\n"
+
+
+ASHCOMBE = Dynasts("ashcombe", P, GENESIS, HOUSE, TITLES, TENURES, "0a5c3e1d9b7f2468")
 
 
 ASHCOMBE_NAMES = """# The plane-C names file of the ashcombe fixture (annals_v0.md §4): what the
@@ -641,6 +703,128 @@ def solitary(seg: Segment, *, untold: bool) -> None:
     seg.exit(tk, ada, NATURAL, e_death)
 
 
+# --- the vassal interregnum fixture (REV-WAVE7 K2; AN-1) -----------------------------------------
+
+CHIEFTAINCY, CARROW_SEAT = 1, 2
+FP = {
+    name: pid(f"person:fells:{name}")
+    for name in (
+        "brannoc",
+        "ulric",
+        "fell_root",
+        "fell_root_wife",
+        "ardith",
+        "fergus",
+        "carrow_root",
+        "carrow_root_wife",
+        "mairead",
+        "cathal",
+    )
+}
+FELLS = Dynasts(
+    "fells",
+    FP,
+    {  # the founder order: the cast (the two holders), then the back-fill
+        "brannoc": (MALE, "fell_root_wife", "fell_root", (-48, 4, 4), None, "fell"),
+        "ulric": (MALE, "carrow_root_wife", "carrow_root", (-42, 8, 8), None, "carrow"),
+        "fell_root": (MALE, 0, 0, (-75, 2, 2), (-20, 9, 9), "fell"),
+        "fell_root_wife": (FEMALE, 0, 0, (-72, 3, 3), (-30, 1, 1), None),
+        "ardith": (FEMALE, 0, 0, (-38, 6, 6), (-10, 10, 10), None),
+        "fergus": (MALE, "ardith", "brannoc", (-15, 5, 1), None, "fell"),
+        "carrow_root": (MALE, 0, 0, (-70, 5, 5), (-15, 3, 3), "carrow"),
+        "carrow_root_wife": (FEMALE, 0, 0, (-66, 6, 6), (-25, 2, 2), None),
+        "mairead": (FEMALE, 0, 0, (-33, 7, 7), None, None),
+        "cathal": (MALE, "mairead", "ulric", (-10, 2, 2), None, "carrow"),
+    },
+    {"fell": pid("house:fell"), "carrow": pid("house:carrow")},
+    ((CHIEFTAINCY, "sovereign", 0), (CARROW_SEAT, "major", CHIEFTAINCY)),
+    (  # each root from his majority, then the only son, an adult (tanistry; B9)
+        (CHIEFTAINCY, "fell_root", (-59, 2, 2), (-20, 9, 9)),
+        (CHIEFTAINCY, "brannoc", (-20, 9, 9), None),
+        (CARROW_SEAT, "carrow_root", (-54, 5, 5), (-15, 3, 3)),
+        (CARROW_SEAT, "ulric", (-15, 3, 3), None),
+    ),
+    "c4f1a29e07b3d586",
+)
+
+
+def fells(seg: Segment) -> None:
+    """The chieftaincy of the High Fells and its vassal seat of Carrow, in the second year.
+
+    Both titles are held under tanistry (twin_vales.yaml's High Fells), whose line holds only adult
+    male agnates within three generations; majority_age is 16 and interregnum_max_days 180 (the
+    defaults, twin_vales' values). Fergus turns 16 on day 1 of month 5 of the second year; Cathal
+    is 11 throughout. Nobody holds a claim, an office or a petition, and Fergus has no living kin.
+    """
+    t = seg.tick
+    f = FP
+    founder_entries(seg, FELLS)
+    # y1 m3 d10: Brannoc dies; his only agnate, Fergus, is a minor, so the chieftaincy finds no
+    # candidate: an interregnum (castless), its resolution timer drawn within 180 days.
+    tk = t(1, 3, 10)
+    e_brannoc = seg.event(tk, VITAL, "DEATH", (NATURAL,), ((TARGET, f["brannoc"]),))
+    e_crisis = seg.event(
+        tk, POLITY, "INTERREGNUM_CRISIS", (CHIEFTAINCY,), causes=(told(e_brannoc),)
+    )
+    seg.exit(tk, f["brannoc"], NATURAL, e_brannoc)
+    # y1 m4 d4: Ulric dies while the liege's interregnum is open. Cathal is a minor, nobody has a
+    # claim or a petition, and the liege has no holder whose kin could be granted the seat: no
+    # candidate, so the seat of Carrow joins the interregnum with its own crisis, triggered to
+    # Ulric's death, and no timer of its own (K2; M7 0.6.0 arbitrate and interregnum_delay).
+    tk = t(1, 4, 4)
+    e_ulric = seg.event(tk, VITAL, "DEATH", (NATURAL,), ((TARGET, f["ulric"]),))
+    seg.event(tk, POLITY, "INTERREGNUM_CRISIS", (CARROW_SEAT,), causes=(told(e_ulric),))
+    seg.exit(tk, f["ulric"], NATURAL, e_ulric)
+    # y1 m6 d1, 81 days after the crisis: the resolution. Fergus is of age now, the legal heir and
+    # alone: he succeeds his father. Then the joined seat is resolved with the same rule, right
+    # after its liege: still no candidate (Cathal a minor; no kin of Fergus within two degrees
+    # alive), so it reverts to the liege's holder in demesne, its SUCCEED triggered to the crisis
+    # the resolution timer carries, the liege's (M7 0.6.0 [[emits]] SUCCEED).
+    tk = t(1, 6, 1)
+    for title, predecessor in ((CHIEFTAINCY, "brannoc"), (CARROW_SEAT, "ulric")):
+        seg.event(
+            tk,
+            POLITY,
+            "SUCCEED",
+            (title,),
+            ((ACTOR, f["fergus"]), (TARGET, f[predecessor])),
+            causes=(told(e_crisis),),
+        )
+
+
+FELLS_NAMES = """# The plane-C names file of the fells fixture (annals_v0.md §4). Persons: the
+# two holders, as a manifest cast would name them (twin_vales.yaml has no cast; a fixture world
+# may); every other person is unnamed. Houses: the manifest's dynasties. Titles: the polity's
+# labels.
+# GENERATED by gen_fixtures.py; do not edit.
+[world]
+manifest = "specs/manifest/examples/twin_vales.yaml"   # the shape: its High Fells polity
+manifest_hash = "sha256:f886c0deaf070193c3ad0cc02a89e0ee2ef5835388b8881275375fcfbfd9d024"
+
+[persons]
+"{brannoc}" = "Brannoc Fell"
+"{ulric}" = "Ulric Carrow"
+
+[houses]
+"{fell}" = "House Fell"
+"{carrow}" = "House Carrow"
+
+[titles]
+"1" = "the chieftaincy of the High Fells"
+"2" = "the seat of Carrow"
+"""
+
+FELLS_WORLD = """# Fixture world for the family annals reference (AN-1): a vassal seat
+# joining its liege's interregnum (REV-WAVE7 K2), in the shape of the High Fells polity of
+# specs/manifest/examples/twin_vales.yaml (tanistry; two houses, a sovereign and a major seat).
+# Nothing here was run by the engine. GENERATED by gen_fixtures.py; do not edit.
+[world]
+id = "fells"
+days_per_year = 360
+epoch_label = "Year of the Fells"
+"""
+
+
 def build() -> dict[Path, str]:
     """Every fixture file, by path."""
     verbs, names, acts = registry_verbs()
@@ -650,11 +834,20 @@ def build() -> dict[Path, str]:
     ashcombe(seg)
     d = HERE / "ashcombe"
     out[d / "chronicle_A.txt"] = seg.text()
-    out[d / "keyframe.toml"] = ashcombe_keyframe(seg)
+    out[d / "keyframe.toml"] = keyframe(seg, ASHCOMBE)
     out[d / "names.toml"] = ASHCOMBE_NAMES.format(
         **{k: P[k] for k in ("edric", "maud", "hugh", "alys", "orm")}, **HOUSE
     )
     out[d / "world.toml"] = ASHCOMBE_WORLD
+    seg = Segment(360, verbs, names, acts, stress_attr)
+    fells(seg)
+    d = HERE / "fells"
+    out[d / "chronicle_A.txt"] = seg.text()
+    out[d / "keyframe.toml"] = keyframe(seg, FELLS)
+    out[d / "names.toml"] = FELLS_NAMES.format(
+        brannoc=FP["brannoc"], ulric=FP["ulric"], **FELLS.houses
+    )
+    out[d / "world.toml"] = FELLS_WORLD
     for name, untold in (("solitary", False), ("untold", True)):
         seg = Segment(365, verbs, names, acts, stress_attr)
         solitary(seg, untold=untold)
@@ -668,7 +861,9 @@ def build() -> dict[Path, str]:
 def main(argv: list[str] | None = None) -> int:
     """Write the fixtures; with ``--check``, compare the committed files with the output."""
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
-    parser.add_argument("--check", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--check", action="store_true")
+    mode.add_argument("--write", action="store_true", help="write the files (also the default)")
     args = parser.parse_args(argv)
     files = build()
     for path, text in files.items():

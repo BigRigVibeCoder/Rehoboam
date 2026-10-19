@@ -214,10 +214,11 @@ REQUIRED_GATES = (
     "Golden vectors: rh-snapshot plane hashes match the independent reference (gen_hash_golden "
     "--check; SPR-007 T-01)",
     "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference (SPR-018)",
-    "Instant log model v0: phases, levels, bindings and serial merges on eleven scripted "
+    "Instant log model v0: phases, levels, bindings and serial merges on fourteen scripted "
     "scenarios; what each step sees in inserted(), exited() and the observed events, the "
-    "merge-time form and its refusals, the genealogy index, thread invariance, the hash, resume; "
-    "the transcript and the vectors current (instant_log_model --check; EVO-002)",
+    "merge-time form and its refusals, the genealogy index, thread invariance, the hash, resume, "
+    "and the order M7's T-00b rules rest on (K12, Q6, K19 with X13h, MIN-10); the transcript and "
+    "the vectors current (instant_log_model --check; EVO-002)",
     "Keyframe sizes per rung: solo, household and hamlet's 200-year golden runs (SPR-013 T-13; "
     "reported)",
     "Licence ledger control: the GPL fixture is listed as GPL-3.0-only",
@@ -589,13 +590,19 @@ REQUIRED_GATES = (
     "gen_sampler_reference positive control: stale reference must FAIL",
     "gen_skeletons positive control: a hand-edited smoke skeleton must FAIL (SPR-008 ruling 2)",
     "gen_skeletons positive control: hand-edited skeleton must FAIL",
+    "instant_log_model positive control: M7's Year pass and vocation fire treating a person dead "
+    "this instant as any other must FAIL (T-00b; Q6 of T-00a's review)",
     "instant_log_model positive control: M7's naming criteria without the manifest's cast, so that "
     "tick 0's pass demotes a cast member, must FAIL (EVO-002; X4)",
+    "instant_log_model positive control: M7's re-sample moving REGENCY_END as if its date were "
+    "drawn must FAIL (T-00b; MIN-10 of T-00a's review)",
     "instant_log_model positive control: a genealogy index kept only at the instant's end must "
     "FAIL (EVO-002)",
     "instant_log_model positive control: a log not cleared at the instant's end must FAIL "
     "(EVO-002)",
     "instant_log_model positive control: a state hash that covers the log must FAIL (EVO-002)",
+    "instant_log_model positive control: a system's Day binding run before its Year binding at a "
+    "year's first instant, so on_death arbitrates before the Year pass, must FAIL (T-00b; K12)",
     "instant_log_model positive control: an append in place of exited()'s sorted insert must FAIL "
     "the order check, a later merge's death having the lower id (EVO-002; R9; T-00a MAJ-1)",
     "instant_log_model positive control: an append in place of inserted()'s sorted insert must "
@@ -604,6 +611,10 @@ REQUIRED_GATES = (
     "level's peers, must FAIL thread invariance (EVO-002)",
     "instant_log_model positive control: the merge-time form resolved against the log at the job's "
     "own merge must FAIL visibility (EVO-002)",
+    "instant_log_model positive control: the vocation drawn at the Year pass after the majority "
+    "date, not at the VOCATION_DUE fire, must FAIL (T-00b; K19)",
+    "instant_log_model positive control: the vocation fire ignoring person.spouse, so a person "
+    "married at the fire draws, must FAIL (T-00b; X13h)",
     "instant_log_model positive control: vectors with one state hash altered must FAIL as stale "
     "(EVO-002; T-00a MIN-5)",
     "kill -9 by name: a kill during sealing leaves no partial segment and the resume reseals "
@@ -615,6 +626,7 @@ REQUIRED_GATES = (
     "lint_arch control: a deny-listed dev-dependency of an engine crate, and a viewer's normal "
     "one, pass (V-INSP-05; SPR-011 T-00)",
     "lint_arch control: a system may depend on rh-sample (SPR-003 T-00)",
+    "lint_arch control: root lock holding bevy_ecs passes (V-R3D-14; SPR-033 T-06)",
     "lint_arch positive control: a #[global_allocator] behind cfg_attr must FAIL (SPR-009 GAP-6)",
     "lint_arch positive control: a #[global_allocator] outside rh-bench's benches must FAIL "
     "(SPR-009 T-05)",
@@ -664,6 +676,10 @@ REQUIRED_GATES = (
     "lint_arch positive control: rh-sample relabelled out of plane A must FAIL (SPR-003 T-00)",
     "lint_arch positive control: rh-sample without [lints] workspace = true must FAIL (SPR-003 "
     "GAP-9)",
+    "lint_arch positive control: root lock holding render/window package must FAIL (V-R3D-14; "
+    "SPR-033 T-06)",
+    "lint_arch positive control: root member depending on viewer crate must FAIL (V-R3D-14; "
+    "SPR-033 T-06)",
     "lint_arch positive control: system -> rh-snapshot aliased as rh-core must FAIL",
     "lint_arch positive control: system -> rh-snapshot as a build-dependency must FAIL",
     "lint_arch positive control: system -> rh-snapshot must FAIL",
@@ -671,6 +687,8 @@ REQUIRED_GATES = (
     "lint_arch positive control: unsafe outside the allow-listed file must FAIL (SPR-009 T-05)",
     "lint_arch positive control: unsafe_code relaxed by a crate not on the allow-list must FAIL "
     "(GOV-003 §2; SPR-009 T-05)",
+    "lint_arch positive control: viewer crate with unlisted path dependency must FAIL (V-R3D-14; "
+    "SPR-033 T-06)",
     "lint_forbidden control: a declared f32_field escape is accepted and counted (SPR-010 T-04)",
     "lint_forbidden control: a float in rh-sample passes (SPR-003 T-00)",
     "lint_forbidden control: a literal in-repository include! of a clean skeleton is followed "
@@ -808,8 +826,8 @@ REQUIRED_GATES = (
     "must FAIL (R3)",
     "lint_odd next positive control: a frozen fidelity-ladder representation changed "
     "without a record must FAIL (R3)",
-    "lint_odd next positive control: a frozen isolation expectation changed without a "
-    "record must FAIL (R3)",
+    "lint_odd next positive control: a frozen isolation horizon changed without a record must "
+    "FAIL (R3; T-00b amends the expectation)",
     "lint_odd next positive control: a frozen parameter source changed without a record "
     "must FAIL (R3)",
     "lint_odd next positive control: a frozen purpose statement changed without a record "
@@ -996,6 +1014,8 @@ REQUIRED_GATES = (
     "deposition must FAIL the possible-history check (REV-SPR-029 R26)",
     "selftest_annals positive control: a fixture deposition moved to a month's first day, its "
     "claims with it, must FAIL the possible-history check (REV-SPR-029 R26, R37)",
+    "selftest_annals positive control: a fixture vassal crisis while its liege is held must FAIL "
+    "the possible-history check (REV-WAVE7 K2; AN-1)",
     "selftest_annals positive control: a forged source row on a sidecar row must FAIL provenance "
     "(REV-SPR-029 R19 P7b, R37)",
     "selftest_annals positive control: a golden file no rendered group owns must FAIL as an "
@@ -1020,6 +1040,8 @@ REQUIRED_GATES = (
     "SPR-029)",
     "selftest_annals positive control: a text shorter than the render must FAIL provenance "
     "(REV-SPR-029 R34 P23)",
+    "selftest_annals positive control: a two-segment cut of solitary's chronicle with one "
+    "#segment digest altered must FAIL the fold (annals_v0.md §9.1; AN-0)",
     "selftest_annals positive control: an altered prologue text must FAIL provenance (REV-SPR-029 "
     "R19 P12, R37)",
     "selftest_annals positive control: two rows with their contents exchanged must FAIL "

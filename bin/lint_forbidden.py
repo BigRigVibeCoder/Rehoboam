@@ -1185,18 +1185,36 @@ def float_yielding_apis() -> dict[str, tuple[frozenset[str] | None, re.Pattern[s
         raise WorkspaceError(f"{LINT_ARCH}: no usable FLOAT_YIELDING_APIS: {err!r}") from err
 
 
+# Agent worktrees under .claude/worktrees/ are skipped (BCK-002 A-73).
+SKIPPED_WORKTREE_PARTS = (".claude", "worktrees")
+
+
+def is_agent_worktree(path: Path, root: Path) -> bool:
+    """Return whether ``path`` is under an agent worktree (.claude/worktrees/)."""
+    try:
+        parts = path.relative_to(root).parts
+    except ValueError:
+        parts = path.parts
+    return any(parts[i : i + 2] == SKIPPED_WORKTREE_PARTS for i in range(len(parts) - 1))
+
+
 def rust_files(roots: Iterable[Path]) -> list[Path]:
     """Return the ``.rs`` files under the given files or directories.
 
     A directory's own top-level ``target/`` (build output) is skipped; a source module that happens
-    to be named ``target`` deeper down is not.
+    to be named ``target`` deeper down is not. Agent worktrees (.claude/worktrees/) are skipped
+    (BCK-002 A-73).
     """
     files: set[Path] = set()
     for root in roots:
         if root.is_file():
             files.add(root)
             continue
-        files.update(p for p in root.rglob("*.rs") if p.relative_to(root).parts[0] != "target")
+        files.update(
+            p
+            for p in root.rglob("*.rs")
+            if p.relative_to(root).parts[0] != "target" and not is_agent_worktree(p, root)
+        )
     return sorted(p for p in files if p.suffix == ".rs")
 
 

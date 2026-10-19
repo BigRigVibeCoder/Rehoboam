@@ -404,6 +404,18 @@ odd_observes_control() {
   "$PY" -I specs/systems/lint_odd.py --extra-specs "$dir" "${overlay[@]}"
 }
 
+# annals_fold_control (annals_v0.md §9.1; AN-0): the committed solitary chronicle cut by the reference into its two
+# sim-year segments, which must fold, then with the second #segment line's digest zeroed, which must FAIL the fold.
+annals_fold_control() {
+  local dir=target/rendered-fixtures/annals_fold
+  rm -rf "$dir" && mkdir -p "$dir" || return 1
+  "$PY" -I specs/annals/selftest_annals_v0.py segment --world specs/annals/fixtures/solitary --out "$dir/cut.txt" || return 1
+  "$PY" -I specs/annals/selftest_annals_v0.py fold "$dir/cut.txt" >/dev/null || { echo "HARNESS ERROR: the unaltered cut does not fold"; return 1; }
+  sed 's/^\(#segment y000003 .* canonical_digest=\)[0-9a-f]*$/\100000000000000000000000000000000/' "$dir/cut.txt" > "$dir/altered.txt" || return 1
+  if cmp -s "$dir/cut.txt" "$dir/altered.txt"; then echo "HARNESS ERROR: the sed planted nothing"; return 1; fi
+  "$PY" -I specs/annals/selftest_annals_v0.py fold "$dir/altered.txt"
+}
+
 # lint_odd --next controls (SPR-015; REV-SPR-015 NIT-4): rendered from the next M2 spec itself, never copied, so they
 # cannot drift. odd_next_control <case>: algorithm (a frozen S0 step reworded), rng (a purpose planted before
 # death_time), bound (the Registry delta with tfr's upper bound moved). Each must FAIL with its own diagnostic.
@@ -439,13 +451,13 @@ odd_next_control() {
       # the M7 draft beside the M2 one and the lock; and the reviewer's three q5 cases, which linted PASS before R3
       cp "$src" "$lock" "$dir/" || return 1
       case "$1" in
-        submodel) sed '/^name = "regency"$/{n;s/^summary = "/summary = "PLANTED /}' "$m7" > "$dir/M7.dynasty.odd.toml" ;;   # regency: no record amends it (exit_hazards has one since 0.6.0, F-3)
+        submodel) sed '/^name = "apply_commands"$/{n;s/^summary = "/summary = "PLANTED /}' "$m7" > "$dir/M7.dynasty.odd.toml" ;;   # apply_commands: no record amends it (exit_hazards has one since 0.6.0, F-3; regency since T-00b, F-10)
         command) sed '/^command = "ScheduleDeath"$/,/^why = "/s/^why = "/why = "PLANTED /' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
         coupling) sed '0,/^via = "/s//via = "PLANTED /' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
         source) sed '0,/^source = "/s//source = "PLANTED /' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
         ladder) sed '0,/^representation = "/s//representation = "PLANTED /' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
         purpose) sed '0,/^statement = "Keep houses/s//statement = "PLANTED Keep houses/' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
-        isolation) sed '0,/^expect = "/s//expect = "PLANTED /' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
+        isolation) sed '0,/^horizon = "/s//horizon = "PLANTED /' "$m7" > "$dir/M7.dynasty.odd.toml" ;;   # horizon: no record amends it (expect has one since T-00b)
         design) sed '0,/^basic_principles = "/s//basic_principles = "PLANTED /' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
         scales) sed '0,/^extent = "/s//extent = "PLANTED /' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
         requirements) sed '0,/^requirements = \["SIM-3"/s//requirements = ["DATA-8", "SIM-3"/' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
@@ -1348,6 +1360,10 @@ run "lint_arch positive control: rh-manifest relabelled as plane A must FAIL (SP
 run "lint_arch positive control: an engine crate depending directly on a deny-listed crate must FAIL (V-INSP-05; SPR-011 T-00)" "fail:VIOLATION [engine-purity] rh-cli: engine crate depends on reqwest (HTTP client (LLM and web APIs)) through rh-cli -> reqwest;" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/engine_purity_direct/Cargo.toml &&
 run "lint_arch positive control: an engine crate reaching a deny-listed crate transitively must FAIL (V-INSP-05; SPR-011 T-00)" "fail:VIOLATION [engine-purity] rh-cli: engine crate depends on axum (HTTP UI (web server framework)) through rh-cli -> middle -> axum;" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/engine_purity_transitive/Cargo.toml &&
 run "lint_arch control: a deny-listed dev-dependency of an engine crate, and a viewer's normal one, pass (V-INSP-05; SPR-011 T-00)" "pass:1 engine crates checked against" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/engine_purity_dev/Cargo.toml &&
+run "lint_arch positive control: root member depending on viewer crate must FAIL (V-R3D-14; SPR-033 T-06)" "fail:VIOLATION [viewer-isolation] rh-bench: root member depends on rh-view-core under viewer/:" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/viewer_isolation/member_dep/Cargo.toml &&
+run "lint_arch positive control: root lock holding render/window package must FAIL (V-R3D-14; SPR-033 T-06)" "fail:VIOLATION [viewer-isolation] workspace: root lock holds render/window package winit;" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/viewer_isolation/lock_has_render_stack/Cargo.toml &&
+run "lint_arch positive control: viewer crate with unlisted path dependency must FAIL (V-R3D-14; SPR-033 T-06)" "fail:VIOLATION [viewer-isolation] rh-view: viewer crate has path dependency on rh-cli" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/viewer_isolation/viewer_path_dep/Cargo.toml &&
+run "lint_arch control: root lock holding bevy_ecs passes (V-R3D-14; SPR-033 T-06)" pass "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/viewer_isolation/lock_has_bevy_ecs/Cargo.toml &&
 run "lint_arch positive control: a crate-local clippy.toml must FAIL (SPR-003 GAP-12)" "fail:VIOLATION [clippy-config] crates/rh-sample/clippy.toml: a clippy configuration other than the workspace root's" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/clippy_config/crate_local/Cargo.toml &&
 run "lint_arch positive control: a symlinked workspace member must FAIL (SPR-003 GAP-13)" "fail:VIOLATION [clippy-config] rh-sample: its manifest directory" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/clippy_config/symlinked_member/Cargo.toml &&
 run "lint_arch positive control: a clippy.toml reached through a symlinked member must FAIL (SPR-003 GAP-13)" "fail:VIOLATION [clippy-config] node_modules/rh-sample/clippy.toml: a clippy configuration other than" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/clippy_config/symlinked_member/Cargo.toml &&
@@ -1458,13 +1474,13 @@ run "lint_odd next positive control: a next version that changes a frozen algori
 run "lint_odd next positive control: a new RNG purpose before a frozen one must FAIL (SPR-015)" "fail:frozen RNG purpose death_time must stay at position 0" odd_next_control rng &&
 run "lint_odd next positive control: a Registry overlay that moves a frozen parameter bound must FAIL (SPR-015)" "fail:replacement changes or drops parameter murder_hazard_base bounds" odd_next_control bound &&
 run "lint_odd next positive control: an amendment whose text changed since the committed lock must FAIL (SPR-015)" "fail:changed its text since amendments.lock.toml" odd_next_control lock &&
-run "lint_odd next positive control: a frozen submodel summary changed without a record must FAIL (deny by default; PR #79 review R3)" "fail:frozen submodels.regency.summary changed without an [[amends]] record" odd_next_control submodel &&
+run "lint_odd next positive control: a frozen submodel summary changed without a record must FAIL (deny by default; PR #79 review R3)" "fail:frozen submodels.apply_commands.summary changed without an [[amends]] record" odd_next_control submodel &&
 run "lint_odd next positive control: a frozen command why changed without a record must FAIL (R3)" "fail:frozen commands.ScheduleDeath.why changed without an [[amends]] record" odd_next_control command &&
 run "lint_odd next positive control: a frozen coupling via changed without a record must FAIL (R3)" "fail:frozen couplings.M6.polity/in.via changed without an [[amends]] record" odd_next_control coupling &&
 run "lint_odd next positive control: a frozen parameter source changed without a record must FAIL (R3)" "fail:frozen params.murder_hazard_base.source changed without an [[amends]] record" odd_next_control source &&
 run "lint_odd next positive control: a frozen fidelity-ladder representation changed without a record must FAIL (R3)" "fail:frozen fidelity_ladder.F0.representation changed without an [[amends]] record" odd_next_control ladder &&
 run "lint_odd next positive control: a frozen purpose statement changed without a record must FAIL (R3)" "fail:frozen purpose.statement changed without an [[amends]] record" odd_next_control purpose &&
-run "lint_odd next positive control: a frozen isolation expectation changed without a record must FAIL (R3)" "fail:frozen isolation.expect changed without an [[amends]] record" odd_next_control isolation &&
+run "lint_odd next positive control: a frozen isolation horizon changed without a record must FAIL (R3; T-00b amends the expectation)" "fail:frozen isolation.horizon changed without an [[amends]] record" odd_next_control isolation &&
 run "lint_odd next positive control: a frozen design concept changed without a record must FAIL (R3)" "fail:frozen design.basic_principles changed without an [[amends]] record" odd_next_control design &&
 run "lint_odd next positive control: a frozen scales field changed without a record must FAIL (R3)" "fail:frozen scales.extent changed without an [[amends]] record" odd_next_control scales &&
 run "lint_odd next positive control: the frozen requirement ids changed without a record must FAIL (R3)" "fail:frozen system.requirements changed without an [[amends]] record" odd_next_control requirements &&
@@ -1697,7 +1713,7 @@ run "control_v1 positive control: a step that pauses one instant past its target
 run "control_v1 positive control: control.pace on the stream method table must FAIL (wire_v1 §4.5; SPR-027 T-01)" "fail:the stream method table carries control.pace" "$PY" -I specs/stream/selftest_control_v1.py --control pace-on-stream &&
 run "control_v1 positive control: a resume that owes the paused wall time must FAIL (SPR-027 T-01)" "fail:paused time was owed" "$PY" -I specs/stream/selftest_control_v1.py --control paused-time-owed &&
 run "control_v1 positive control: a sixth method on the control table must FAIL the method-table check (REV-SPR-027-control C4; SPR-027 T-01)" "fail:the control method table is not exactly the five methods of" "$PY" -I specs/stream/selftest_control_v1.py --control extra-method &&
-run "Instant log model v0: phases, levels, bindings and serial merges on eleven scripted scenarios; what each step sees in inserted(), exited() and the observed events, the merge-time form and its refusals, the genealogy index, thread invariance, the hash, resume; the transcript and the vectors current (instant_log_model --check; EVO-002)" "pass:OK:" "$PY" -I specs/engine/instant_log_model.py --check &&
+run "Instant log model v0: phases, levels, bindings and serial merges on fourteen scripted scenarios; what each step sees in inserted(), exited() and the observed events, the merge-time form and its refusals, the genealogy index, thread invariance, the hash, resume, and the order M7's T-00b rules rest on (K12, Q6, K19 with X13h, MIN-10); the transcript and the vectors current (instant_log_model --check; EVO-002)" "pass:OK:" "$PY" -I specs/engine/instant_log_model.py --check &&
 run "instant_log_model positive control: jobs that merge as they finish, so a later job sees its level's peers, must FAIL thread invariance (EVO-002)" "fail:THREAD INVARIANCE: job order" "$PY" -I specs/engine/instant_log_model.py --control peer-visible &&
 run "instant_log_model positive control: an append in place of inserted()'s sorted insert must FAIL the order check (EVO-002)" "fail:ORDER: inserted() is not in ascending row order" "$PY" -I specs/engine/instant_log_model.py --control unsorted-inserted &&
 run "instant_log_model positive control: an append in place of exited()'s sorted insert must FAIL the order check, a later merge's death having the lower id (EVO-002; R9; T-00a MAJ-1)" "fail:ORDER: exited() is not in ascending row order" "$PY" -I specs/engine/instant_log_model.py --control unsorted-exited &&
@@ -1706,6 +1722,11 @@ run "instant_log_model positive control: a state hash that covers the log must F
 run "instant_log_model positive control: a genealogy index kept only at the instant's end must FAIL (EVO-002)" "fail:GENEALOGY: children(P" "$PY" -I specs/engine/instant_log_model.py --control genealogy-late &&
 run "instant_log_model positive control: the merge-time form resolved against the log at the job's own merge must FAIL visibility (EVO-002)" "fail:VISIBILITY: X2.observer resolved the merge-time form" "$PY" -I specs/engine/instant_log_model.py --control late-watermark &&
 run "instant_log_model positive control: M7's naming criteria without the manifest's cast, so that tick 0's pass demotes a cast member, must FAIL (EVO-002; X4)" "fail:NAMED: world_start_cast ends with" "$PY" -I specs/engine/instant_log_model.py --control cast-demoted &&
+run "instant_log_model positive control: a system's Day binding run before its Year binding at a year's first instant, so on_death arbitrates before the Year pass, must FAIL (T-00b; K12)" "fail:YEAR PASS (K12): the Year pass at day 360" "$PY" -I specs/engine/instant_log_model.py --control day-before-year &&
+run "instant_log_model positive control: M7's Year pass and vocation fire treating a person dead this instant as any other must FAIL (T-00b; Q6 of T-00a's review)" "fail:SKIP (Q6): M7 sent Demote for P6" "$PY" -I specs/engine/instant_log_model.py --control exited-not-skipped &&
+run "instant_log_model positive control: the vocation drawn at the Year pass after the majority date, not at the VOCATION_DUE fire, must FAIL (T-00b; K19)" "fail:VOCATION: P21's vocation was written at day 360" "$PY" -I specs/engine/instant_log_model.py --control vocation-yearly &&
+run "instant_log_model positive control: the vocation fire ignoring person.spouse, so a person married at the fire draws, must FAIL (T-00b; X13h)" "fail:VOCATION: P22, married at the fire" "$PY" -I specs/engine/instant_log_model.py --control married-draws &&
+run "instant_log_model positive control: M7's re-sample moving REGENCY_END as if its date were drawn must FAIL (T-00b; MIN-10 of T-00a's review)" "fail:RESAMPLE: REGENCY_END about P40 moved from day 9" "$PY" -I specs/engine/instant_log_model.py --control regency-redrawn &&
 run "instant_log_model positive control: vectors with one state hash altered must FAIL as stale (EVO-002; T-00a MIN-5)" "fail:STALE: target/rendered-fixtures/instant_log_vectors_altered.json differs from the reference" instant_log_vectors_stale_control &&
 run "Chronicle SQL-twin equivalence" pass "$PY" -I specs/chronicle/selftest.py &&
 run "Chronicle envelope v0: anchored snapshots, typed edges, cause_told, provenance index, byte budget (selftest_envelope; SPR-020)" "pass:ENVELOPE v0: PASS" "$PY" -I specs/chronicle/selftest_envelope.py &&
@@ -1714,7 +1735,7 @@ run "selftest_envelope positive control: a motive on a triggered edge must FAIL 
 run "selftest_envelope positive control: a state value whose cause is a later event must FAIL (V-SAGA-21; SPR-020)" "fail:4. provenance of change: FAIL" "$PY" -I specs/chronicle/selftest_envelope.py --control cause-later &&
 run "selftest_envelope positive control: fifty witnesses on every event must FAIL the byte budget (V-SAGA-15; REV-SPR-020 R11)" "fail:6. the byte budget: FAIL" "$PY" -I specs/chronicle/selftest_envelope.py --control budget-bloat &&
 run "selftest_envelope positive control: an input's consequence that loses the origin after one hop must FAIL (05.2 §4.0 criterion 4; REV-SPR-020 R14)" "fail:7. origin through hops: FAIL" "$PY" -I specs/chronicle/selftest_envelope.py --control origin-lost &&
-run "Annals fixtures: the committed fixture chronicles equal the scripted history (gen_fixtures --check; SPR-029, REV-SPR-029 R10)" "pass:checked 10 fixture files" "$PY" -I specs/annals/fixtures/gen_fixtures.py --check &&
+run "Annals fixtures: the committed fixture chronicles equal the scripted history (gen_fixtures --check; SPR-029, REV-SPR-029 R10)" "pass:checked 14 fixture files" "$PY" -I specs/annals/fixtures/gen_fixtures.py --check &&
 run "Family annals v0: provenance re-derived by a whole-group re-render, template slots, no model, calendar, a possible history under M7's rules, determinism in two processes, coverage, injective designation, a canonical extract digest, golden annals and manifests (selftest_annals_v0 --check; SPR-029)" "pass:ANNALS v0: PASS" "$PY" -I specs/annals/selftest_annals_v0.py --check &&
 run "selftest_annals positive control: a sentence with no sidecar row must FAIL provenance (V-NAR-05; SPR-029)" "fail:has no sidecar row: 'Thus the chronicle ended, and the land was quiet.'" "$PY" -I specs/annals/selftest_annals_v0.py --check --control no-event-id &&
 run "selftest_annals positive control: a row that drops its own event must FAIL provenance (REV-SPR-029 R2 P1)" "fail:events differs: [3] where the render gives [3,4]" "$PY" -I specs/annals/selftest_annals_v0.py --check --control row-drops-own &&
@@ -1725,15 +1746,17 @@ run "selftest_annals positive control: two rows with their contents exchanged mu
 run "selftest_annals positive control: an altered prologue text must FAIL provenance (REV-SPR-029 R19 P12, R37)" "fail:line 5: the text differs from the render: 'House Ashcombe entered the chronicle with four living members, so the record says.'" "$PY" -I specs/annals/selftest_annals_v0.py --check --control prologue-altered &&
 run "selftest_annals positive control: a prologue row citing another house's root must FAIL provenance (REV-SPR-029 R19 P13, R37)" "fail:sidecar line 5: persons differs: [626540833280463727] where the render gives" "$PY" -I specs/annals/selftest_annals_v0.py --check --control foreign-root &&
 run "selftest_annals positive control: a forged source row on a sidecar row must FAIL provenance (REV-SPR-029 R19 P7b, R37)" "fail:life/424242] where the render gives" "$PY" -I specs/annals/selftest_annals_v0.py --check --control forged-source &&
-run "selftest_annals positive control: a text shorter than the render must FAIL provenance (REV-SPR-029 R34 P23)" "fail:line 73: missing: 'On day 2 of month 2, p-aae0 granted a seat to p-e400.'" "$PY" -I specs/annals/selftest_annals_v0.py --check --control text-truncated &&
+run "selftest_annals positive control: a text shorter than the render must FAIL provenance (REV-SPR-029 R34 P23)" "fail:line 74: missing: 'On day 1 of month 1, p-aae0 granted a seat to p-e400.'" "$PY" -I specs/annals/selftest_annals_v0.py --check --control text-truncated &&
 run "selftest_annals positive control: a shared name left undisambiguated must FAIL injective designation (REV-SPR-029 R24, R33)" "fail:share the designation 'the first son of Edric Ashcombe'" "$PY" -I specs/annals/selftest_annals_v0.py --check --control shared-name &&
 run "selftest_annals positive control: a fixture deposition moved to a month's first day, its claims with it, must FAIL the possible-history check (REV-SPR-029 R26, R37)" "fail:a deposition on day 1 (M7's timer fires on days 2 to the last)" "$PY" -I specs/annals/selftest_annals_v0.py --check --control fixture-deposed-day-one &&
 run "selftest_annals positive control: a fixture claim with no triggered edge to a succession or deposition must FAIL the possible-history check (REV-SPR-029 R26)" "fail:a claim created with no triggered edge to a succession or a deposition (M7's when)" "$PY" -I specs/annals/selftest_annals_v0.py --check --control fixture-claim-untriggered &&
+run "selftest_annals positive control: a fixture vassal crisis while its liege is held must FAIL the possible-history check (REV-WAVE7 K2; AN-1)" "fail:fells: event 6: an INTERREGNUM_CRISIS on title 2 (major, liege 1) while its liege's interregnum is closed" "$PY" -I specs/annals/selftest_annals_v0.py --check --control fixture-vassal-liege-held &&
 run "selftest_annals positive control: a slot outside DEATH's declared roles must FAIL (SPR-029)" "fail:slot 'instrument' is not a role DEATH declares" "$PY" -I specs/annals/selftest_annals_v0.py --check --control undeclared-slot &&
 run "selftest_annals positive control: a template that reads world state must FAIL (ADR-0024; SPR-029)" "fail:is outside the envelope" "$PY" -I specs/annals/selftest_annals_v0.py --check --control state-read &&
 run "selftest_annals positive control: a network module imported during the render must FAIL (V-NAR-07; REV-SPR-029 F16)" "fail:was imported during the render" "$PY" -I specs/annals/selftest_annals_v0.py --check --control network-import &&
 run "selftest_annals positive control: a stale golden annal must FAIL (SPR-029)" "fail:STALE:" annals_golden_control &&
 run "selftest_annals positive control: a golden file no rendered group owns must FAIL as an orphan (REV-SPR-029 R39)" "fail:STALE: orphan target/rendered-fixtures/annals_orphan/ashcombe_line-1.txt: no rendered group owns it" annals_orphan_control &&
+run "selftest_annals positive control: a two-segment cut of solitary's chronicle with one #segment digest altered must FAIL the fold (annals_v0.md §9.1; AN-0)" "fail:altered.txt:4: segment y000003 (records on lines 5-7): its #segment line says canonical_digest=00000000000000000000000000000000; its records recompute to" annals_fold_control &&
 run "Annals template lint: every slot resolves to a declared role, snapshot, payload slot, motive or edge; every in-scope kind has a template and every out-of-scope kind a label (lint_templates; SPR-029)" "pass:PASS: 29 templates linted" "$PY" -I specs/annals/lint_templates.py &&
 run "lint_templates positive control: a slot naming a role the kind does not declare must FAIL (SPR-029)" "fail:slot 'instrument' is not a role DEATH declares in [[emits]]" annals_lint_control undeclared_role &&
 run "lint_templates positive control: a snapshot slot the kind does not declare must FAIL (SPR-029)" "fail:slot 'snapshot.stress.actor' is not a snapshot BIRTH declares" annals_lint_control undeclared_snapshot &&

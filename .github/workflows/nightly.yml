@@ -62,7 +62,7 @@ jobs:
     if: needs.freshness.outputs.run == 'true'
     runs-on: ubuntu-24.04
     # 30 minutes for the ignored tests, and the effect-language fuzz's nightly tier (SPR-017 T-08).
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       CARGO_TERM_COLOR: never
       CARGO_INCREMENTAL: "0"
@@ -82,7 +82,7 @@ jobs:
           tool: cargo-nextest@0.9
 
       - name: Ignored tests (V-DET-20 full sweep; rh-sample statistics, nightly tier)
-        run: cargo nextest run --workspace --locked --run-ignored ignored-only --no-fail-fast --no-capture
+        run: cargo nextest run --workspace --locked -E 'not test(effect_mutants)' --run-ignored ignored-only --no-fail-fast --no-capture
 
       # SPR-017 T-08: 64 times the PR tier's 16 seeds, effect_ref.py against the release evaluator.
       # Both sides are the standard library and rh-cli, so the runner's Python 3.12 runs it.

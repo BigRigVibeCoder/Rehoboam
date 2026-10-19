@@ -1,19 +1,19 @@
-# HANDOFF: Rehoboam, 2026-10-18 (the Architect's lane, paused at the usage limit)
+# HANDOFF: Rehoboam, 2026-10-18 (Architect Project Management & Roadmap Snapshot)
 
-> **Read this first, then `AGENTS.md` and `CLAUDE.md`.** This file is a snapshot of in-flight work for the developer who picks up the project. The repository's own records (CODEX, `docs/`, PRs) are authoritative; this file tells you where they are and what to do next, in order.
+> **Read this first, then `AGENTS.md` and `CLAUDE.md`.** This file is an authoritative snapshot of in-flight work for the developer or agent picking up the project. The repository's own records (CODEX, `docs/`, PRs) are authoritative; this file tells you where they are and what to do next, in order.
 >
-> - **How to work alongside the other agents** is now written down:
+> - **How to work alongside the other agents** is codified in:
 >   - `CODEX/10_GOVERNANCE/GOV-009`: Git and GitHub (branches, commits, PRs, merges);
 >   - `GOV-010`: CI;
 >   - `GOV-011`: ownership, independence, records and handoffs.
 >
->   §9 below applies them to this handoff. `CLAUDE.md` binds every agent whatever its vendor; `GEMINI.md` points here.
-> - **main:** `3824601` (the merge of PR #90, 2026-10-18); check it with `git ls-remote origin main`.
+>   `CLAUDE.md` binds every agent whatever its vendor; `GEMINI.md` points here.
+> - **main:** `736e8e5b` (the merge of PR #112, 2026-10-18); check it with `git ls-remote origin main`.
 > - **Priority (the director's D62, binding):**
 >   - **P1:** the engine core (P1a "Bloodlines", gate G1a), which wins every contention for CI minutes, review time and merge slots.
 >   - **P2:** the voxel viewer lane.
 >   - **P3:** era packs, after G2.
-> - **Director Decisions:** D58, D59, D61, and D63 are **RATIFIED and APPROVED** (`docs/decisions_pending.md`, `docs/decisions-log.md`). Wave 7, Minds, Wave 8, and Viewer plans are APPROVED.
+> - **Director Decisions:** D58, D59, D61, and D63 are **RATIFIED and APPROVED** (`docs/decisions_pending.md`, `docs/decisions-log.md`). Wave 7, Minds, Wave 8, and Viewer plans are APPROVED. Decisional queue is 100% clear.
 
 ---
 
@@ -21,9 +21,9 @@
 
 - **What it is.** Rehoboam is a deterministic historical-simulation engine (Rust workspace in `crates/`), with exact Python reference implementations of every algorithm (`specs/`), executable contracts, and a strict governance model in `CODEX/`. The plan is in `docs/` (start with `docs/00_executive_summary.md`). The director (a human, they/them) owns ADRs, `docs/11_roadmap.md`, the D-items and the non-negotiables in `CLAUDE.md`.
 - **How work runs** (ADR-0032; `AGENTS.md`, `CODEX/80_AGENTS/`, `CODEX/10_GOVERNANCE/`):
-  - **The Architect** (the role being handed over) writes or commissions plans and spec PRs, rules on findings, audits every sprint and merges every PR.
-  - **A Developer** implements a sprint on `sprint/SPR-NNN-*`.
-  - **A Tester**, on a different model from the Developer's, verifies independently and writes `CODEX/40_VERIFICATION/VER-SPR-NNN-TEST.md`.
+  - **The Architect** (`AGT-001`) writes or commissions plans and spec PRs, rules on findings, audits every sprint and merges every PR.
+  - **A Developer** (`AGT-002-CORE` or `AGT-002-TOOLS`) implements a sprint on `sprint/SPR-NNN-*`.
+  - **A Tester** (`AGT-003-*`), on a different model from the Developer's, verifies independently and writes `CODEX/40_VERIFICATION/VER-SPR-NNN-TEST.md`.
   - **Every plan and spec PR** gets an independent review, recorded as `REV-*`.
   - **The Architect's audit** is `VER-SPR-NNN.md`.
 - **The checks.** Run `bin/check_all.sh` (three parts: `--part core`, `--part golden`, `--part stream`; CI runs them as parallel jobs). Every gate also runs on a planted violation that must FAIL. `CLAUDE.md` lists every check. The Python environment: `uv sync --frozen --project python`, then `python/.venv/bin/python`.
@@ -38,181 +38,118 @@
     - bring `main` in with `git merge origin/main`;
     - merge PRs with a merge commit, pinned to the full head SHA that CI passed (`gh pr merge <N> --merge --match-head-commit <sha>`).
   - **PR body:** follow `.github/pull_request_template.md`: Sprint (with the new `Agent:` line), Compliance, Tasks, Verification, Merge route.
-  - **Commits:** this session ended its commits with its own attribution trailers. Use your own tool's attribution, and put no model identifiers anywhere else in the repository.
+  - **Commits:** follow GOV-009 with your own tool's attribution trailers. Put no model identifiers anywhere else in the repository.
   - **Disk:** a cargo `target/` is 8–11 GB, and two concurrent `check_all` runs filled a 40 GB container today. Run one cargo-building `check_all` at a time per machine, and delete `target/` dirs you no longer need.
   - **CI time:** each part's target is 12 minutes, the hard limit 15.
 
-## 2. State of `main` and what merged on 2026-10-18
+---
 
-| PR | What |
-|---|---|
-| #89 | The third CI part (stream), path-scoped references, the two-way inventory, baseline controls (BCK-002 A-63..A-66) |
-| #92 | D62 recorded (the director's priorities and viewer answers) |
-| #93 | Minds sprint plans SPR-023, SPR-024a/b, SPR-025 (REV-MINDS; D59 to the director) |
-| #94 | A-62: M2's elite fertility read on the couple |
-| #95 | Wave-7 plans SPR-021a/b, SPR-022a/b (REV-WAVE7; D58), D60 approved (SPR-038 plan) |
-| #96 | Red-team batch-08 dispositions |
-| #97 | Wave-8 plans SPR-028, SPR-029, SPR-030 (REV-WAVE8; D61) |
-| #98 | **T-1A** spec: `specs/systems/next/T1.minds.odd.toml` 0.4.0 A-steps, `specs/minds/selftest_minds_v0.py`; REV-T1A; SPR-023 0.3.1 |
-| #99 | **T-00a** spec: EVO-002 (the instant log, the genealogy index), `next/M7` 0.6.0, the `[[observes]]` lint, `specs/engine/instant_log_model.py`; REV-T00a |
-| #100 | Viewer plans SPR-033a/b, SPR-034, SPR-035 (revision 2); PRJ-003 v1.4.2; REV-VIEWER CLOSED; D63 filed; BCK-002 1.22.1 (A-68..A-71). Merged `fc979ee` |
-| #101 | PY-PKG: the uv project packaged (`uv_build==0.11.32`, `rehoboam_tools`, layout tests); fixes P1–P7. Unblocks SPR-027 T-05, SPR-028 T-02, SPR-029 T-02. Merged `66ec301` |
-| #83 | **SPR-014**: Lifecycle Queues (`sprint/SPR-014-lifecycle-queues`). Merged `d0e82c5` |
-| #104 | **SPR-038a**: Per-Instant Cost Reduction Stage A (`sprint/SPR-038a-per-instant-cost`). Merged `5e01601` |
-| #84 | **SPR-020**: Event Envelope in Engine (`sprint/SPR-020-envelope`). Merged `16a8559` |
-| #82 | **SPR-026**: World Stream v1 Live Edge (`sprint/SPR-026-stream-v1`). Merged `fbfa53b` |
-| #90 | **SPR-017**: Registry Effect Language v0 (`sprint/SPR-017-effect-language`). Merged `3824601` |
+## 2. State of `main` and what merged on 2026-10-18 / 2026-10-19
 
-## 3. Active Branches & Sprints
+| PR | What | Commit |
+|:---|:---|:---|
+| #111 | **SPR-033a**: Bevy Voxel Viewer Core (Bevy-free core, greedy mesher, hamlet terrain golden, isolation lint, viewer CI) (`sprint/SPR-033a-viewer-core`; VER-SPR-033a) | `7083e64` |
+| #119 | **A-73**: Ignore agent worktrees in `lint_arch` and `lint_forbidden` (`tools/A-73-worktree-lint-skip`) | `39d6bfb` |
+| #118 | Fix cargo-deny advisories (`deny.toml`) and nightly ignored-test panic (`rh-manifest`) | `4d3d14e` |
+| #117 | Owed plan edits (SPR-027, SPR-028, SPR-038) and Wave 6 dispatch briefs | `50ed8cf` |
+| #116 | Backlog triage of A-42, A-69, A-70, A-72, A-73, and A-81 note | `562386c` |
+| #115 | VER-SPR-038a backfill record (DRAFT) & Tester commission brief | `143f1e5` |
+| #114 | Probe record corrections, Director rulings of 2026-10-18, `.gitignore` `docs/red_team/games/` | `2deb172` |
+| #113 | Red-team Batch 09 dossier & probe B09-01 only | `07a3430` |
+| #112 | Handoff refresh, status report, BCK-002 A-78..A-82 | `736e8e5` |
+| #83 | **SPR-014**: Lifecycle Queues (`sprint/SPR-014-lifecycle-queues`) | `d0e82c5` |
+| #104 | **SPR-038a**: Per-Instant Cost Reduction Stage A (`sprint/SPR-038a-per-instant-cost`) | `5e01601` |
+| #84 | **SPR-020**: Event Envelope in Engine (`sprint/SPR-020-envelope`) | `16a8559` |
+| #82 | **SPR-026**: World Stream v1 Live Edge (`sprint/SPR-026-stream-v1`) | `fbfa53b` |
+| #90 | **SPR-017**: Registry Effect Language v0 (`sprint/SPR-017-effect-language`) | `3824601` |
 
-| Branch @ head | Role / Owner | State | Next action |
-|---|---|---|---|
-| `sprint/SPR-015-births-f1` | Developer (Exuberant), `AGT-002-CORE` | Provisioned from `main` (`3824601`). Work order in `docs/handoff/2026-10-18/exuberant_work_order.md`. | T-01..T-03 (Stage A), then checkpoint |
-| `sprint/SPR-016-mortality-f1` @ `da6c74d` | Developer, `AGT-002-CORE` | Stage 1 (exp/ln Q32_32, F1 schedule) Tester PASS; stage 2 held until SPR-015 merges | After SPR-015 |
-| `arch/AN-0-annals-fold` @ `cfe5961` | Drafter / Architect | Multi-segment annals fold; review findings R1–R11 in `an0_rulings.md` | Apply rulings, verify, merge |
-| `arch/AN-1-annals-m7-fixtures` @ `733960b` | Drafter / Architect | Annals fixtures for M7 F1 | Merge after AN-0 |
-| `arch/M7-0.6-T-00b` @ `8a5b1ea` | Drafter / Architect | M7 amendments for SPR-022 | Finish draft before SPR-021a |
+---
 
-## 4. Records you will need (all in the repo)
+## 3. Active Fleet, Branches & Pull Requests
 
-- **Plans:**
-  - `CODEX/05_PROJECT/SPR-*.md`, each with its specs table, tasks, acceptance and merge route.
-  - `CODEX/05_PROJECT/PRJ-002_P1aPlan.md` (P1a: order, graph, §6 spec PRs).
-  - `CODEX/05_PROJECT/PRJ-003_BevyVoxelViewer.md` (the viewer lane).
-  - `CODEX/05_PROJECT/BCK-002_ArchitectBacklog.md` (the Architect's backlog; A-68..A-71 are on PR #100).
-- **Reviews and audits:** `CODEX/40_VERIFICATION/` (`REV-*`, `VER-*`).
-- **Director items:** `docs/decisions_pending.md` (waiting) and `docs/decisions-log.md` (decided).
-- **Handoff-only records** (`docs/handoff/2026-10-18/`), which exist nowhere else:
-  - `spr014_code_review.md` and `spr014_rulings.md`: SPR-014's code review and the Architect's rulings (the developer's fixes are `1d351f5`).
-  - `spr026_code_review.md` and `spr026_rulings.md`: SPR-026's code review, the Tester's DEF-2, and the rulings.
-  - `an0_drafter_report.md`, `an0_review.md` and `an0_rulings.md`: AN-0 (R1–R11 to apply).
-  - `pypkg_drafter_report.md` and `pypkg_review.md`: PY-PKG (already applied on PR #101).
-  - `rulings_by_message.md`: the SPR-038a and SPR-017 rulings sent by message (copy them into those audits).
-  - `session_reports.md`: each remote session's own handoff report (state, what was and was not run, next steps). Read the one for a sprint before you touch its branch.
-  - `architect_log.md`: the Architect's terse running log, 2026-10-16 to 2026-10-18.
+| Branch @ head | Node / Role | State & PR | Next Action |
+|:---|:---|:---|:---|
+| `sprint/SPR-015-births-f1` | **Exuberant** (`100.115.214.32`)<br>`AGT-002-CORE` | PR #107 (draft): Phase 1 approved; `ci_scope.py` demography input registered; core gates passing. | Finalizing local tier gates, commit, push, and mark ready |
+| `sprint/SPR-016-mortality-f1`<br>@ `da6c74d` | Developer<br>`AGT-002-CORE` | PR #88 (draft): stage 1 only, Tester PASS on stage 1. **234 commits behind `main`.** | Held until SPR-015 merges; then merge `main` by gate name |
+| `sprint/SPR-027-stream-materializer`<br>@ `9625584` | Adjutant Agent 1 (`AGT-002-TOOLS`, VM `adjutant`) | Pushed through `9625584` (T-02, T-03, T-04 done; A-70 `engine_build_commit` implemented; `origin/main` merged). | Open draft PR or request split of T-05 into SPR-027b |
+| `tools/A-69-lint-odd-frozen-keys`<br>@ `3c82cf2` | Adjutant Agent 2 (`AGT-002-TOOLS`, VM `adjutant`) | PR #120: Deny added keys on frozen entries by default in `lint_odd.py`. CI running. | Merge when CI green |
+| `sprint/SPR-033a-viewer-core`<br>@ `17f6ca7` | `AGT-002-TOOLS` | PR #111 **MERGED** into `main` at `7083e64`. Audit record: `VER-SPR-033a.md`. | Stage B scheduled for Bevy 0.20.0 entry (2026-10-22 22:31Z) |
+| `tools/A-73-worktree-lint-skip`<br>@ `cb351ab` | Adjutant Agent 2 (`AGT-002-TOOLS`) | PR #119 **MERGED** into `main` at `39d6bfb`. | Complete |
+| `sprint/SPR-021a-…` | Unassigned | No branch. Queued behind SPR-015, SPR-016 and SPR-019 stage A (D58 item 5) | Dispatch to `AGT-002-CORE` when the gate arrives |
+| `arch/red-team-batch-04`<br>@ `63046c9` | Red Team | **Do not open a PR from it.** Carries `tools/asset_ripper`, 7 copyrighted PDFs and a viewer HTML that ADR-0036 and the licence rules keep out | Red Team retires it |
 
-## 5. What to do next, in order (P1 first)
+---
 
-Each step ends with the Architect's audit (a `VER-` record) and a merge with a merge commit. Testers re-check by scope after each fix push.
+## 4. Key Records & Directives
 
-1. **SPR-014 (lifecycle queues; C3 `[perf-baseline]`), merge first.**
-   1. Fast-forward the sprint branch to `28ab29e` (`git push origin 28ab29e:sprint/SPR-014-lifecycle-queues`; it is a descendant, so no force is needed). It already holds the fix batch and a merge of `main` `3d26090` by gate name.
-   2. Merge the current `main` (#100, #101 and this handoff: docs and Python packaging, no gate changes expected). Check the baselines with `bin/check_baseline.py`; they should not move.
-   3. Run the full `check_all` (the developer reports a PASS on `28ab29e` itself). The Tester's probes and draft re-check scope are on `review/SPR-014-tester-handoff-20261018` @ `b03cc79` (under `tester-probes/SPR-014-handoff/`; evidence, not for merging).
-   4. Push, and mark PR #83 ready.
-   5. The Tester re-checks K1, K2, K3, K6, K7, K10 and K11 by scope (the list is in `spr014_rulings.md`).
-   6. Write `VER-SPR-014`.
-   7. File in BCK-002:
-      - K4 and K9, to SPR-038b T-07;
-      - K8, to SPR-021a;
-      - K5's figures, into A-60, marked part done;
-      - K12, to SPR-015 N7;
-      - the Tester's survivors M4, M5, M7 and S2, and K4's pending test (`session_reports.md`);
-      - the "a event" wart;
-      - the sealed constructor.
-   8. Delete `backup/SPR-014-pre-audit` and, once folded in, `backup/SPR-014-dev-handoff-20261018`. Ask the director to delete `review/SPR-014-tester-probes`.
-   9. Merge.
-2. **SPR-038a (per-instant cost, stage A; C2 `[perf-baseline]`).** Fast-forward the sprint branch to **`160be40`**, the Architect's conditions (local `check_all` PASS, 564 checks). Leave out the handoff commit `789c138`, but take its `handoff/SPR-038a_evidence.md` as the PR body. Merge main by gate name, re-record both perf baselines with the tools in a `[perf-baseline]` commit, re-run `check_all`, and open the PR `SPR-038a: per-instant engine cost, stage A [perf-baseline] [C2]` with the before/after table. Then the Tester's phase 2. Check every condition in `rulings_by_message.md`. Audit and merge. SPR-038b follows (D60).
-3. **SPR-020 (the event envelope; C3 `[perf-baseline]`).** Merge main by gate name, regenerate the baselines in the final `[C3]` commit, then the Tester, the audit and the merge.
-4. **SPR-026 (World Stream v1; C2).**
-   1. Start from `2323640` (the developer's WIP C1 fix, gates not run; the timing could not reproduce the reviewer's figures on that machine, so re-measure on a hosted runner or `adjutant`; `session_reports.md`) and finish the batch in `spr026_rulings.md`:
-      - **C1:** no per-append copy of the chunk list. Re-measure; at most 5% overhead on solo 3,000 years and hamlet 6,000 years with `--ladder monthly`.
-      - **DEF-2:** the accounting test and its two mutants.
-      - **The MIN and cheap NIT fixes.**
-   2. Merge main.
-   3. The Tester re-checks with their "before" probes (`review/SPR-026-tester-handoff-20261018` @ `041659a`).
-   4. Write `VER-SPR-026`. File in BCK-002:
-      - GAP-2..GAP-7;
-      - A-67, with the about 5 MB plateau and C11;
-      - C10, to SPR-027 T-04;
-      - C16, to the P2 WebSocket.
-   5. Merge.
-   6. **This merge starts the viewer lane** (SPR-033a), once D63 is approved.
-5. **SPR-017 (effect language; C2).**
-   1. Rerun the independent code review of `34a7f56`; the first one was cut off.
-   2. Let the Tester finish pass 2.
-   3. Send one batch: the review findings plus `7d83b2e` (the fuzz control on seeds 1–4, on `backup/SPR-017-dev-handoff-20261018`; fast-forward the sprint branch to it).
-   4. If golden is still over 12:00, move the two fuzz gates to part stream.
-   5. Write `VER-SPR-017` (rule on deviations 1–10), merge, and ask the director to delete `review/SPR-017-tester-cases`.
-6. **Then the wave order** (PRJ-002 §3–§4; the cross-plan ruling X9). Note for SPR-021: SPR-017's Tester found that M7 0.3.4 lacks a `person.id` read, so the real M7 fails `UndeclaredRead(person.id)` through the effect seam until SPR-021 adds it. SPR-015 (births F1), then SPR-016 stage 2, then wave 6 (SPR-018, SPR-019), then wave 7 (SPR-021a/b, SPR-022a/b, once D58 is approved), and so on. Minds (SPR-023 onward) need D59; wave 8 needs D61.
-7. **Spec PRs in flight** (each: finish, independent review on a different model, rulings, close with a `REV-`, PR, merge):
-   - **AN-0** (`arch/AN-0-annals-fold`): apply R1–R11 (`an0_rulings.md`); the WIP commit has started R1–R3. Then verify, write `REV-AN0`, open the PR and merge, **before AN-1**.
-   - **AN-1** (`arch/AN-1-annals-m7-fixtures`): run its gates, review, merge after AN-0 (the conflicts are mechanical: `annals_v0.md`'s status line and §14, the `CLAUDE.md` annals line, `check_all`'s annals block). AN-0's control needs `solitary` to keep its two segments at y000000 and y000003.
-   - **T-00b** (`arch/M7-0.6-T-00b`): finish the draft (its brief is in the commit message and in PRJ-002 §6's T-00b row), regenerate the lock and the model's goldens with their tools, review, merge. It must merge before SPR-021a's T-01.
-   - **T1-I/S** (the minds I- and S-steps): after SPR-023's T-01 promotes T1 0.4.0.
-8. **The Architect's plan edits that are owed:**
-   - **SPR-029:** port AN-0's R7 calendar check into T-03; R12's wording; use `python -P -s -m` for the two-process determinism check (PY-PKG review P3); swapped blocks are refused with canonical's message (AN-0 F2).
-   - **SPR-028:** the same `-P -s` note; new workflows run `uv sync` and `python/.venv/bin/python`, with `setup-uv` pinned to 0.11.32.
-   - **SPR-027 T-05:** in PY-PKG's layout, one `module-name` line plus the textual pin; `__main__ --help` exits 0.
-   - **SPR-038b's T-list:** stage A's remainder (the O(N+L) checks, the guard's O(L) checks), K4 and K9.
-   - **GOV-008 §2:** the layout line, at its next revision (director-owned).
+- **Status report (read this for the full picture):** [`docs/handoff/2026-10-18/pm_status_report.md`](file:///home/bdavidriggins/Documents/Rehoboam/docs/handoff/2026-10-18/pm_status_report.md): sprint ledger, code status, findings, governance gaps, backlog, next seven days.
+- **Interim audit:** [`CODEX/40_VERIFICATION/VER-SPR-015-INTERIM.md`](file:///home/bdavidriggins/Documents/Rehoboam/CODEX/40_VERIFICATION/VER-SPR-015-INTERIM.md) (DRAFT; no pass given).
+- **Work orders and briefings:**
+  - [`exuberant_stage_b_work_order.md`](file:///home/bdavidriggins/Documents/Rehoboam/docs/handoff/2026-10-18/exuberant_stage_b_work_order.md) (revision 2).
+  - [`viewer_lane_briefing.md`](file:///home/bdavidriggins/Documents/Rehoboam/docs/handoff/2026-10-18/viewer_lane_briefing.md): P2 lane (SPR-033a/b, 034, 035).
+- **Red-team files** (PR #113): `docs/red_team/RT-2026-10-18-batch-09-dossier.md` (RT-039..041) and `tests/probes/probe_fertility_adversarial_traps.py` (B09-01). The probe passes 6 of 6 but tests a Python model of the M2 spec, not the engine; the six traps must become Rust tests against `rh-core` / `rh-ids` in SPR-015.
+- **Director rulings of 2026-10-18:** [`director_rulings_20261018.md`](file:///home/bdavidriggins/Documents/Rehoboam/docs/handoff/2026-10-18/director_rulings_20261018.md).
+- **Roadmap & Plans:**
+  - `CODEX/05_PROJECT/PRJ-002_P1aPlan.md` (P1a "Bloodlines" plan through Gate G1a).
+  - `CODEX/05_PROJECT/PRJ-003_BevyVoxelViewer.md` (P2 Viewer lane plan).
+  - `docs/decisions-log.md` (ratified Director decisions D58, D59, D61, D63).
 
-## 6. Remote work sessions (Claude Code on the web) at the handoff
+---
 
-Each session was asked to push its unpushed work, reply and stop. These arrived (checked with `git ls-remote` at about 12:00 UTC); each session's own report is in `docs/handoff/2026-10-18/session_reports.md`. Each `backup/` and `review/` head is a fast-forward of its sprint branch's head.
+## 5. What to do next, in order (Crucible Roadmap)
 
-| Role | Branch @ head | What it holds |
-|---|---|---|
-| SPR-014 developer | `backup/SPR-014-dev-handoff-20261018` @ `28ab29e` | The fix batch `1d351f5` plus a merge of `main` `3d26090` by gate name |
-| SPR-014 tester | `review/SPR-014-tester-handoff-20261018` @ `b03cc79` | Unpushed probes (`tester_death.rs`, `tester_spr014.rs`), a draft `VER-SPR-014-TEST` and the re-check scope, under `tester-probes/SPR-014-handoff/` |
-| SPR-026 developer | `backup/SPR-026-dev-handoff-20261018` @ `2323640` | WIP: C1, a bounded `LiveEdge` append. **Gates not run** |
-| SPR-026 tester | `review/SPR-026-tester-handoff-20261018` @ `041659a` | The re-check probes and the "before" readings |
-| SPR-017 developer | `backup/SPR-017-dev-handoff-20261018` @ `7d83b2e` | T-08: the fuzz control on seeds 1–4 |
-| SPR-017 tester | `review/SPR-017-tester-handoff-20261018` @ `0bc28fc` | The pass-2 draft of `VER-SPR-017-TEST` on `34a7f56`, and the probes |
-| SPR-038a developer | `backup/SPR-038a-dev-handoff-20261018` @ `789c138` | `160be40` (the Architect's conditions) and a WIP evidence draft |
-| SPR-020 developer | **no handoff push** | `sprint/SPR-020-envelope` @ `512432a` is the last known state |
+```mermaid
+flowchart TD
+    subgraph Wave5 ["Wave 5 (In Flight)"]
+        SPR015["SPR-015: Births & Households (PR #107)<br/>Remediate CI & Merge"]
+        SPR016["SPR-016: F1 Mortality (PR #88)<br/>Fast-forward Stage 2 & Merge"]
+    end
 
-These sessions are stopped. They push nothing more unless the director restarts them (§9).
+    subgraph Wave6 ["Wave 6: Demography & Space"]
+        SPR018["SPR-018: Residence at Birth & Settlements"]
+        SPR019["SPR-019: Population Synthesis & Backfill"]
+    end
 
-## 7. Director decisions waiting (`docs/decisions_pending.md`)
+    subgraph Wave7 ["Wave 7: Dynasties & Governance (Unblocked)"]
+        SPR021["SPR-021: M7 Succession & Cognatic Lineage"]
+        SPR022["SPR-022: Ruler Exits & Regency"]
+    end
 
-| ID | What | Architect's recommendation |
-|---|---|---|
-| D58 | Wave-7 plans SPR-021a/b, SPR-022a/b (M7 succession, ruler exits, dormancy); sizes, classes, spec prep, Registry defaults, requirement texts, CI, shared owners | Approve (65%) |
-| D59 | Minds plans SPR-023, SPR-024a/b, SPR-025; the ADR-0002 §2 addendum (columns, not `bevy_ecs`, in P1a) | Approve (70%) |
-| D61 | Wave-8 plans SPR-028, SPR-029, SPR-030 (the M9 harness, family annals, the G1a run); **plus the question of the real Actions allowance** | Approve (70%) |
-| D63 | Viewer plans SPR-033a/b, SPR-034, SPR-035 (on PR #100) | Approve (75%) |
+    subgraph Wave8 ["Wave 8: The Crucible (Gate G1a)"]
+        SPR028["SPR-028: M9 Statistical Invariant Harness"]
+        SPR029["SPR-029: Annals & Family Chronicles"]
+        SPR030["SPR-030: Gate G1a 60s Crucible Run"]
+    end
 
-No sprint starts without its plan's approval (GOV-005 §2). Spec PRs (AN-0, AN-1, T-00b) may proceed meanwhile.
+    SPR015 --> SPR016
+    SPR016 --> Wave6
+    Wave6 --> Wave7
+    Wave7 --> Wave8
+```
 
-## 8. Known risks and lessons from this session
+### 1. Close Wave 5: SPR-015 & SPR-016
+1. **SPR-015 (M2 F1 Births, PR #107):** work order revision 2, in order (also: implement the six Batch 09 traps as Rust tests against the engine):
+   1. Finish T-01: remove `next/M2`, strip M2 from `next/registry_delta.toml`, update the README, regenerate the lock with its tool.
+   2. Regenerate the registry fixture.
+   3. Explain the +62% quiet-instant cost before any baseline moves.
+   4. Snapshot and baselines in the final `[C3] [perf-baseline]` commit only.
+   5. Full local `bin/check_all.sh`; Tester pass (different model); Architect audit (`VER-SPR-015`); merge pinned to the head SHA.
+2. **SPR-016 (M2 F1 Mortality, PR #88):** after SPR-015 merges, merge `main` (232 commits) by gate name, run the inventory self-check, finish stage 2, Tester, audit, merge.
+3. **Records (A-78):** backfill `VER-SPR-038a`; commission independent Tester passes on SPR-020 and SPR-038a.
 
-- **CI minutes.** The PR tier ran 462 times in 7 days; the real allowance is unknown (D61 item 8). The viewer lane's scheduled runs are twice a week by design (SPR-033 F17).
-- **G1a performance.** `kingdom_10k` must run 1,000 sim-years in at most 60 s. After SPR-038a it is about 1,530 s; the projection after SPR-038b is 80–117 s. BCK-002 A-68 (the residual digest) is ruled on SPR-030a's probe. Expect a miss; plan for it.
-- **Merges of `main` into long-lived sprint branches** are the most common source of silent breakage (the inventory trap). Always merge by gate name and run the inventory self-check.
-- **Independent reviews find real defects.** Today's included a quadratic append in the live edge, a fail-open registry, and a pty corrupting a data stream. Do not skip the review step for spec PRs or the code review at audit.
+### 2. Wave 6: Demography & Space (scope from the sprint documents; read them, not this summary)
+1. **SPR-018** (`SPR-018_WorldgenLite.md`): M1.regions F0 (elevation raster, regions, seats, routes); `S3.migration` F0 in a new `rh-sys-migration` (residence at genesis and at birth); the manifest validator's two household refusals; bench 4.
+2. **SPR-019** (`SPR-019_PopulationSynthesis.md`): population synthesis v0 from the manifest's `population` marginal (D46) and the dynastic back-fill; stage A comes before SPR-021a (D58 item 5).
 
-## 9. Working alongside the other agents (GOV-009, GOV-010, GOV-011)
+### 3. Wave 7: Dynasties (the specs are on `main`: AN-0, AN-1, T-00b merged)
+1. **SPR-021a/b** (`SPR-021_SuccessionF1.md`): T-01 promotes M7 0.6.0 with the Registry's M7 defaults; T-02 builds the instant log's merged events in `rh-core`; the system crate is `rh-sys-dynasty`. Follow the plan's own task list. Known gap to close: M7 0.3.4 lacks a `person.id` read (SPR-017's Tester).
+2. **SPR-022a/b** (`SPR-022_RulerExitsDormancyF1.md`): ruler-exit hazards, murder timer, feud stock, deposition and claims, regencies.
 
-- **You are the Architect** from this handoff until the director says otherwise (GOV-011 §2). Every merge, ruling and audit is yours, under the same limits:
-  - the director approves C2/C3 plans, ADRs, D-items, `GOV-` and `AGT-` documents, and the non-negotiables;
-  - nobody types a generated file.
-- **Ownership of the branches above.**
-  - Every Claude session is stopped, so every branch in §3 and §6 is yours to assign.
-  - When you or a Developer you start take one, record it with the PR's `Agent:` line (the PR template now has one) or by opening its draft PR (GOV-011 §3).
-  - Fold `backup/` heads into their sprint branches by fast-forward (§5), then delete the `backup/` branches.
-  - Leave `review/` branches for the director to delete when their sprint closes.
-- **If the Claude lane comes back** (its weekly limit resets 2026-10-24, 02:00 UTC):
-  - it starts by reading this file, the open PRs and your log;
-  - it takes only what you assign it;
-  - it never pushes to a branch whose `Agent:` line names you.
-  - Use it, or any other model family, as the **independent** Tester or reviewer of your work (GOV-011 §4); you can do the same for its work.
-- **Token discipline (GOV-011 §8).** It applies to you as well:
-  - small contexts, restarted daily from this file;
-  - one status pass per check-in instead of polling;
-  - short command output;
-  - the model tier matched to the job;
-  - three or four sessions at once.
+### 4. Wave 8: Gate G1a
+1. **SPR-028** (`SPR-028_ValidationHarness.md`), **SPR-029** (`SPR-029_FamilyAnnals.md`), **SPR-030** (`SPR-030_ScaleAndGoldens.md`).
+2. **G1a performance bar:** `kingdom_10k`, 1,000 sim-years in at most 60 s. See the status report §1: expect a miss; SPR-030a's probe decides A-68.
 
-  Claude sessions get the defaults from `.claude/settings.json` and `.claude/agents/`. Moving the check catalogue out of `CLAUDE.md` is BCK-002 A-72, after the five in-flight sprints merge.
-- **Keep a dated log** in `docs/handoff/<date>/`. Replace this file at your own handoff (GOV-011 §7), so the next agent, of any vendor, can pick up from it.
-- **Tools.** This session used GitHub's API through its own tools. The `gh` equivalents:
-
-  | Task | Command |
-  |---|---|
-  | Open PRs | `gh pr list` |
-  | CI on a PR's head | `gh pr checks <N>`, or `gh pr view <N> --json headRefOid,statusCheckRollup` |
-  | Per-gate report | `gh run download <run-id> -n check-report-<part>` |
-  | Open a draft PR | `gh pr create --draft --base main --head <branch> --title "…" --body-file <file>` |
-  | Merge | `gh pr merge <N> --merge --match-head-commit <full-sha> --subject "Merge PR #<N>: … [C<n>]"` |
-
+### 5. P2 Viewer Lane Execution
+1. **SPR-033a (PR #111):** the red stream job was rerun once on 2026-10-18; if it fails again on `ConnectionRefused`, file under A-81. Then audit and merge.
+2. **SPR-033b:** Stage Bevy 0.20 application once 14-day lock age criterion matures (2026-10-22).
+3. **SPR-034 & SPR-035:** Stream ingestion and timeline scrubber hookup to SPR-027's materializer (branch now on `origin`).

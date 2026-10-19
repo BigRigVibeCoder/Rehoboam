@@ -762,6 +762,22 @@ def test_only_the_root_target_and_git_directories_are_skipped(tmp_path: Path) ->
     ]
 
 
+def test_agent_worktrees_clippy_configs_are_skipped(tmp_path: Path) -> None:
+    """Agent worktrees under .claude/worktrees/ are skipped (BCK-002 A-73)."""
+    worktree_cfg = tmp_path / ".claude" / "worktrees" / "agent-1" / "clippy.toml"
+    worktree_cfg.parent.mkdir(parents=True)
+    worktree_cfg.write_text("")
+    assert check_clippy_configs(tmp_path) == []
+
+    # Real violations outside ignored paths continue to FAIL
+    rogue_cfg = tmp_path / "sub" / "clippy.toml"
+    rogue_cfg.parent.mkdir(parents=True)
+    rogue_cfg.write_text("")
+    assert [(v.rule, v.crate) for v in check_clippy_configs(tmp_path)] == [
+        ("clippy-config", "sub/clippy.toml")
+    ]
+
+
 def test_a_member_reached_through_a_symlink_is_found_and_reported(tmp_path: Path) -> None:
     """Clippy's own lookup from the member's (symlinked) directory finds the hidden config."""
     real = tmp_path / "elsewhere" / "rh-sample"

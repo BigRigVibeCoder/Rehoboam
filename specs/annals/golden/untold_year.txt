@@ -1,5 +1,5 @@
 # The annals of the years
-# From the chronicle of untold; templates 0.3.0
+# From the chronicle of untold; templates 0.4.0
 
 ## The fourth year (Test era)
 With an event the chronicle does not tell, no one was left alive in the world.

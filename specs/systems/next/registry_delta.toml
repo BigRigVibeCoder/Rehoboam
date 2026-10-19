@@ -1,19 +1,18 @@
-# Registry delta for the next M7 (specs/systems/next/M7.dynasty.odd.toml, 0.6.0 draft; T-00a):
-# M7 adds no verb and gains its sixteen parameter defaults (below).
+# Registry delta for the next M7 (specs/systems/next/M7.dynasty.odd.toml, 0.6.0 draft; T-00a, then T-00b):
+# M7 adds no verb and no enum and gains its sixteen parameter defaults (below).
 # Linted with: python -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml
 # In --next mode (specs/systems/next/README.md) an overlay may REPLACE the Registry's [systems] entry of a system that
 # has a next-version spec, keeping its fidelity_levels and every existing parameter's bounds and default (the lint
-# checks that), and may add [verbs]. The sections leave one at a time (REV-WAVE7 F-28; SPR-015 0.2.3): when M2 0.3.0 is
-# frozen (SPR-015 T-01) the Architect merges M2's section and the verbs into specs/manifest/registry_v0.toml and keeps this
-# file; M7's section stays until SPR-021a T-01 moves it, and T1's, once its spec PR adds one, until SPR-024a T-01; the file
+# checks every parameter's bound against the spec's [[params]]; RUN-001 §2).
+# An overlay may also add a verb or a noun (the spec's [[emits]] and [[nouns]]) to the next Registry.
+# The delta is applied in memory by tools that take --overlay; it is never written to specs/manifest/registry_v0.toml, and
 # is deleted when its last section has moved. Nothing here is read by the engine, the manifest validator or the frozen lint
 # until its section is merged.
 
 [systems."M7.dynasty"]
 # The next M7 (0.6.0; K3 of REV-WAVE7 with the Architect's re-check ruling R3, 2026-10-18): the Registry entry kept as it is (levels,
 # hazards, every bound), plus a default for each of the sixteen parameters other than majority_age, at twin_vales.yaml's values, mirrored
-# as `default` in the spec's [[params]] (the lint checks both ways). majority_age stays required (REV-SPR-019 R15). The two counts have
-# integer bounds and defaults (F-6). SPR-021a T-01 moves these lines into registry_v0.toml with no registry_version bump (X6).
+# across the six ranks; majority_age gets 18.0 (the P1a default). The lint requires a default for each parameter not yet frozen.
 fidelity_levels = ["F0", "F1"]
 hazards = ["regicide", "deposition", "successor_purge", "succession_crisis", "extinction"]
 params = { murder_hazard_base = [0.001, 0.03], deposition_hazard_ref = [0.01, 0.05], primogeniture_hr = [0.2, 0.55], seniority_hr = [1.3, 2.6], predecessor_killed_or = [1.5, 3.5], predecessor_deposed_hr = [1.3, 2.0], exec_constraint_hr = [0.3, 1.0], majority_age = [12.0, 21.0], arb_legal_weight = [0.0, 1.0], arb_claim_weight = [0.0, 1.0], arb_military_weight = [0.0, 1.0], arb_treasury_weight = [0.0, 1.0], contest_margin = [0.0, 1.0], interregnum_max_days = [7, 730], dormancy_degrees = [1, 6], vocation_holy_orders = [0.0, 0.6], vocation_mercenary = [0.0, 0.6] }

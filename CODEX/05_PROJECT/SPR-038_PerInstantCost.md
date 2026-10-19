@@ -9,7 +9,7 @@ tags: [sprint, determinism]
 related: [BCK-002, PRJ-002, REV-WAVE5, REV-WAVE6, SPR-007, SPR-009, SPR-011, SPR-014, SPR-015, SPR-016, SPR-018, SPR-019, SPR-020, SPR-021, SPR-030, ADR-0006, ADR-0007, ADR-0024, ADR-0025]
 created: 2026-10-18
 updated: 2026-10-18
-version: 0.3.3
+version: 0.3.4
 ---
 
 > **BLUF:** Removes the fixed per-instant engine overhead that SPR-014 exposed when it bound M2's `Day`/`Vital` drain to every day start (BCK-002 A-60: about 360 instants a year where there were 12–14), and the costs that grow with the life-course log, **in two stages in one plan, as SPR-019 has. Each stage is its own PR, Tester pass and audit.**
@@ -328,6 +328,7 @@ Each gate is in exactly one part. A time is a gate-time estimate on one runner, 
 
 #### T-05: The check cadence as a run parameter, `check_now`, the refusals, the compile-out and the soak obligation (AGT-002-CORE with AGT-002-TOOLS; S1, S2, S3, S14)
 - **Deliverable:**
+  - **Stage A's remainder (the Architect's ruling by message on SPR-038a, 75%; Architect's edit, 2026-10-18):** at stage A's close, the O(N + L) invariant checks were 48% of the death instant at L = 10^5 and the life-course guard's O(L) value checks about 44% (with compaction at 3.4%). The cadence below is the lever for the checks; the guard's O(L) value checks are cut by the compile-out below. This task reports `death/n10k_l100k` and `death/n10k_l10k` after, against stage A's 12,900,470 and 2,594,905 instructions, and states what share of each the checks still hold.
   - **The cadence and the run parameter:**
     - `CheckCadence { EveryChange, Yearly }` and `Engine::set_check_cadence`, default `EveryChange` in every build;
     - `RunArgs::check_cadence` and `rh-cli run --check-cadence {every-change,yearly}`;
@@ -390,6 +391,9 @@ Each gate is in exactly one part. A time is a gate-time estimate on one runner, 
 
 #### T-07: The instant log, the `DropReason` change, the real-world benches, the greedy writer, and the no-dispatch fallback (AGT-002-CORE with AGT-002-TOOLS; S8, S9, S10, S12, S13; X1; R14)
 - **Deliverable:**
+  - **The SPR-014 review's two engine findings (Architect's edit, 2026-10-18; `spr014_code_review.md` K4, K9):**
+    - **K4:** "every command taken is settled" becomes a machine-checked core invariant: commands taken by a drain equal commands applied plus commands dropped, per kind, checked at the instant's end. Its planted control is a stub drain that skips a kind with `continue` and must FAIL by name.
+    - **K9:** an owner drops with an owner-reason type of two variants, not any `DropReason`. It is made together with R14's `DropReason` change below, not in a second pass.
   - **The instant log** (the specs table's row): `InstantLog` in `rh-core`, with `StepCtx::inserted()` and `StepCtx::exited()`.
     - It is filled at the serial merges: (a) `PersonId`s by a sorted insert at each row insert; (b) `PersonId`s, ascending across the instant, by a sorted insert from a scan of `person.alive` at each merge where the write set shows it written. A newborn who dies in the same instant stays in (a) and enters (b).
     - It is cleared at the instant's end, and is in no `EngineState`.
@@ -412,6 +416,7 @@ Each gate is in exactly one part. A time is a gate-time estimate on one runner, 
     - the `05.1` §4.1 sentence;
     - the observer's notices and the dispatch counts restated.
 - **Acceptance:**
+  - **K4 and K9 (Architect's edit, 2026-10-18):** the settle invariant holds on every default ladder with no change to any of them; the stub drain that skips a kind fails by name; an owner that drops with a reason outside its two variants does not compile (a compile-fail test).
   - **`inserted()`:**
     - on random worlds (three sizes, eight seeds), with inserts at earlier levels and phases and same-instant newborn deaths, it yields `PersonId`s equal to the scan at every read, ascending;
     - a reader in the inserter's own level sees none of that level's inserts (pinned by a test);

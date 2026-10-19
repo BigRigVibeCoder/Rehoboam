@@ -130,9 +130,29 @@ SCOPED_GATES: dict[str, tuple[str, ...]] = {
 }
 
 
+VIEWER_PREFIXES = ("viewer/", "specs/viewer/")
+VIEWER_FILES = frozenset(
+    {
+        "bin/check_viewer.sh",
+        ".github/workflows/viewer.yml",
+        "python/tests/test_viewer_workflow.py",
+    }
+)
+
+
 def is_doc(path: str) -> bool:
     """A file that cannot change what the golden and stream parts check."""
     return path.startswith(DOC_PREFIXES) or path.endswith(DOC_SUFFIXES)
+
+
+def is_viewer_only(path: str) -> bool:
+    """Whether a path belongs to the viewer workspace or its CI configuration (SPR-033 T-06)."""
+    return path in VIEWER_FILES or path.startswith(VIEWER_PREFIXES)
+
+
+def is_doc_or_viewer(path: str) -> bool:
+    """Whether a path can skip golden and stream parts (documentation or viewer-only)."""
+    return is_doc(path) or is_viewer_only(path)
 
 
 def docs_only(paths: Sequence[str]) -> bool:
@@ -178,11 +198,20 @@ def decide(part: str, files: list[str] | None) -> tuple[bool, str]:
         return True, f"part {part}: always runs in full"
     if files is None:
         return True, f"part {part}: the scope is unknown, so it runs in full (fail closed)"
-    if not any(p.strip() for p in files):
+    clean = [p for p in files if p.strip()]
+    if not clean:
         return True, f"part {part}: no changed file found, so it runs in full (fail closed)"
-    if docs_only(files):
-        return False, f"part {part}: skipped, {len(files)} changed file(s), all documentation"
-    others = [p for p in files if p.strip() and not is_doc(p)]
+    if all(is_doc_or_viewer(p) for p in clean):
+        viewer = [p for p in clean if is_viewer_only(p)]
+        if viewer:
+            msg = (
+                f"part {part}: skipped, {len(clean)} changed file(s), "
+                f"all documentation or viewer ({_shown(viewer)})"
+            )
+        else:
+            msg = f"part {part}: skipped, {len(clean)} changed file(s), all documentation"
+        return False, msg
+    others = [p for p in clean if not is_doc_or_viewer(p)]
     return True, f"part {part}: runs in full ({len(others)} other file(s): {_shown(others)})"
 
 
