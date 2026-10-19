@@ -5,8 +5,9 @@ and the typed forcing registry (specs/validation/forcing_v0.toml):
   1. Every [isolation] forcing entry has a corresponding typed entry in forcing_v0.toml.
   2. Series head words agree between the spec and forcing_v0.toml.
   3. Every rate or mode read is either forced in [isolation] or has a declared typed neutral value.
-  4. v0 series types are restricted to constant, step, and historical (sine and ramp are refused in v0).
-  5. Every historical series names a valid, readable forcing file in specs/validation/forcing/<id>.toml.
+  4. v0 series types are restricted to constant, step, and historical (sine and ramp are refused).
+  5. Every historical series names a valid, readable forcing file in
+     specs/validation/forcing/<id>.toml.
 
 Usage:
   python -I bin/lint_forcing.py              (lint real specs and forcing_v0.toml)
@@ -32,28 +33,27 @@ ALLOWED_HEADS_V0 = {"constant", "step", "historical"}
 FORBIDDEN_HEADS_V0 = {"sine", "ramp"}
 
 
-def lint_forcing(
-    forcing_path: Path,
-    specs_dir: Path,
-    extra_forcing_entries: list[dict[str, Any]] | None = None,
-    mock_specs: dict[str, dict[str, Any]] | None = None,
-) -> list[str]:
-    """Lints forcing_v0.toml against system specs in specs_dir."""
-    errors: list[str] = []
-
-    if not forcing_path.exists():
-        return [f"forcing file not found: {forcing_path}"]
-
+def _check_historical_series(sys_name: str, inp_name: str, series: str) -> list[str]:
+    """Validates the historical series format and referenced file."""
+    m = re.match(r"^historical:([a-z0-9_]+)$", series)
+    if not m:
+        return [f"({sys_name}, {inp_name}): invalid historical series format '{series}'"]
+    hist_id = m.group(1)
+    hist_file = ROOT / "specs" / "validation" / "forcing" / f"{hist_id}.toml"
+    if not hist_file.exists():
+        return [f"({sys_name}, {inp_name}): historical forcing file not found: {hist_file}"]
     try:
-        f_data = tomllib.loads(forcing_path.read_text(encoding="utf-8"))
+        tomllib.loads(hist_file.read_text(encoding="utf-8"))
     except (tomllib.TOMLDecodeError, OSError) as e:
-        return [f"failed to parse TOML in {forcing_path}: {e}"]
+        return [f"({sys_name}, {inp_name}): syntax error in {hist_file}: {e}"]
+    return []
 
-    entries = list(f_data.get("forcing", []))
-    if extra_forcing_entries:
-        entries.extend(extra_forcing_entries)
 
-    # 1. Validate forcing_v0.toml entries
+def _validate_forcing_entries(
+    entries: list[dict[str, Any]],
+) -> tuple[dict[tuple[str, str], dict[str, Any]], list[str]]:
+    """Validates forcing_v0.toml entries format and builds lookup map."""
+    errors: list[str] = []
     typed_map: dict[tuple[str, str], dict[str, Any]] = {}
     for i, entry in enumerate(entries):
         sys_name = entry.get("system")
@@ -69,7 +69,6 @@ def lint_forcing(
             errors.append(f"duplicate forcing entry for ({sys_name}, {inp_name})")
         typed_map[key] = entry
 
-        # Check series format and refusal of sine / ramp
         head = series.split(":")[0].strip()
         if head in FORBIDDEN_HEADS_V0:
             errors.append(f"({sys_name}, {inp_name}): series '{head}' is refused in v0")
@@ -77,29 +76,72 @@ def lint_forcing(
             errors.append(f"({sys_name}, {inp_name}): unknown series head '{head}'")
 
         if head == "historical":
-            m = re.match(r"^historical:([a-z0-9_]+)$", series)
-            if not m:
-                errors.append(
-                    f"({sys_name}, {inp_name}): invalid historical series format '{series}'"
-                )
-            else:
-                hist_id = m.group(1)
-                hist_file = (
-                    ROOT / "specs" / "validation" / "forcing" / f"{hist_id}.toml"
-                )
-                if not hist_file.exists():
-                    errors.append(
-                        f"({sys_name}, {inp_name}): historical forcing file not found: {hist_file}"
-                    )
-                else:
-                    try:
-                        tomllib.loads(hist_file.read_text(encoding="utf-8"))
-                    except (tomllib.TOMLDecodeError, OSError) as e:
-                        errors.append(
-                            f"({sys_name}, {inp_name}): syntax error in {hist_file}: {e}"
-                        )
+            errors.extend(_check_historical_series(sys_name, inp_name, series))
+    return typed_map, errors
 
-    # 2. Check bidirectional consistency with specs
+
+def _check_spec_isolation_forcing(
+    sys_id: str,
+    spec_forcings: list[dict[str, Any]],
+    typed_map: dict[tuple[str, str], dict[str, Any]],
+) -> list[str]:
+    """Checks that every spec forcing entry matches a typed forcing entry."""
+    errors: list[str] = []
+    for sf in spec_forcings:
+        inp = sf.get("input")
+        s_series = sf.get("series", "")
+        s_head = s_series.split(":")[0].strip()
+
+        key = (sys_id, inp)
+        if key not in typed_map:
+            msg = f"{sys_id}: [isolation] forcing for '{inp}' has no typed entry in forcing_v0.toml"
+            errors.append(msg)
+            continue
+
+        t_entry = typed_map[key]
+        t_series = t_entry.get("series", "")
+        t_head = t_series.split(":")[0].strip()
+
+        if s_head != t_head:
+            msg = (
+                f"{sys_id}: head word differs for '{inp}': "
+                f"spec says '{s_head}', forcing_v0.toml says '{t_head}'"
+            )
+            errors.append(msg)
+    return errors
+
+
+def _check_spec_rate_reads(
+    sys_id: str,
+    reads: list[dict[str, Any]],
+    spec_forcings: list[dict[str, Any]],
+    typed_map: dict[tuple[str, str], dict[str, Any]],
+) -> list[str]:
+    """Checks that all rate reads have neutrals or are forced."""
+    errors: list[str] = []
+    for r in reads:
+        if r.get("use") == "rate":
+            col = r.get("column")
+            has_neutral = "neutral" in r
+            is_forced = (sys_id, col) in typed_map or any(
+                sf.get("input") == col for sf in spec_forcings
+            )
+            if not has_neutral and not is_forced:
+                msg = (
+                    f"{sys_id}: rate read '{col}' is neither forced in [isolation] "
+                    "nor has a typed neutral"
+                )
+                errors.append(msg)
+    return errors
+
+
+def _check_specs_consistency(
+    specs_dir: Path,
+    typed_map: dict[tuple[str, str], dict[str, Any]],
+    mock_specs: dict[str, dict[str, Any]] | None = None,
+) -> list[str]:
+    """Checks bidirectional consistency with odd.toml specs."""
+    errors: list[str] = []
     spec_files = sorted(specs_dir.glob("*.odd.toml"))
     for sp in spec_files:
         if sp.name.startswith("_"):
@@ -120,42 +162,34 @@ def lint_forcing(
         iso = s_data.get("isolation", {})
         spec_forcings = iso.get("forcing", [])
 
-        # Verify each spec forcing has a typed entry
-        for sf in spec_forcings:
-            inp = sf.get("input")
-            s_series = sf.get("series", "")
-            s_head = s_series.split(":")[0].strip()
+        errors.extend(_check_spec_isolation_forcing(sys_id, spec_forcings, typed_map))
+        errors.extend(
+            _check_spec_rate_reads(sys_id, s_data.get("reads", []), spec_forcings, typed_map)
+        )
+    return errors
 
-            key = (sys_id, inp)
-            if key not in typed_map:
-                errors.append(
-                    f"{sys_id}: [isolation] forcing for '{inp}' has no typed entry in forcing_v0.toml"
-                )
-                continue
 
-            t_entry = typed_map[key]
-            t_series = t_entry.get("series", "")
-            t_head = t_series.split(":")[0].strip()
+def lint_forcing(
+    forcing_path: Path,
+    specs_dir: Path,
+    extra_forcing_entries: list[dict[str, Any]] | None = None,
+    mock_specs: dict[str, dict[str, Any]] | None = None,
+) -> list[str]:
+    """Lints forcing_v0.toml against system specs in specs_dir."""
+    if not forcing_path.exists():
+        return [f"forcing file not found: {forcing_path}"]
 
-            if s_head != t_head:
-                errors.append(
-                    f"{sys_id}: head word differs for '{inp}': spec says '{s_head}', forcing_v0.toml says '{t_head}'"
-                )
+    try:
+        f_data = tomllib.loads(forcing_path.read_text(encoding="utf-8"))
+    except (tomllib.TOMLDecodeError, OSError) as e:
+        return [f"failed to parse TOML in {forcing_path}: {e}"]
 
-        # Check rate reads: must have either neutral or be forced
-        reads = s_data.get("reads", [])
-        for r in reads:
-            if r.get("use") == "rate":
-                col = r.get("column")
-                has_neutral = "neutral" in r
-                is_forced = (sys_id, col) in typed_map or any(
-                    sf.get("input") == col for sf in spec_forcings
-                )
-                if not has_neutral and not is_forced:
-                    errors.append(
-                        f"{sys_id}: rate read '{col}' is neither forced in [isolation] nor has a typed neutral"
-                    )
+    entries = list(f_data.get("forcing", []))
+    if extra_forcing_entries:
+        entries.extend(extra_forcing_entries)
 
+    typed_map, errors = _validate_forcing_entries(entries)
+    errors.extend(_check_specs_consistency(specs_dir, typed_map, mock_specs))
     return errors
 
 
@@ -168,9 +202,7 @@ def run_controls() -> tuple[bool, list[str]]:
     mock_1 = {
         "M2.demography": {
             "system": {"id": "M2.demography"},
-            "isolation": {
-                "forcing": [{"input": "untyped.column", "series": "constant:0"}]
-            },
+            "isolation": {"forcing": [{"input": "untyped.column", "series": "constant:0"}]},
         }
     }
     errs_1 = lint_forcing(FORCING_TOML, SPECS_DIR, mock_specs=mock_1)
@@ -184,17 +216,13 @@ def run_controls() -> tuple[bool, list[str]]:
     mock_2 = {
         "M2.demography": {
             "system": {"id": "M2.demography"},
-            "isolation": {
-                "forcing": [{"input": "person.named", "series": "step:0->1"}]
-            },
+            "isolation": {"forcing": [{"input": "person.named", "series": "step:0->1"}]},
         }
     }
     errs_2 = lint_forcing(FORCING_TOML, SPECS_DIR, mock_specs=mock_2)
     c2_ok = any("head word differs" in e for e in errs_2)
     all_passed &= c2_ok
-    control_logs.append(
-        f"Control 2 'head-word-differs': {'PASS (caught)' if c2_ok else 'FAIL'}"
-    )
+    control_logs.append(f"Control 2 'head-word-differs': {'PASS (caught)' if c2_ok else 'FAIL'}")
 
     # Control 3: rate-read-unforced
     mock_3 = {
@@ -207,27 +235,22 @@ def run_controls() -> tuple[bool, list[str]]:
     errs_3 = lint_forcing(FORCING_TOML, SPECS_DIR, mock_specs=mock_3)
     c3_ok = any("rate read 'unforced.rate_col' is neither forced" in e for e in errs_3)
     all_passed &= c3_ok
-    control_logs.append(
-        f"Control 3 'rate-read-unforced': {'PASS (caught)' if c3_ok else 'FAIL'}"
-    )
+    control_logs.append(f"Control 3 'rate-read-unforced': {'PASS (caught)' if c3_ok else 'FAIL'}")
 
     # Control 4: sine-series-refused
     mock_extra = [{"system": "M2.demography", "input": "test.sine", "series": "sine:1"}]
     errs_4 = lint_forcing(FORCING_TOML, SPECS_DIR, extra_forcing_entries=mock_extra)
     c4_ok = any("series 'sine' is refused in v0" in e for e in errs_4)
     all_passed &= c4_ok
-    control_logs.append(
-        f"Control 4 'sine-series-refused': {'PASS (caught)' if c4_ok else 'FAIL'}"
-    )
+    control_logs.append(f"Control 4 'sine-series-refused': {'PASS (caught)' if c4_ok else 'FAIL'}")
 
     return all_passed, control_logs
 
 
 def main() -> int:
+    """CLI entry point for synthetic forcing series linter."""
     parser = argparse.ArgumentParser(description="Lint synthetic forcing series v0")
-    parser.add_argument(
-        "--controls", action="store_true", help="Run the four planted controls"
-    )
+    parser.add_argument("--controls", action="store_true", help="Run the four planted controls")
     args = parser.parse_args()
 
     errors = lint_forcing(FORCING_TOML, SPECS_DIR)
