@@ -25,7 +25,7 @@ version: 0.3.0
 | Head `cda5d16d`; commits `f332ead9` (T-04), `5ee789ff`, `3ead3ab2`, `2519e912`, `a61e9195` | `git log` on the remote | Yes |
 | CI on `cda5d16d`: core, golden and stream all `failure` (run 39176905920) | `gh run`, the three `check_report.md` artifacts | Yes |
 | The two pytest failures | Reproduced in a worktree of `cda5d16d` with system Python (two further failures there come from the machine: no `duckdb`; CI does not show them) | Yes |
-| Red-team probe `B09-01` passed 6 of 6 traps | Red-team report in `pm_inbox.md` | **No.** Reported, not re-run |
+| Red-team probe `B09-01` passed 6 of 6 traps | Red-team report in `pm_inbox.md` | **Re-run by the Architect (2026-10-18): it passes 6 of 6, but it tests a self-contained Python model of the M2 spec, not the Rust engine.** It imports only `sys`, `hashlib` and `struct`; its hash is blake2b, not the engine's SplitMix64; Trap 5 runs 10,000 births (the dossier says 100,000) and meets no collision. The claim "passed against Exuberant's code" is false |
 | Tester interim pass (`VER-SPR-015-TEST`) | None exists on disk | **No such record** |
 | The Rust code, the M2 0.3.0 spec text, any Rust gate | — | **No** |
 
@@ -62,5 +62,5 @@ The work order's hard checkpoint after Stage A (T-01 to T-03) was not observed: 
 
 ## 5. Not yet decided
 
-- Probe `B09-01` and the Batch 09 dossier exist only on `arch/red-team-batch-04` (43 commits ahead of `main`, no PR). `main` has neither file, and no gate in `bin/check_all.sh` or the workflows runs a probe from `tests/probes/`. A pass reported by message protects nothing once the code changes. Filed as BCK-002 A-80.
+- Probe `B09-01` and the Batch 09 dossier exist only on `arch/red-team-batch-04` (43 commits ahead of `main`, no PR). `main` has neither file, and no gate in `bin/check_all.sh` or the workflows runs a probe from `tests/probes/`. A pass reported by message protects nothing once the code changes. Filed as BCK-002 A-80. Update 2026-10-18: the dossier and probe go to `main` by PR #113 with a scope note; the probe checks a Python spec model only, so the SPR-015 Developer and Tester must implement the six traps as Rust tests against `rh-core` / `rh-ids` (Director ruling, 2026-10-18).
 - Sign-off of the keyframe hash change: pending cause 3.
