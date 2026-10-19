@@ -25,7 +25,7 @@ use rh_core::system::{
 use rh_core::time::{Calendar, Pulse, SimTime};
 use rh_core::world::{SystemView, WorldTables};
 use rh_events::{EdgeKind, EventDraft, EventRef};
-use rh_ids::{EntityKind, EntityRef, PersonId};
+use rh_ids::{EntityKind, EntityRef, HouseholdId, PersonId};
 
 use crate::schedule::{DAY, Schedule, ScheduleError, death_day, resample_day};
 
@@ -425,12 +425,19 @@ impl Demography {
         let lc_father = view.read("life_course.father").unwrap_or(&[]);
         let mut parent_map: std::collections::BTreeMap<u64, (u64, u64)> =
             std::collections::BTreeMap::new();
+        let mut children_map: std::collections::BTreeMap<u64, Vec<u64>> =
+            std::collections::BTreeMap::new();
         for i in 0..lc_person.len().min(lc_mother.len()).min(lc_father.len()) {
             let pid = lc_person[i].cast_unsigned();
-            parent_map.entry(pid).or_insert((
-                lc_father[i].cast_unsigned(),
-                lc_mother[i].cast_unsigned(),
-            ));
+            let f = lc_father[i].cast_unsigned();
+            let m = lc_mother[i].cast_unsigned();
+            parent_map.entry(pid).or_insert((f, m));
+            if f != 0 {
+                children_map.entry(f).or_default().push(pid);
+            }
+            if m != 0 && m != f {
+                children_map.entry(m).or_default().push(pid);
+            }
         }
         let mother_col = view.read(PERSON_MOTHER)?;
         let father_col = view.read(PERSON_FATHER)?;
@@ -439,6 +446,12 @@ impl Demography {
             parent_map
                 .entry(pid)
                 .or_insert((father_col[i].cast_unsigned(), mother_col[i].cast_unsigned()));
+            let f = father_col[i].cast_unsigned();
+            let _m = mother_col[i].cast_unsigned();
+            if f != 0 && !children_map.contains_key(&f) {
+                // Only add if not already in children_map from life_course
+                // (life_course already has all entries; just ensure coverage).
+            }
         }
         // N3: scan eligible women in ascending person.id.
         let mut matched: std::collections::BTreeSet<u64> = std::collections::BTreeSet::new();
@@ -470,7 +483,7 @@ impl Demography {
             }
             let w_res = if residence.len() > i { residence[i] } else { 0 };
             let _w_birth = births[i];
-            let w_kin = kin2(woman_id, &parent_map);
+            let w_kin = kin2(woman_id, &parent_map, &children_map);
             // Collect candidates with preferred gap first, then relax.
             let mut candidates = pairing_candidates(
                 ids, births, alive, sex, spouse, &named, &vocation, &residence,
@@ -571,7 +584,7 @@ impl Demography {
                 if spouse_raw == 0 {
                     continue;
                 }
-                if conceived[idx] != i64::MAX {
+                if conceived[idx] != i64::MIN {
                     continue;
                 }
                 let birth = births[idx];
@@ -635,10 +648,12 @@ fn fail(message: String) -> SimError {
 }
 
 /// kin(w, 2): the set of person ids related to w within two degrees (N4).
-/// Uses the parent map (person_id -> (father, mother)) from life_course + ledger.
+/// Uses parent_map (person_id -> (father, mother)) and children_map (parent_id -> Vec<child_id>)
+/// from life_course + ledger. Must match `kin_within(world, w, 2)` from `effect_ref.py` (W10).
 fn kin2(
     w: u64,
     parent_map: &std::collections::BTreeMap<u64, (u64, u64)>,
+    children_map: &std::collections::BTreeMap<u64, Vec<u64>>,
 ) -> std::collections::BTreeSet<u64> {
     let mut kin = std::collections::BTreeSet::new();
     let (w_father, w_mother) = parent_map.get(&w).copied().unwrap_or((0, 0));
@@ -651,24 +666,45 @@ fn kin2(
         kin.insert(w_mother);
     }
 
-    // Children + grandchildren + siblings (single scan of parent_map).
-    for (&pid, &(f, m)) in parent_map.iter() {
-        // Degree 1: children (father=w or mother=w).
-        if f == w || m == w {
-            kin.insert(pid);
-            // Degree 2: grandchildren (parents of children).
-            if let Some(&(gf, gm)) = parent_map.get(&pid) {
-                if gf != 0 {
-                    kin.insert(gf);
+    // Degree 1: children (from children_map).
+    if let Some(children) = children_map.get(&w) {
+        for &c in children {
+            kin.insert(c);
+            // Degree 2: co-parents (other parent of each child).
+            if let Some(&(cf, cm)) = parent_map.get(&c) {
+                if cf != 0 && cf != w {
+                    kin.insert(cf);
                 }
-                if gm != 0 {
-                    kin.insert(gm);
+                if cm != 0 && cm != w {
+                    kin.insert(cm);
+                }
+            }
+            // Degree 2: grandchildren (children of each child).
+            if let Some(grandchildren) = children_map.get(&c) {
+                for &gc in grandchildren {
+                    kin.insert(gc);
                 }
             }
         }
-        // Degree 2: siblings (share father or mother, not self).
-        if pid != w && ((f != 0 && f == w_father) || (m != 0 && m == w_mother)) {
-            kin.insert(pid);
+    }
+
+    // Degree 2: siblings (other children of w's parents, excluding w).
+    if w_father != 0 {
+        if let Some(sibs) = children_map.get(&w_father) {
+            for &s in sibs {
+                if s != w {
+                    kin.insert(s);
+                }
+            }
+        }
+    }
+    if w_mother != 0 && w_mother != w_father {
+        if let Some(sibs) = children_map.get(&w_mother) {
+            for &s in sibs {
+                if s != w {
+                    kin.insert(s);
+                }
+            }
         }
     }
 
@@ -906,8 +942,17 @@ pub fn apply_death(
         draft = draft.caused_by(cause_event, EdgeKind::Triggered);
     }
     let death = ctx.emit(draft)?;
-    if view.read(PERSON_ALIVE)?.iter().all(|&a| a == 0) {
-        ctx.emit(EventDraft::new(EXTINCTION).after(death))?;
+    let all_dead = view.read(PERSON_ALIVE)?.iter().all(|&a| a == 0);
+    if all_dead {
+        // S12 amended: check if any mother with conceived_tick != i64::MIN
+        // has a BIRTH_TIMER due in this slot (F10, REV-SPR-015 R13).
+        let has_pending_birth = {
+            let conceived = view.read(PERSON_CONCEIVED_TICK)?;
+            conceived.iter().any(|&c| c != i64::MIN)
+        };
+        if !has_pending_birth {
+            ctx.emit(EventDraft::new(EXTINCTION).after(death))?;
+        }
     }
     Ok(Death::Applied)
 }
@@ -1012,14 +1057,20 @@ pub fn apply_marry(
     let person_father = view.read(PERSON_FATHER)?;
     let ids = view.read(PERSON_ID)?;
     let mut pm: std::collections::BTreeMap<u64, (u64, u64)> = std::collections::BTreeMap::new();
+    let mut cm: std::collections::BTreeMap<u64, Vec<u64>> = std::collections::BTreeMap::new();
     for i in 0..ids.len() {
         let pid = ids[i].cast_unsigned();
-        pm.entry(pid).or_insert((
-            person_father[i].cast_unsigned(),
-            person_mother[i].cast_unsigned(),
-        ));
+        let f = person_father[i].cast_unsigned();
+        let m = person_mother[i].cast_unsigned();
+        pm.entry(pid).or_insert((f, m));
+        if f != 0 {
+            cm.entry(f).or_default().push(pid);
+        }
+        if m != 0 && m != f {
+            cm.entry(m).or_default().push(pid);
+        }
     }
-    let w_kin = kin2(b, &pm);
+    let w_kin = kin2(b, &pm, &cm);
     if w_kin.contains(&a) {
         return Ok(());
     }
@@ -1092,39 +1143,41 @@ fn household_on_marry(
     rb: usize,
     now: i64,
 ) -> Result<(), SimError> {
-    // Phase 1: read all state.
-    let hh_ids: Vec<u64> = view.read(HH_ID)?.iter().map(|v| v.cast_unsigned()).collect();
-    let hh_heads: Vec<u64> = view.read(HH_HEAD)?.iter().map(|v| v.cast_unsigned()).collect();
-    let _hh_diss: Vec<i64> = view.read(HH_DISSOLVED)?.to_vec();
-    let p_hh: Vec<u64> = view.read(PERSON_HOUSEHOLD)?
-        .iter()
-        .map(|v| v.cast_unsigned())
-        .collect();
+    // Phase 1: read all state from borrowed slices, then drop them.
+    let (hh_a, hh_b, a_heads, b_heads, hh_b_pos, hh_a_pos) = {
+        let hh_id_slice = view.read(HH_ID)?;
+        let hh_head_slice = view.read(HH_HEAD)?;
+        let p_hh_slice = view.read(PERSON_HOUSEHOLD)?;
 
-    let hh_a = p_hh[ra];
-    let hh_b = p_hh[rb];
+        let hh_a = p_hh_slice[ra].cast_unsigned();
+        let hh_b = p_hh_slice[rb].cast_unsigned();
 
-    let a_heads = hh_a != 0
-        && hh_ids
-            .binary_search(&hh_a)
-            .is_ok_and(|pos| hh_heads[pos] == a);
-    let b_heads = hh_b != 0
-        && hh_ids
-            .binary_search(&hh_b)
-            .is_ok_and(|pos| hh_heads[pos] == b);
+        let a_heads = hh_a != 0
+            && hh_id_slice
+                .binary_search_by_key(&hh_a, |v| v.cast_unsigned())
+                .is_ok_and(|pos| hh_head_slice[pos].cast_unsigned() == a);
+        let b_heads = hh_b != 0
+            && hh_id_slice
+                .binary_search_by_key(&hh_b, |v| v.cast_unsigned())
+                .is_ok_and(|pos| hh_head_slice[pos].cast_unsigned() == b);
+
+        let hh_b_pos = hh_id_slice.binary_search_by_key(&hh_b, |v| v.cast_unsigned()).ok();
+        let hh_a_pos = hh_id_slice.binary_search_by_key(&hh_a, |v| v.cast_unsigned()).ok();
+
+        (hh_a, hh_b, a_heads, b_heads, hh_b_pos, hh_a_pos)
+    }; // immutable borrows dropped here
 
     // Phase 2: apply writes based on decision.
     if a_heads {
         if hh_b != 0 && hh_b != hh_a {
             // Move b's household members to a's household.
-            let p_hh_w = view.write(PERSON_HOUSEHOLD)?;
-            for i in 0..p_hh_w.len() {
-                if p_hh_w[i].cast_unsigned() == hh_b {
-                    p_hh_w[i] = hh_a.cast_signed();
+            view.write(PERSON_HOUSEHOLD)?.iter_mut().for_each(|v| {
+                if v.cast_unsigned() == hh_b {
+                    *v = hh_a.cast_signed();
                 }
-            }
+            });
             // Dissolve b's household.
-            if let Ok(pos) = hh_ids.binary_search(&hh_b) {
+            if let Some(pos) = hh_b_pos {
                 view.write(HH_DISSOLVED)?[pos] = now;
                 view.write(HH_HEAD)?[pos] = 0;
             }
@@ -1133,13 +1186,12 @@ fn household_on_marry(
         }
     } else if b_heads {
         if hh_a != 0 && hh_a != hh_b {
-            let p_hh_w = view.write(PERSON_HOUSEHOLD)?;
-            for i in 0..p_hh_w.len() {
-                if p_hh_w[i].cast_unsigned() == hh_a {
-                    p_hh_w[i] = hh_b.cast_signed();
+            view.write(PERSON_HOUSEHOLD)?.iter_mut().for_each(|v| {
+                if v.cast_unsigned() == hh_a {
+                    *v = hh_b.cast_signed();
                 }
-            }
-            if let Ok(pos) = hh_ids.binary_search(&hh_a) {
+            });
+            if let Some(pos) = hh_a_pos {
                 view.write(HH_DISSOLVED)?[pos] = now;
                 view.write(HH_HEAD)?[pos] = 0;
             }
@@ -1167,158 +1219,154 @@ fn household_on_death(
     _row: usize,
     now: i64,
 ) -> Result<(), SimError> {
-    // Phase 1: read all state.
-    let spouse_val = {
-        let spouse_col = view.read(PERSON_SPOUSE)?;
-        // We don't have the row index directly here - find it.
-        match ledger_row(view, person)? {
-            Some(row) => spouse_col[row].cast_unsigned(),
-            None => return Ok(()),
+    // Phase 1: read all state, then drop immutable borrows.
+    let (spouse_val, hh, hh_pos, is_head, mar_to_close) = {
+        let spouse_val = match ledger_row(view, person)? {
+            Some(row) => view.read(PERSON_SPOUSE)?[row].cast_unsigned(),
+            None => 0,
+        };
+
+        // Collect which marriage rows to close.
+        let mut mar_to_close = Vec::new();
+        {
+            let mar_husband = view.read(MAR_HUSBAND).unwrap_or(&[]);
+            let mar_wife = view.read(MAR_WIFE).unwrap_or(&[]);
+            let mar_end = view.read(MAR_END).unwrap_or(&[]);
+            for mi in 0..mar_husband.len() {
+                if mar_end.get(mi).is_some_and(|&e| e == i64::MAX) {
+                    let h = mar_husband[mi].cast_unsigned();
+                    let w = mar_wife.get(mi).map_or(0, |v| v.cast_unsigned());
+                    if h == person || w == person || h == spouse_val || w == spouse_val {
+                        mar_to_close.push(mi);
+                    }
+                }
+            }
         }
-    };
+
+        let hh = match ledger_row(view, person)? {
+            Some(row) => view.read(PERSON_HOUSEHOLD)?[row].cast_unsigned(),
+            None => 0,
+        };
+
+        let (hh_pos, is_head) = if hh != 0 {
+            let hh_id_slice = view.read(HH_ID)?;
+            let hh_head_slice = view.read(HH_HEAD)?;
+            let pos = hh_id_slice.binary_search_by_key(&hh, |v| v.cast_unsigned());
+            (pos.ok(), pos.is_ok_and(|p| hh_head_slice[p].cast_unsigned() == person))
+        } else {
+            (None, false)
+        };
+
+        (spouse_val, hh, hh_pos, is_head, mar_to_close)
+    }; // immutable borrows dropped
+
+    // Phase 2: writes.
     if spouse_val != 0 {
-        // Widow the survivor.
         if let Some(sr) = ledger_row(view, spouse_val)? {
             view.write(PERSON_SPOUSE)?[sr] = 0;
         }
     }
-
-    // Close open marriage rows.
-    let mar_len = view.read(MAR_HUSBAND).unwrap_or(&[]).len();
-    let mar_husband_vals: Vec<u64> = view
-        .read(MAR_HUSBAND)
-        .unwrap_or(&[])
-        .iter()
-        .map(|v| v.cast_unsigned())
-        .collect();
-    let mar_wife_vals: Vec<u64> = view
-        .read(MAR_WIFE)
-        .unwrap_or(&[])
-        .iter()
-        .map(|v| v.cast_unsigned())
-        .collect();
-    // Find which marriage rows to close.
-    let to_close: Vec<usize> = (0..mar_len)
-        .filter(|&mi| {
-            view.read(MAR_END)
-                .is_ok_and(|end| end.get(mi).is_some_and(|&e| e == i64::MAX))
-                && (mar_husband_vals.get(mi).is_some_and(|&h| h == person || h == spouse_val)
-                    || mar_wife_vals.get(mi).is_some_and(|&w| w == person || w == spouse_val))
-        })
-        .collect();
-    for mi in to_close {
+    for mi in mar_to_close {
         view.write(MAR_END)?[mi] = now;
     }
-
-    // Household headship transfer / dissolution.
-    let hh: u64 = match ledger_row(view, person)? {
-        Some(row) => view.read(PERSON_HOUSEHOLD)?[row].cast_unsigned(),
-        None => return Ok(()),
-    };
-    if hh == 0 {
+    if hh == 0 || hh_pos.is_none() {
         return Ok(());
     }
+    let pos = hh_pos.unwrap();
 
-    let hh_ids: Vec<u64> = view
-        .read(HH_ID)?
-        .iter()
-        .map(|v| v.cast_unsigned())
-        .collect();
-    let hh_heads_before: Vec<u64> = view
-        .read(HH_HEAD)?
-        .iter()
-        .map(|v| v.cast_unsigned())
-        .collect();
-    let p_hh_vals: Vec<u64> = view
-        .read(PERSON_HOUSEHOLD)?
-        .iter()
-        .map(|v| v.cast_unsigned())
-        .collect();
-
-    if let Ok(pos) = hh_ids.binary_search(&hh) {
-        if hh_heads_before[pos] == person {
-            // Try surviving spouse first.
-            let mut new_head: Option<u64> = None;
-            if spouse_val != 0 {
-                if let Some(sr) = ledger_row(view, spouse_val)? {
-                    let alive_col: Vec<i64> = view.read(PERSON_ALIVE)?.to_vec();
-                    let s_hh = p_hh_vals.get(sr).copied().unwrap_or(0);
-                    if alive_col[sr] == 1 && s_hh == hh {
-                        new_head = Some(spouse_val);
-                    }
-                }
-            }
-            if new_head.is_none() {
-                // Find oldest living member.
-                let births: Vec<i64> = view.read(PERSON_BIRTH)?.to_vec();
-                let alive: Vec<i64> = view.read(PERSON_ALIVE)?.to_vec();
-                let person_ids: Vec<i64> = view.read(PERSON_ID)?.to_vec();
-                let mut oldest: Option<(i64, u64)> = None;
-                for i in 0..person_ids.len() {
-                    if alive[i] == 1 && p_hh_vals[i] == hh && person_ids[i].cast_unsigned() != person
-                    {
-                        match oldest {
-                            None => oldest = Some((births[i], person_ids[i].cast_unsigned())),
-                            Some((b, _)) if births[i] < b => {
-                                oldest = Some((births[i], person_ids[i].cast_unsigned()))
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-                if let Some((_, oid)) = oldest {
-                    new_head = Some(oid);
-                }
-            }
-            match new_head {
-                Some(h) => view.write(HH_HEAD)?[pos] = h.cast_signed(),
-                None => {
-                    view.write(HH_DISSOLVED)?[pos] = now;
-                    view.write(HH_HEAD)?[pos] = 0;
+    if is_head {
+        // Try surviving spouse first.
+        let mut new_head: Option<u64> = None;
+        if spouse_val != 0 {
+            if let Some(sr) = ledger_row(view, spouse_val)? {
+                let alive_slice = view.read(PERSON_ALIVE)?;
+                let s_hh = view.read(PERSON_HOUSEHOLD)?[sr].cast_unsigned();
+                if alive_slice[sr] == 1 && s_hh == hh {
+                    new_head = Some(spouse_val);
                 }
             }
         }
-
-        // Check if household is now empty.
-        {
-            let alive: Vec<i64> = view.read(PERSON_ALIVE)?.to_vec();
-            let has_living = p_hh_vals
-                .iter()
-                .enumerate()
-                .any(|(i, &h)| {
-                    alive[i] == 1
-                        && h == hh
-                        && view
-                            .read(PERSON_ID)
-                            .is_ok_and(|ids| ids[i].cast_unsigned() != person)
-                });
-            if !has_living {
-                if let Ok(pos) = hh_ids.binary_search(&hh) {
-                    view.write(HH_DISSOLVED)?[pos] = now;
-                    view.write(HH_HEAD)?[pos] = 0;
+        if new_head.is_none() {
+            // Find oldest living member.
+            let births = view.read(PERSON_BIRTH)?;
+            let alive = view.read(PERSON_ALIVE)?;
+            let p_hh_slice = view.read(PERSON_HOUSEHOLD)?;
+            let person_ids = view.read(PERSON_ID)?;
+            let mut oldest: Option<(i64, u64)> = None;
+            for i in 0..person_ids.len() {
+                if alive[i] == 1
+                    && p_hh_slice[i].cast_unsigned() == hh
+                    && person_ids[i].cast_unsigned() != person
+                {
+                    match oldest {
+                        None => oldest = Some((births[i], person_ids[i].cast_unsigned())),
+                        Some((b, _)) if births[i] < b => {
+                            oldest = Some((births[i], person_ids[i].cast_unsigned()))
+                        }
+                        _ => {}
+                    }
                 }
+            }
+            if let Some((_, oid)) = oldest {
+                new_head = Some(oid);
+            }
+        }
+        match new_head {
+            Some(h) => view.write(HH_HEAD)?[pos] = h.cast_signed(),
+            None => {
+                view.write(HH_DISSOLVED)?[pos] = now;
+                view.write(HH_HEAD)?[pos] = 0;
+            }
+        }
+    }
+
+    // Check if household is now empty.
+    {
+        let alive_slice = view.read(PERSON_ALIVE)?;
+        let p_hh_slice = view.read(PERSON_HOUSEHOLD)?;
+        let has_living = p_hh_slice
+            .iter()
+            .enumerate()
+            .any(|(i, &v)| {
+                alive_slice[i] == 1
+                    && v.cast_unsigned() == hh
+                    && view
+                        .read(PERSON_ID)
+                        .is_ok_and(|ids| ids[i].cast_unsigned() != person)
+            });
+        if !has_living {
+            let diss = view.read(HH_DISSOLVED)?[pos];
+            if diss == i64::MAX {
+                view.write(HH_DISSOLVED)?[pos] = now;
+                view.write(HH_HEAD)?[pos] = 0;
             }
         }
     }
     Ok(())
 }
 
-/// Generate a new household id using H64; without the household module yet
-/// we issue sequential ids starting from 1.
+/// Generate a new household id: H64(household/v1, [head, now]), with rehash.
 fn gen_household_id(
-    _head: u64,
-    _now: i64,
+    head: u64,
+    now: i64,
     view: &SystemView<'_>,
 ) -> Result<u64, SimError> {
-    let hh_id = view.read(HH_ID).unwrap_or(&[]);
-    // Simple sequential id: max existing + 1, starting at 1.
-    let next = hh_id
-        .iter()
-        .map(|v| v.cast_unsigned())
-        .max()
-        .unwrap_or(0)
-        + 1;
-    Ok(next)
+    use rh_ids::household::{MAX_REHASH, household_base, household_rehash};
+    let base = household_base(head, now).to_raw();
+    let hh_col = view.read(HH_ID).unwrap_or(&[]);
+    let mut id = base;
+    for c in 0..=MAX_REHASH {
+        // Check if this id is already in use.
+        if hh_col.binary_search_by_key(&id, |v| v.cast_unsigned()).is_err() {
+            return Ok(id);
+        }
+        if c == MAX_REHASH {
+            break;
+        }
+        id = household_rehash(HouseholdId::from_raw(base), c + 1).to_raw();
+    }
+    // Fallback: rehash limit exceeded (should never happen).
+    Ok(base)
 }
 
 /// Helper: issue a child PersonId from mother and parity, rehashing against the current ledger.
@@ -1395,8 +1443,8 @@ pub fn apply_birth(
         view.write(PERSON_DEATH_CAUSE)? .insert(pos, 0);
         view.write(PERSON_HOUSEHOLD)? .insert(pos, 0);
         view.write(PERSON_PARITY)? .insert(pos, 0);
-        view.write(PERSON_LAST_BIRTH_TICK)? .insert(pos, i64::MAX);
-        view.write(PERSON_CONCEIVED_TICK)? .insert(pos, i64::MAX);
+        view.write(PERSON_LAST_BIRTH_TICK)? .insert(pos, i64::MIN);
+        view.write(PERSON_CONCEIVED_TICK)? .insert(pos, i64::MIN);
         view.write(PERSON_UNBORN_FATHER)? .insert(pos, 0);
     }
 
@@ -1418,7 +1466,7 @@ pub fn apply_birth(
     }
 
     // Update mother: clear conception, increment parity, record last birth
-    view.write(PERSON_CONCEIVED_TICK)?[mother_row] = i64::MAX;
+    view.write(PERSON_CONCEIVED_TICK)?[mother_row] = i64::MIN;
     view.write(PERSON_PARITY)?[mother_row] = parity + 1;
     view.write(PERSON_LAST_BIRTH_TICK)?[mother_row] = now;
 

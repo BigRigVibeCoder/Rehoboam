@@ -13,6 +13,7 @@
 
 pub mod entity;
 pub mod hash;
+pub mod household;
 pub mod ids;
 pub mod person;
 pub mod rng;

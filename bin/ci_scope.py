@@ -108,7 +108,6 @@ _SYNTHESIS = (
     "specs/demography/selftest_m2_f1.py",
     "specs/demography/selftest_m2_f1_mortality.py",
     "specs/demography/selftest_m2_rung0.py",
-    "specs/systems/next/M2.demography.odd.toml",
     "specs/worldgen/selftest_population_synthesis.py",
     "specs/worldgen/selftest_worldgen_lite.py",
     "specs/worldgen/templates_v0.toml",

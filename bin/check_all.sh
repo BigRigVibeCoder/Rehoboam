@@ -408,7 +408,7 @@ odd_observes_control() {
 # cannot drift. odd_next_control <case>: algorithm (a frozen S0 step reworded), rng (a purpose planted before
 # death_time), bound (the Registry delta with tfr's upper bound moved). Each must FAIL with its own diagnostic.
 odd_next_control() {
-  local dir=target/rendered-fixtures/odd_next/$1 src=specs/systems/next/M2.demography.odd.toml
+  local dir=target/rendered-fixtures/odd_next/$1 src=specs/systems/M2.demography.odd.toml
   rm -rf "$dir" && mkdir -p "$dir" || return 1
   local lock=specs/systems/next/amendments.lock.toml m7=specs/systems/next/M7.dynasty.odd.toml
   # the M7 draft rides along unchanged where the overlay is the real delta: a next version with a verb of its own
@@ -488,7 +488,7 @@ bad_domains_control() {
 m2_f1_stale_control() {
   local planted=target/rendered-fixtures/m2_f1_stale_check_value.odd.toml
   mkdir -p "$(dirname "$planted")" || return 1
-  sed 's/tfr1_bits = 615614/tfr1_bits = 615615/' specs/systems/next/M2.demography.odd.toml > "$planted" || return 1
+  sed 's/tfr1_bits = 615614/tfr1_bits = 615615/' specs/systems/M2.demography.odd.toml > "$planted" || return 1
   grep -q 'tfr1_bits = 615615' "$planted" || { echo "control not planted: tfr1_bits = 615614 not found in the next M2 spec"; return 1; }
   "$PY" -I specs/demography/selftest_m2_f1.py --spec "$planted"
 }
@@ -499,7 +499,7 @@ m2_f1_stale_control() {
 m2_f1_mortality_stale_control() {
   local planted=target/rendered-fixtures/m2_f1_mortality_stale_check_value.odd.toml
   mkdir -p "$(dirname "$planted")" || return 1
-  sed 's/K = 27498377919,/K = 27498377920,/' specs/systems/next/M2.demography.odd.toml > "$planted" || return 1
+  sed 's/K = 27498377919,/K = 27498377920,/' specs/systems/M2.demography.odd.toml > "$planted" || return 1
   grep -q 'K = 27498377920,' "$planted" || { echo "control not planted: K = 27498377919 not found in the next M2 spec"; return 1; }
   "$PY" -I specs/demography/selftest_m2_f1_mortality.py --spec "$planted"
 }
