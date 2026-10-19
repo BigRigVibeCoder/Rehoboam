@@ -44,20 +44,24 @@
 
 ---
 
-## 2. State of `main` and what merged on 2026-10-18
+## 2. State of `main` and what merged on 2026-10-18 / 2026-10-19
 
 | PR | What | Commit |
 |:---|:---|:---|
+| #111 | **SPR-033a**: Bevy Voxel Viewer Core (Bevy-free core, greedy mesher, hamlet terrain golden, isolation lint, viewer CI) (`sprint/SPR-033a-viewer-core`; VER-SPR-033a) | `7083e64` |
+| #119 | **A-73**: Ignore agent worktrees in `lint_arch` and `lint_forbidden` (`tools/A-73-worktree-lint-skip`) | `39d6bfb` |
+| #118 | Fix cargo-deny advisories (`deny.toml`) and nightly ignored-test panic (`rh-manifest`) | `4d3d14e` |
+| #117 | Owed plan edits (SPR-027, SPR-028, SPR-038) and Wave 6 dispatch briefs | `50ed8cf` |
+| #116 | Backlog triage of A-42, A-69, A-70, A-72, A-73, and A-81 note | `562386c` |
+| #115 | VER-SPR-038a backfill record (DRAFT) & Tester commission brief | `143f1e5` |
+| #114 | Probe record corrections, Director rulings of 2026-10-18, `.gitignore` `docs/red_team/games/` | `2deb172` |
+| #113 | Red-team Batch 09 dossier & probe B09-01 only | `07a3430` |
+| #112 | Handoff refresh, status report, BCK-002 A-78..A-82 | `736e8e5` |
 | #83 | **SPR-014**: Lifecycle Queues (`sprint/SPR-014-lifecycle-queues`) | `d0e82c5` |
 | #104 | **SPR-038a**: Per-Instant Cost Reduction Stage A (`sprint/SPR-038a-per-instant-cost`) | `5e01601` |
 | #84 | **SPR-020**: Event Envelope in Engine (`sprint/SPR-020-envelope`) | `16a8559` |
 | #82 | **SPR-026**: World Stream v1 Live Edge (`sprint/SPR-026-stream-v1`) | `fbfa53b` |
 | #90 | **SPR-017**: Registry Effect Language v0 (`sprint/SPR-017-effect-language`) | `3824601` |
-| #105 | Ratify Director decisions D58, D59, D61, D63 | `2fc58c3` |
-| #106 | **AN-0**: Multi-Segment Chronicle Fold (`arch/AN-0-annals-fold`; REV-AN0 CLOSED) | `1a412f8` |
-| #108 | **AN-1**: Annals Fixtures for M7 F1 (`arch/AN-1-annals-m7-fixtures`; REV-AN1 CLOSED) | `d50f1af` |
-| #109 | **T-00b**: M7 0.6.0 Amendments for SPR-022 (`arch/M7-0.6-T-00b`; REV-T00b CLOSED) | `6b1970d` |
-| #110 | Update HANDOFF.md with AN-0, AN-1, and T-00b merges [C0] | `01690f6` |
 
 ---
 
@@ -65,13 +69,13 @@
 
 | Branch @ head | Node / Role | State & PR | Next Action |
 |:---|:---|:---|:---|
-| `sprint/SPR-015-births-f1`<br>@ `cda5d16` | **Exuberant** (`100.115.214.32`)<br>`AGT-002-CORE` | PR #107 (draft): T-01..T-04 committed. **CI red on all three parts** (core, golden, stream). T-01 incomplete (`next/M2` not removed). No Tester pass yet. | Work order revision 2: [`exuberant_stage_b_work_order.md`](file:///home/bdavidriggins/Documents/Rehoboam/docs/handoff/2026-10-18/exuberant_stage_b_work_order.md). Evidence: `VER-SPR-015-INTERIM.md` |
-| `sprint/SPR-016-mortality-f1`<br>@ `da6c74d` | Developer<br>`AGT-002-CORE` | PR #88 (draft): stage 1 only, Tester PASS on stage 1. **232 commits behind `main`.** | Held until SPR-015 merges; then merge `main` by gate name (expect conflicts in the M2 spec and `check_all`) |
-| `sprint/SPR-027-stream-materializer` | Adjutant Agent 1 (`AGT-002-TOOLS`, VM `adjutant`) | Pushed to `origin` 2026-10-18 (T-02 done; T-03 `governor.rs` in progress). Do not reassign | Owner continues |
+| `sprint/SPR-015-births-f1` | **Exuberant** (`100.115.214.32`)<br>`AGT-002-CORE` | PR #107 (draft): Phase 1 approved; `ci_scope.py` demography input registered; core gates passing. | Finalizing local tier gates, commit, push, and mark ready |
+| `sprint/SPR-016-mortality-f1`<br>@ `da6c74d` | Developer<br>`AGT-002-CORE` | PR #88 (draft): stage 1 only, Tester PASS on stage 1. **234 commits behind `main`.** | Held until SPR-015 merges; then merge `main` by gate name |
+| `sprint/SPR-027-stream-materializer`<br>@ `9625584` | Adjutant Agent 1 (`AGT-002-TOOLS`, VM `adjutant`) | Pushed through `9625584` (T-02, T-03, T-04 done; A-70 `engine_build_commit` implemented; `origin/main` merged). | Open draft PR or request split of T-05 into SPR-027b |
+| `tools/A-69-lint-odd-frozen-keys`<br>@ `3c82cf2` | Adjutant Agent 2 (`AGT-002-TOOLS`, VM `adjutant`) | PR #120: Deny added keys on frozen entries by default in `lint_odd.py`. CI running. | Merge when CI green |
+| `sprint/SPR-033a-viewer-core`<br>@ `17f6ca7` | `AGT-002-TOOLS` | PR #111 **MERGED** into `main` at `7083e64`. Audit record: `VER-SPR-033a.md`. | Stage B scheduled for Bevy 0.20.0 entry (2026-10-22 22:31Z) |
+| `tools/A-73-worktree-lint-skip`<br>@ `cb351ab` | Adjutant Agent 2 (`AGT-002-TOOLS`) | PR #119 **MERGED** into `main` at `39d6bfb`. | Complete |
 | `sprint/SPR-021a-…` | Unassigned | No branch. Queued behind SPR-015, SPR-016 and SPR-019 stage A (D58 item 5) | Dispatch to `AGT-002-CORE` when the gate arrives |
-| `sprint/SPR-033a-viewer-core`<br>@ `17f6ca7` | `AGT-002-TOOLS` | PR #111 (draft): core, golden and viewer checks green; **stream red** on `serve::probe_c…` `ConnectionRefused` (suspected flaky test, A-81) | Rerun once; audit and merge |
-| `arch/pm-records-20261018` | Architect<br>`AGT-001` | This refresh: probe-record corrections, rulings record, `.gitignore` | Merge when CI green |
-| `arch/red-team-b09` | Architect<br>`AGT-001` | PR #113 (draft): Batch 09 dossier and probe only | Merge when CI green |
 | `arch/red-team-batch-04`<br>@ `63046c9` | Red Team | **Do not open a PR from it.** Carries `tools/asset_ripper`, 7 copyrighted PDFs and a viewer HTML that ADR-0036 and the licence rules keep out | Red Team retires it |
 
 ---
