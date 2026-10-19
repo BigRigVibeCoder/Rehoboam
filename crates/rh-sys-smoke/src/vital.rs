@@ -84,6 +84,7 @@ impl Vital {
 }
 
 impl SystemModel for Vital {
+    type Index = ();
     from_skeleton!();
 
     fn access(&self) -> AccessSpec {

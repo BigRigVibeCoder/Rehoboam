@@ -34,6 +34,10 @@ pub struct WorldSpec {
     /// household's children (sons, then daughters) and servants in manifest order, then the rest
     /// of the human population.
     pub founders: Vec<Founder>,
+    /// The manifest households, in manifest order, each resolved to founder indices into
+    /// [`Self::founders`] (SPR-015 H2). Founders that no entry covers are each their own
+    /// one-person household at genesis.
+    pub households: Vec<HouseholdSpec>,
 }
 
 /// One system a manifest names.
@@ -57,6 +61,10 @@ pub struct DemographyParams {
     pub e0: Q16_16,
     /// The Brass slope; exactly 1 at rung 0.
     pub brass_beta: Q16_16,
+    /// Total fertility rate target (F2), in `Q16_16`.
+    pub tfr: Q16_16,
+    /// Fertility multiplier for house members (F2), in `Q16_16`.
+    pub elite_fertility_mult: Q16_16,
 }
 
 /// A founder's sex: as the manifest gives it, else drawn by `rh-worldgen` (ruling 10).
@@ -91,4 +99,20 @@ pub struct Founder {
     pub sex: Option<Sex>,
     /// The age in whole years, when the manifest gives it.
     pub age_years: Option<u8>,
+}
+
+/// One manifest household resolved to founder indices (SPR-015 H2), for `rh-worldgen` to lay out
+/// the household and marriage tables at genesis. All indices are positions in
+/// [`WorldSpec::founders`] in genesis order.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HouseholdSpec {
+    /// The head's founder index: a cast member.
+    pub head: usize,
+    /// The head's spouse's founder index (the one other adult of the other sex in the household),
+    /// when the manifest household has one.
+    pub spouse: Option<usize>,
+    /// The children's founder-index range `[start, end)`: sons, then daughters.
+    pub children: std::ops::Range<usize>,
+    /// The servants' founder-index range `[start, end)`.
+    pub servants: std::ops::Range<usize>,
 }

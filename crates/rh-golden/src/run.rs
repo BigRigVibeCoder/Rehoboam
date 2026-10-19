@@ -328,14 +328,14 @@ impl Outcome {
 
 /// The smoke world's systems; with `leak`, `X7.smoke_market` inside [`crate::leak::Leaky`].
 #[must_use]
-pub fn smoke_systems(leak: bool) -> Vec<Box<dyn SystemModel>> {
+pub fn smoke_systems(leak: bool) -> Vec<Box<dyn SystemModel<Index = ()>>> {
     rh_sys_smoke::systems()
         .into_iter()
         .map(|s| {
             if leak && s.descriptor().id == "X7.smoke_market" {
-                Box::new(crate::leak::Leaky(s)) as Box<dyn SystemModel>
+                Box::new(crate::leak::Leaky(s)) as Box<dyn SystemModel<Index = ()>>
             } else {
-                s
+                s as Box<dyn SystemModel<Index = ()>>
             }
         })
         .collect()

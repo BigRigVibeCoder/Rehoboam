@@ -79,10 +79,14 @@ impl Literal {
     pub fn typed(&self, ty: &str, values: Option<&[String]>) -> Option<i64> {
         match (self, ty) {
             (Self::Bool(b), "bool") => Some(i64::from(*b)),
-            (Self::Text(s), "enum") => values?
-                .iter()
-                .position(|v| v == s)
-                .and_then(|i| i64::try_from(i).ok()),
+            (Self::Text(s), "enum") => match values {
+                Some(v) => v
+                    .iter()
+                    .position(|item| item == s)
+                    .and_then(|i| i64::try_from(i).ok()),
+                None if s == "none" => Some(0),
+                None => None,
+            },
             (Self::Int(i), "q8_8") => i.checked_mul(1 << 8),
             (Self::Int(i), "q16_16") => i.checked_mul(1 << 16),
             (Self::Int(i), _) if ty != "bool" && ty != "enum" => Some(*i),

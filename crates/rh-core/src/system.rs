@@ -34,6 +34,11 @@
 //! `rng` and `stream` draw by the drawn entity's epoch (T-02, BCK-002 A-29), and keeps the stream
 //! guard per (system, instant), across bindings and the timer pass (BCK-002 A-37).
 //!
+//! SPR-015 adds the derived per-system index (the Architect's W4 ruling): a system declares an index
+//! built from its own columns at construction and at restore, kept by a serial post-merge `&mut`
+//! hook, never hashed or keyframed; F9's issued-id table and the kinship, spouse and
+//! children-by-parent lookups live in it, and M7 reuses it.
+//!
 //! REF: `docs/05_architecture/05.1_simulation_core.md` §2, §4.1, §4.3; ADR-0025; ADR-0033 §3;
 //! `CODEX/05_PROJECT/SPR-005_CoreTimeAndScheduler.md` T-03, T-06, rulings 1 and 2;
 //! `CODEX/05_PROJECT/SPR-006_AgendaEventsInvariants.md` T-02–T-05, rulings 1–5.
@@ -1209,6 +1214,67 @@ impl ResampleCtx {
 
 /// The contract every simulation system implements (`05.1` §2).
 pub trait SystemModel: Send + Sync {
+    /// The system's per-column index, built from its own columns. A system that declares one
+    /// implements [`SystemModel::build_index`] (W4), which the engine calls at construction and
+    /// at restore to build it from the current tables, and [`SystemModel::post_merge`] (W4),
+    /// which it calls after merging each step to update it from the step's writes only: the
+    /// post-merge hook sees the index as it stood before the step, and exactly the columns the
+    /// step wrote. The index is never hashed or keyframed, and does not outlive the engine
+    /// (W4): it holds no state, only derived data the step computes from the tables as they
+    /// stand, so restoring a snapshot restores the tables and builds a fresh index from them.
+    ///
+    /// The index type itself is opaque to `rh-core`: the trait fixes it as an associated type
+    /// only so the compiler can track mutations through borrows. A system that uses one gives
+    /// the type it wants to hold, and its `build_index` and `post_merge` signatures say how to
+    /// construct and update exactly that type. An index that holds interior mutability (`RefCell`,
+    /// `Cell`, `Mutex`) must be behind a `Box`: the trait bounds below (`Clone` especially)
+    /// require a type that moves without disturbing its contents, and a `Box` moves as a pointer.
+    ///
+    /// SPR-015 adds this hook (the Architect's W4 ruling): F9's issued-id table and the kinship,
+    /// spouse and children-by-parent lookups live in it, and M7 reuses it.
+    type Index: Clone + fmt::Debug;
+
+    /// Builds the system's index from the current tables (`WorldTables`), for construction or
+    /// restore (W4). A system that declares one implements this method, and `post_merge` too.
+    ///
+    /// SPR-015 adds this hook (the Architect's W4 ruling).
+    ///
+    /// The default implementation panics. Systems that want to use indexing must override this.
+    #[allow(
+        clippy::panic,
+        reason = "INVARIANT: SystemModel::build_index default stub panics if indexing is used without an implementation"
+    )]
+    fn build_index(&self, _tables: &WorldTables) -> Self::Index {
+        panic!(
+            "System {} does not implement build_index but tries to use indexing",
+            std::any::type_name::<Self>()
+        )
+    }
+
+    /// Updates the system's index from exactly the columns the step wrote (W4). The engine calls
+    /// this after merging each step: the hook sees the index as it stood before the step, and
+    /// exactly the columns the step wrote (the same ones `SystemView::into_owned` returns).
+    /// A step that writes no column of the system calls this with an empty `writes` map.
+    ///
+    /// The hook's borrow of the index is `&mut`: nothing else can see the index while this
+    /// method runs, so it can mutate freely without interior mutability (`RefCell` etc.). The
+    /// index type itself may hold such types, but if it does it must be behind a `Box` (see
+    /// `Index`).
+    ///
+    /// SPR-015 adds this hook (the Architect's W4 ruling).
+    ///
+    /// The default implementation panics. Systems that want to use indexing must override this.
+    #[allow(
+        clippy::panic,
+        reason = "INVARIANT: SystemModel::post_merge default stub panics if indexing is used without an implementation"
+    )]
+    fn post_merge(&self, _index: &mut Self::Index, _writes: BTreeMap<&str, &[i64]>) {
+        panic!(
+            "System {} does not implement post_merge but tries to use indexing",
+            std::any::type_name::<Self>()
+        )
+    }
+
     /// The spec header.
     fn descriptor(&self) -> SystemDescriptor;
     /// Reads (with owner and lag) and owned writes.

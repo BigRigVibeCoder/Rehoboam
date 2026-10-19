@@ -68,7 +68,7 @@ pub const OVERLAY: &str = "worlds/smoke/registry_overlay.toml";
 
 /// The seven dummy systems, unregistered.
 #[must_use]
-pub fn systems() -> Vec<Box<dyn SystemModel>> {
+pub fn systems() -> Vec<Box<dyn SystemModel<Index = ()>>> {
     vec![
         Box::new(Weather),
         Box::new(Harvest),

@@ -26,12 +26,14 @@ thread_local! {
 }
 
 /// A system with the thread-identity leak planted after its Environment steps.
-pub struct Leaky(pub Box<dyn SystemModel>);
+pub struct Leaky(pub Box<dyn SystemModel<Index = ()>>);
 
 /// The column the leak writes: `X7.smoke_market`'s own.
 pub const COLUMN: &str = "market.ticks";
 
 impl SystemModel for Leaky {
+    type Index = ();
+
     fn descriptor(&self) -> SystemDescriptor {
         self.0.descriptor()
     }

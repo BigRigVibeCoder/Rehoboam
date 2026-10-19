@@ -43,6 +43,7 @@ impl Chronicle {
 }
 
 impl SystemModel for Chronicle {
+    type Index = ();
     from_skeleton!();
 
     fn access(&self) -> AccessSpec {
