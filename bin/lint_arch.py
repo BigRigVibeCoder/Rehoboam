@@ -89,6 +89,21 @@ workspace crates, of every dependency kind (normal, build and dev):
                      resolved graph in the workspace's Cargo.lock, read offline. A missing lock,
                      or a dependency the lock does not hold, is a violation (never fail open).
 
+    viewer-isolation
+                     Isolates the Bevy voxel viewer workspace (viewer/) from the authoritative
+                     engine and root workspace (SPR-033 T-06; V-R3D-14, V-VIEW-04). Refuses:
+                     (a) a root workspace member depending on any path under viewer/;
+                     (b) a root Cargo.lock containing any render/window package from
+                         VIEWER_ONLY_PACKAGES (bevy, bevy_internal, bevy_render,
+                         bevy_winit, bevy_window, bevy_pbr, bevy_core_pipeline,
+                         bevy_ui, bevy_ui_*, wgpu, wgpu-*, winit, naga, rh-view,
+                         rh-view-core; bevy_ecs and other non-render crates pass);
+                     (c) a root workspace member whose manifest lies under viewer/;
+                     (d) a viewer/Cargo.toml without its own [workspace];
+                     (e) a path dependency of a viewer crate not on the forward allow-list
+                         (rh-protocol, rh-stream, rh-worldgen, rh-snapshot, rh-golden, rh-ids;
+                          rh-core as a dev-dependency only; and viewer crates).
+
 Sources, wildcards and licences of third-party crates are governed by cargo-deny (deny.toml).
 
 Usage:  python -I bin/lint_arch.py [--manifest-path Cargo.toml]
@@ -456,7 +471,50 @@ ENGINE_DENY_LIST = MappingProxyType(
     }
 )
 ENGINE_PURITY_RULE = "engine-purity"
+VIEWER_ISOLATION_RULE = "viewer-isolation"
 LOCK_FILE = "Cargo.lock"
+
+# Render and window stack packages that belong only in viewer/ (SPR-033 T-06; ruling A3).
+# bevy_ecs and non-render Bevy crates are permitted in the engine and pass.
+VIEWER_ONLY_PACKAGES = frozenset(
+    {
+        "bevy",
+        "bevy_internal",
+        "bevy_render",
+        "bevy_winit",
+        "bevy_window",
+        "bevy_pbr",
+        "bevy_core_pipeline",
+        "bevy_ui",
+        "winit",
+        "naga",
+        "rh-view",
+        "rh-view-core",
+    }
+)
+
+# Forward allow-list for path dependencies of viewer crates (SPR-033 T-06; ruling A11).
+# rh-core is allowed as a dev-dependency only.
+VIEWER_PATH_ALLOW_LIST = frozenset(
+    {
+        "rh-protocol",
+        "rh-stream",
+        "rh-worldgen",
+        "rh-snapshot",
+        "rh-golden",
+        "rh-ids",
+    }
+)
+
+
+def is_viewer_only_package(name: str) -> bool:
+    """Whether a package belongs to the viewer's render and window stack (ruling A3)."""
+    if name in VIEWER_ONLY_PACKAGES:
+        return True
+    if name.startswith(("bevy_ui_", "bevy_ui-")):
+        return True
+    return bool(name == "wgpu" or name.startswith(("wgpu-", "wgpu_")))
+
 
 EXIT_OK = 0
 EXIT_VIOLATIONS = 1
@@ -1323,6 +1381,215 @@ def member_clippy_configs(root: Path, crates: Sequence[Crate]) -> list[str]:
     return sorted(found)
 
 
+def _read_toml_doc(path: Path) -> dict[str, object]:
+    """Safely read and parse a TOML file, returning an empty dict on error."""
+    try:
+        return tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError):
+        return {}
+
+
+def _extract_dep_tables(doc: dict[str, object]) -> list[dict[str, object]]:
+    """Extract all dependency tables including target configurations."""
+    sections: list[dict[str, object]] = []
+    dep_keys = ("dependencies", "build-dependencies", "dev-dependencies")
+    for s in dep_keys:
+        sec = doc.get(s)
+        if isinstance(sec, dict):
+            sections.append(sec)
+    target_table = doc.get("target")
+    if isinstance(target_table, dict):
+        for cfg_target in target_table.values():
+            if isinstance(cfg_target, dict):
+                for s in dep_keys:
+                    sec = cfg_target.get(s)
+                    if isinstance(sec, dict):
+                        sections.append(sec)
+    return sections
+
+
+def _crate_viewer_dep_violations(crate: Crate, viewer_dir: Path) -> list[Violation]:
+    """Check if a root crate has path dependencies pointing into viewer/."""
+    crate_dir = crate.directory
+    if crate_dir is None:
+        return []
+    manifest_path = crate_dir / "Cargo.toml"
+    if not manifest_path.exists():
+        return []
+
+    doc = _read_toml_doc(manifest_path)
+    violations: list[Violation] = []
+    for sec in _extract_dep_tables(doc):
+        for dep_name, dep_spec in sec.items():
+            if not (isinstance(dep_spec, dict) and "path" in dep_spec):
+                continue
+            dep_path_str = str(dep_spec["path"])
+            try:
+                resolved = (crate_dir / dep_path_str).resolve()
+            except OSError:
+                resolved = crate_dir / dep_path_str
+            if resolved == viewer_dir or viewer_dir in resolved.parents:
+                violations.append(
+                    Violation(
+                        VIEWER_ISOLATION_RULE,
+                        crate.name,
+                        f"root member depends on {dep_name} under viewer/: "
+                        f"{dep_path_str} (clause a)",
+                    )
+                )
+    return violations
+
+
+def _check_root_crates_isolation(crates: Sequence[Crate], viewer_dir: Path) -> list[Violation]:
+    """Check root members for clause (a) and clause (c) violations."""
+    violations: list[Violation] = []
+    for crate in crates:
+        if crate.directory is not None:
+            try:
+                crate_dir = crate.directory.resolve()
+            except OSError:
+                crate_dir = crate.directory
+            if crate_dir == viewer_dir or viewer_dir in crate_dir.parents:
+                violations.append(
+                    Violation(
+                        VIEWER_ISOLATION_RULE,
+                        crate.name,
+                        f"root workspace member manifest lies under viewer/ "
+                        f"({crate.directory}) (clause c)",
+                    )
+                )
+        violations.extend(_crate_viewer_dep_violations(crate, viewer_dir))
+    return violations
+
+
+def _check_root_lock_isolation(lock: Sequence[LockPackage] | None) -> list[Violation]:
+    """Check clause (b): root Cargo.lock holding render/window packages."""
+    if lock is None:
+        return []
+    violations: list[Violation] = []
+    for pkg in lock:
+        if is_viewer_only_package(pkg.name):
+            violations.append(
+                Violation(
+                    VIEWER_ISOLATION_RULE,
+                    "workspace",
+                    f"root lock holds render/window package {pkg.name}; "
+                    f"render packages belong only in viewer/ (clause b)",
+                )
+            )
+    return violations
+
+
+def _check_one_viewer_dep(
+    pkg_name: str,
+    dep: tuple[str, object],
+    kind: str,
+    manifest_dir: Path,
+    viewer_dir: Path,
+) -> Violation | None:
+    """Validate a single path dependency of a viewer crate."""
+    dep_key, dep_val = dep
+    if not (isinstance(dep_val, dict) and "path" in dep_val):
+        return None
+    target_name = str(dep_val.get("package", dep_key))
+    dep_path_str = str(dep_val["path"])
+    try:
+        target_path = (manifest_dir / dep_path_str).resolve()
+    except OSError:
+        target_path = manifest_dir / dep_path_str
+    if target_path == viewer_dir or viewer_dir in target_path.parents:
+        return None
+    if target_name == "rh-core":
+        if kind == "dev":
+            return None
+        return Violation(
+            VIEWER_ISOLATION_RULE,
+            pkg_name,
+            f"viewer crate has path dependency on rh-core as {kind}; "
+            f"rh-core is allowed as dev-dependency only (clause e)",
+        )
+    if target_name not in VIEWER_PATH_ALLOW_LIST:
+        return Violation(
+            VIEWER_ISOLATION_RULE,
+            pkg_name,
+            f"viewer crate has path dependency on {target_name} ({kind}), "
+            f"which is not on the forward allow-list (clause e)",
+        )
+    return None
+
+
+def _check_viewer_manifest_deps(
+    manifest_file: Path, viewer_dir: Path, v_doc: dict[str, object]
+) -> list[Violation]:
+    """Check clause (e) path dependency allow-lists for a single viewer manifest."""
+    pkg_obj = v_doc.get("package")
+    pkg_name = pkg_obj.get("name") if isinstance(pkg_obj, dict) else None
+    if not isinstance(pkg_name, str):
+        pkg_name = manifest_file.parent.name
+
+    dep_kinds = (
+        ("dependencies", "normal"),
+        ("build-dependencies", "build"),
+        ("dev-dependencies", "dev"),
+    )
+    violations: list[Violation] = []
+    for sec_name, kind in dep_kinds:
+        sec = v_doc.get(sec_name)
+        if not isinstance(sec, dict):
+            continue
+        for dep_item in sec.items():
+            viol = _check_one_viewer_dep(pkg_name, dep_item, kind, manifest_file.parent, viewer_dir)
+            if viol is not None:
+                violations.append(viol)
+    return violations
+
+
+def _check_viewer_manifests_isolation(root: Path, viewer_dir: Path) -> list[Violation]:
+    """Check clauses (d) and (e) on manifests inside viewer/."""
+    viewer_cargo_toml = root / "viewer" / "Cargo.toml"
+    if not viewer_cargo_toml.exists():
+        return []
+
+    viewer_root_doc = _read_toml_doc(viewer_cargo_toml)
+    violations: list[Violation] = []
+    if "workspace" not in viewer_root_doc:
+        violations.append(
+            Violation(
+                VIEWER_ISOLATION_RULE,
+                "viewer",
+                f"{viewer_cargo_toml} does not declare its own [workspace] (clause d)",
+            )
+        )
+
+    for manifest_file in (root / "viewer").rglob("Cargo.toml"):
+        v_doc = _read_toml_doc(manifest_file)
+        if v_doc:
+            violations.extend(_check_viewer_manifest_deps(manifest_file, viewer_dir, v_doc))
+
+    return violations
+
+
+def check_viewer_isolation(
+    root: Path, crates: Sequence[Crate], lock: Sequence[LockPackage] | None
+) -> list[Violation]:
+    """Check the viewer-isolation rule (SPR-033 T-06; V-R3D-14, V-VIEW-04).
+
+    Refuses:
+      (a) A root member with a dependency of any kind whose path lies under viewer/;
+      (b) A root lock holding a package of the render and window stack (VIEWER_ONLY_PACKAGES);
+      (c) A root member whose manifest lies under viewer/;
+      (d) A viewer/Cargo.toml without its own [workspace];
+      (e) A path dependency of a viewer crate, of any kind, not on the forward allow-list
+          (VIEWER_PATH_ALLOW_LIST, rh-core as a dev-dependency only, and viewer crates).
+    """
+    viewer_dir = (root / "viewer").resolve()
+    violations: list[Violation] = []
+    violations.extend(_check_root_crates_isolation(crates, viewer_dir))
+    violations.extend(_check_root_lock_isolation(lock))
+    violations.extend(_check_viewer_manifests_isolation(root, viewer_dir))
+    return violations
+
+
 def check_clippy_configs(root: Path, crates: Sequence[Crate] = ()) -> list[Violation]:
     """Check that the root clippy.toml is the only clippy config (VER-SPR-003-TEST GAP-12, 13)."""
     allowed = CLIPPY_CONFIG_FIXTURES | {ROOT_CLIPPY_CONFIG}
@@ -1433,6 +1700,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         + check_engine_purity(crates, lock)
         + check_clippy_configs(root, crates)
         + allocator
+        + check_viewer_isolation(root, crates, lock)
     )
     print(f"lint_arch: {args.manifest_path}")
     for crate in crates:

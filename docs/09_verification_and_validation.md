@@ -365,7 +365,7 @@ Playwright drives the console against the real `rh-server` and against the mock 
 | V-R3D-11 | The glyph client decides nothing (R3D-10) | Lint for FOV, pathing and RNG APIs in client code; feed two clients the same recorded server stream | Lint clean; byte-identical rendered cell buffers |
 | V-R3D-12 | Glyph-pack completeness (R3D-10) | CI lint over every Registry presentation key and each shipped pack | Every key mapped; every asset's licence on the allow-list with attribution recorded |
 | V-R3D-13 | Viewer hydration determinism (R3D-11, R3D-2; ADR-0036) | A fixed bubble on a recorded run at fixed ticks: two runs, 1 and N threads, two builds; each tick reached by forward play and by rewind | Equal voxel content digests in every case; rendering (lighting, frames) is not hashed |
-| V-R3D-14 | Viewer isolation (R3D-11; ADR-0036) | `lint_arch` over both workspaces; the engine's `Cargo.lock` with and without `viewer/`; V-PERF-09 with `rh-view` attached as one harness | No crate under `crates/` depends on `viewer/`; the engine's lock unchanged; throughput ≥ 95% of headless and the `state_hash` ladder identical |
+| V-R3D-14 | Viewer isolation (R3D-11; ADR-0036) | `lint_arch` rule `viewer-isolation` and its four fixtures; root `Cargo.lock` compared to merge base in viewer-only diffs; `check_viewer.sh` assets and `#![forbid/deny(unsafe_code)]` checks; V-PERF-09 with `rh-view` attached as one harness | No crate under `crates/` depends on `viewer/`; the engine's lock unchanged; throughput ≥ 95% of headless and the `state_hash` ladder identical |
 
 ### 2.17 Audio (V-AUD)
 

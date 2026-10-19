@@ -410,3 +410,53 @@ def test_the_gate_s_own_text_follows_calls_and_settings() -> None:
         assert changed != SYNTHETIC, old
         assert scoped_text(changed, "k") != own, old
     assert scoped_text(SYNTHETIC.replace("echo other", "echo changed"), "k") == own
+
+
+def test_viewer_only_diff_skips_golden_and_stream() -> None:
+    """A4: a change only touching viewer paths skips golden and stream parts, but core runs."""
+    viewer_diff = ["viewer/Cargo.toml", "specs/viewer/terrain_v0.md", "bin/check_viewer.sh"]
+    assert decide("core", viewer_diff)[0] is True
+    ran_golden, why_golden = decide("golden", viewer_diff)
+    assert ran_golden is False
+    assert "viewer/Cargo.toml" in why_golden
+    ran_stream, why_stream = decide("stream", viewer_diff)
+    assert ran_stream is False
+    assert "viewer/Cargo.toml" in why_stream
+
+
+def test_diff_with_crates_runs_golden_and_stream() -> None:
+    """A4: a diff containing a crates/ file runs golden and stream parts in full."""
+    mixed_diff = ["viewer/Cargo.toml", "crates/rh-core/src/lib.rs"]
+    assert decide("core", mixed_diff)[0] is True
+    ran_golden, why_golden = decide("golden", mixed_diff)
+    assert ran_golden is True
+    assert "crates/rh-core/src/lib.rs" in why_golden
+    ran_stream, why_stream = decide("stream", mixed_diff)
+    assert ran_stream is True
+    assert "crates/rh-core/src/lib.rs" in why_stream
+
+
+def test_rename_from_crates_into_viewer_runs_golden() -> None:
+    """A4: --no-renames ensures a file moved from crates/ into viewer/ lists both paths."""
+    rename_diff = ["crates/rh-core/src/moved.rs", "viewer/rh-view-core/src/moved.rs"]
+    assert decide("core", rename_diff)[0] is True
+    ran_golden, why_golden = decide("golden", rename_diff)
+    assert ran_golden is True
+    assert "crates/rh-core/src/moved.rs" in why_golden
+    ran_stream, _ = decide("stream", rename_diff)
+    assert ran_stream is True
+
+
+def test_viewer_file_plus_documentation_skips() -> None:
+    """A4: viewer paths mixed with documentation still skips golden and stream."""
+    mixed_doc_viewer = [
+        "docs/09_testing.md",
+        "viewer/rh-view-core/src/lib.rs",
+        ".github/workflows/viewer.yml",
+    ]
+    assert decide("core", mixed_doc_viewer)[0] is True
+    ran_golden, why_golden = decide("golden", mixed_doc_viewer)
+    assert ran_golden is False
+    assert "viewer/rh-view-core/src/lib.rs" in why_golden
+    ran_stream, _ = decide("stream", mixed_doc_viewer)
+    assert ran_stream is False

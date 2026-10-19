@@ -626,6 +626,7 @@ REQUIRED_GATES = (
     "lint_arch control: a deny-listed dev-dependency of an engine crate, and a viewer's normal "
     "one, pass (V-INSP-05; SPR-011 T-00)",
     "lint_arch control: a system may depend on rh-sample (SPR-003 T-00)",
+    "lint_arch control: root lock holding bevy_ecs passes (V-R3D-14; SPR-033 T-06)",
     "lint_arch positive control: a #[global_allocator] behind cfg_attr must FAIL (SPR-009 GAP-6)",
     "lint_arch positive control: a #[global_allocator] outside rh-bench's benches must FAIL "
     "(SPR-009 T-05)",
@@ -675,6 +676,10 @@ REQUIRED_GATES = (
     "lint_arch positive control: rh-sample relabelled out of plane A must FAIL (SPR-003 T-00)",
     "lint_arch positive control: rh-sample without [lints] workspace = true must FAIL (SPR-003 "
     "GAP-9)",
+    "lint_arch positive control: root lock holding render/window package must FAIL (V-R3D-14; "
+    "SPR-033 T-06)",
+    "lint_arch positive control: root member depending on viewer crate must FAIL (V-R3D-14; "
+    "SPR-033 T-06)",
     "lint_arch positive control: system -> rh-snapshot aliased as rh-core must FAIL",
     "lint_arch positive control: system -> rh-snapshot as a build-dependency must FAIL",
     "lint_arch positive control: system -> rh-snapshot must FAIL",
@@ -682,6 +687,8 @@ REQUIRED_GATES = (
     "lint_arch positive control: unsafe outside the allow-listed file must FAIL (SPR-009 T-05)",
     "lint_arch positive control: unsafe_code relaxed by a crate not on the allow-list must FAIL "
     "(GOV-003 §2; SPR-009 T-05)",
+    "lint_arch positive control: viewer crate with unlisted path dependency must FAIL (V-R3D-14; "
+    "SPR-033 T-06)",
     "lint_forbidden control: a declared f32_field escape is accepted and counted (SPR-010 T-04)",
     "lint_forbidden control: a float in rh-sample passes (SPR-003 T-00)",
     "lint_forbidden control: a literal in-repository include! of a clean skeleton is followed "
