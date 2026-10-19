@@ -1289,6 +1289,7 @@ fn stream_host(
 #[must_use]
 pub fn mutant_features() -> Vec<&'static str> {
     let mut all = [
+        // rh_golden::MUTANTS (BCK-002 A-52)
         crate::MUTANTS,
         rh_core::MUTANTS,
         rh_manifest::MUTANTS,

@@ -39,6 +39,7 @@ def test_there_are_mutant_features_to_guard() -> None:
             "mutant-stale-lagged-snapshot",
             "mutant-unmarked-put-back",
         ],
+        "rh-golden": ["mutant-materialize-no-journal"],
         "rh-manifest": ["mutant-effect"],
         "rh-protocol": ["mutant-accept-flags", "mutant-pace-method"],
         "rh-registry": ["mutant-effect"],
