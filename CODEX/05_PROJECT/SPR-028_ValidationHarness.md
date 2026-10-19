@@ -9,7 +9,7 @@ tags: [sprint, validation, testing]
 related: [BCK-002, PRJ-002, REV-WAVE5, REV-WAVE6, REV-SPR-030, REV-SPR-015, REV-SPR-016, REV-SPR-038, SPR-012, SPR-015, SPR-016, SPR-018, SPR-019, SPR-021, SPR-022, SPR-023, SPR-024, SPR-025, SPR-027, SPR-029, SPR-030, SPR-038, ADR-0024, ADR-0026, ADR-0033, GOV-002, GOV-008]
 created: 2026-10-18
 updated: 2026-10-18
-version: 0.3.0
+version: 0.3.1
 ---
 
 > **BLUF:** Builds M9 v0 (`docs/11` P1.10, `docs/11_roadmap.md:200`: "the isolation harness (V-SF-22), the demography and dynasty bands first, censoring-aware lifespans, 32-seed ensembles, the auto-generated run report"), the tool that turns G1a's statistical rows into evidence, plus BCK-002 A-15's coverage (ruling M-10). **Priority 1** under D62 (the director's execution priorities of 2026-10-18: the engine core first, then the viewer, then era packs; `docs/decisions-log.md:7`): this plan carries G1a's demography row (`:211`), its isolation row (`:212`) and the reported succession bands (`:214`). Two stages, each its own PR, Tester pass and audit:
@@ -163,7 +163,7 @@ version: 0.3.0
   - **On real runs, against independent counts:** on `hamlet`'s 200-year run directory, the package's births, deaths and age-at-death histogram equal an independent count by the Tester's own DuckDB query over the same segments; a `--vitals` file with its fields reordered gives the same report (read by key).
   - **V-SCALE-02:** on the three rungs every band reports INSUFFICIENT or a valid result, none passes or fails below its minimum.
   - **The sealed rule holds on real reports:** no report the package writes contains a V-SF-06c or V-SF-07 statistic.
-  - **Determinism:** the report of a run set is byte-identical in two processes under different `PYTHONHASHSEED` values; the package reads no environment variable and no clock (a grep test).
+  - **Determinism:** the report of a run set is byte-identical in two processes under different `PYTHONHASHSEED` values; the package reads no environment variable and no clock (a grep test). **The two processes run as `python/.venv/bin/python -P -s -m rehoboam_calib …`** (PY-PKG review P3): `-I` implies `-E` and so ignores `PYTHONHASHSEED`, and `-S` would drop the installed packages and their dependencies; `-P` keeps the working directory off `sys.path` and `-s` keeps the user site off it.
   - `ruff` and `mypy --strict` clean; no dependency added (the lock changes only as PY-PKG's packaging makes it change for a new package).
 - **Status:** [ ] not started
 
@@ -181,7 +181,7 @@ version: 0.3.0
 - **Status:** [ ] not started
 
 #### T-04: Stage-A gates, CI, docs and `bin/g1a_ensembles.sh` (W42, Z1, X10; 0.25 day)
-- **Deliverable:** the gates of the "CI by part" table's stage-A row; `validation.yml` with stage A's weekly jobs; `bin/g1a_ensembles.sh` (stage A's part: the demography gates at 32 × 1,000 and `kingdom_10k`'s V-SF-01 report; `--dry-run` prints its commands), which SPR-030b2's `g1a` job calls; the inventory test; `CLAUDE.md`; the stage's docs; the PR title `SPR-028a: … [C1]`.
+- **Deliverable:** the gates of the "CI by part" table's stage-A row; `validation.yml` with stage A's weekly jobs, whose jobs install uv with the same `setup-uv` step and pin as `ci.yml` (0.11.32), run `uv sync --frozen --project python`, and call `python/.venv/bin/python`, never a system `python`; `bin/g1a_ensembles.sh` (stage A's part: the demography gates at 32 × 1,000 and `kingdom_10k`'s V-SF-01 report; `--dry-run` prints its commands), which SPR-030b2's `g1a` job calls; the inventory test; `CLAUDE.md`; the stage's docs; the PR title `SPR-028a: … [C1]`.
 - **Acceptance:** every gate in exactly one part; within the stage-A row's ×1.5 budgets (+14 s core, +15 s stream); `validation.yml`'s `pull_request` reduced case is green on the PR (its first weekly dispatch after the merge is recorded by the Architect at the audit: C6); no existing gate moves part. The Tester's pass and the audit are recorded (`VER-SPR-028-TEST`, `VER-SPR-028`, stage A).
 - **Status:** [ ] not started
 
