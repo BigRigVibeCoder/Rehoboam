@@ -22,3 +22,6 @@ CODEX/00_INDEX/MANIFEST.yaml
 # Claude Code: local worktrees and personal settings (the project settings and agents in .claude/ are tracked)
 .claude/worktrees/
 .claude/settings.local.json
+
+# Red Team game archives were a dead end (voxel viewer, ADR-0036); never track them
+docs/red_team/games/
