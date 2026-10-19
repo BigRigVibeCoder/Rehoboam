@@ -2,14 +2,14 @@
 id: SPR-020
 title: "The event envelope in the engine: roles, anchored snapshots, typed edges, origin and provenance of change (P1.9)"
 type: how-to
-status: APPROVED
+status: CLOSED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
 related: [BCK-002, PRJ-002, REV-SPR-020, EVO-001, REV-EVO-001, SPR-013, SPR-014, SPR-026, SPR-029, SPR-030, ADR-0024, ADR-0025, ADR-0035]
 created: 2026-10-17
-updated: 2026-10-17
-version: 0.1.1
+updated: 2026-10-18
+version: 1.0.0
 ---
 
 > **BLUF:** Builds the event envelope v0 (`specs/chronicle/envelope_v0.md`, merged in PR #61) in the engine:

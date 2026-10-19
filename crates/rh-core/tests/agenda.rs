@@ -49,6 +49,7 @@ fn random_insert(a: &mut Agenda, d: &mut Draws) -> (AgendaKey, Timer) {
         purpose: PurposeId::from_raw(d.next(1 << 20)),
         kind: u32::try_from(d.next(9)).unwrap(),
         payload: i64::try_from(d.next(1000)).unwrap(),
+        cause: rh_events::EventRef::None,
     };
     let id = a.insert(time, phase, entity, timer);
     let key = AgendaKey {
@@ -157,6 +158,7 @@ fn t01_order_is_a_function_of_the_keys_not_of_insertion_order() {
         purpose: PurposeId::from_raw(0),
         kind: 0,
         payload: 0,
+        cause: rh_events::EventRef::None,
     };
     let run = |order: &[(SimTime, Phase, EntityRef)]| -> Vec<(SimTime, Phase, EntityRef)> {
         let mut a = Agenda::new();

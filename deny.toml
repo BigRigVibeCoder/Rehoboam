@@ -33,3 +33,8 @@ allow-git = []
 [advisories]
 # Scheduled job only (see the header). Yanked crates are treated as advisories for the same reason.
 yanked = "deny"
+ignore = [
+    # Transitive dev-dependencies of rh-bench via iai-callgrind (unmaintained notices, non-production):
+    "RUSTSEC-2025-0141", # bincode 1.3.3 unmaintained
+    "RUSTSEC-2026-0173", # proc-macro-error2 2.0.1 unmaintained
+]

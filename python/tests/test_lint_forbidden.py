@@ -274,6 +274,40 @@ def test_rust_files_skip_only_the_top_level_target_directory(tmp_path: Path) -> 
     assert found == ["src/lib.rs", "src/target/mod.rs"]
 
 
+def test_rust_files_skip_agent_worktrees(tmp_path: Path) -> None:
+    """Agent worktrees under .claude/worktrees/ are skipped (BCK-002 A-73)."""
+    for rel in [
+        "src/lib.rs",
+        ".claude/worktrees/agent-1/src/lib.rs",
+        ".claude/worktrees/viewer-core/crates/rh-viewer/src/main.rs",
+    ]:
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text("")
+    found = [p.relative_to(tmp_path).as_posix() for p in rust_files([tmp_path])]
+    assert found == ["src/lib.rs"]
+
+
+def test_scan_paths_ignores_forbidden_patterns_in_agent_worktrees(tmp_path: Path) -> None:
+    """Agent worktrees are skipped; violations outside FAIL (BCK-002 A-73)."""
+    wt_file = tmp_path / ".claude" / "worktrees" / "agent-1" / "src" / "lib.rs"
+    wt_file.parent.mkdir(parents=True)
+    wt_file.write_text("use std::time::SystemTime;\n")
+
+    clean_file = tmp_path / "src" / "lib.rs"
+    clean_file.parent.mkdir(parents=True)
+    clean_file.write_text("pub fn answer() -> u32 { 42 }\n")
+
+    # The forbidden pattern in the agent worktree is ignored
+    report = scan_paths([tmp_path], float_fields=frozenset())
+    assert report.violations == []
+
+    # But a forbidden pattern outside the worktree continues to FAIL
+    clean_file.write_text("use std::time::SystemTime;\n")
+    report_fail = scan_paths([tmp_path], float_fields=frozenset())
+    assert len(report_fail.violations) == 1
+    assert any("SystemTime" in v for v in report_fail.violations)
+
+
 # file stem -> (rule, the token the report names); mirrors FORBIDDEN_API_CONTROLS in check_all.sh.
 PLANTED = {
     "net_socket": ("network", "std::os::unix::net"),
@@ -328,6 +362,14 @@ PLANTED = {
     "env_set_current_dir": ("env", "std::env"),
     "env_split_paths": ("env", "std::env"),
     "env_join_paths": ("env", "std::env"),
+    "build_env_home": ("build-env", "env!("),
+    "build_env_option": ("build-env", "option_env!("),
+    "build_env_concat": ("build-env", "env!("),
+    "build_env_manifest": ("build-env", "env!["),
+    "build_env_rename_core": ("build-env", "core::env"),
+    "build_env_rename_option": ("build-env", "std::option_env"),
+    "build_env_rename_group": ("build-env", "core::option_env"),
+    "build_env_rename_reexport": ("build-env", "some_crate::env"),
     "fs_renamed_std": ("file-io", "fs::r"),
     "fs_os_symlink": ("file-io", "fs::s"),
     "raw_ident_fs": ("file-io", "std::fs"),
@@ -931,7 +973,7 @@ def test_a_clean_included_file_passes(tmp_path: Path) -> None:
     "invocation",
     [
         'include!(concat!("gen", ".rs"));',
-        'include!(concat!(env!("OUT_DIR"), "/gen.rs"));',
+        'include!(concat!("gen", ".rs", "x"));',
         "include!($file);",
         'include!("gen\\x2ers");',
         'include!(b"gen.rs");',
@@ -1068,7 +1110,7 @@ def test_an_in_repository_data_include_is_allowed_and_not_scanned(tmp_path: Path
     [
         'include_str!("../outside.txt")',
         'include_bytes!("/etc/hostname")',
-        'include_str!(concat!(env!("OUT_DIR"), "/x"))',
+        'include_str!(concat!("../outside", ".txt"))',
         'include_bytes!("missing.bin")',
     ],
 )
@@ -1264,14 +1306,37 @@ def test_def_5_any_path_into_std_env_is_refused(source: str) -> None:
         "use std::env::consts;",
         "use std::env::consts::{ARCH, FAMILY};",
         'fn f() -> &\'static str { env!("CARGO_PKG_NAME") }',
-        'fn f() -> Option<&\'static str> { option_env!("X") }',
+        'fn f() -> Option<&\'static str> { option_env!("CARGO_PKG_VERSION") }',
+        'fn f() -> &\'static str { env!(r"CARGO_PKG_NAME") }',
         "fn f(env: u8) -> u8 { env }",
         "fn f() { let _ = my_env::current_dir(); }",
     ],
 )
 def test_def_5_the_constants_and_the_compile_time_macros_pass(source: str) -> None:
-    """std::env::consts is fixed by the build; env! and option_env! are compile-time (DEF-5)."""
+    """std::env::consts is fixed by the build; env!/option_env! of CARGO_PKG_* are the package's.
+
+    A literal CARGO_PKG_* name is the package's own constant (DEF-5; BCK-002 A-50).
+    """
     assert rules_hit(source) == []
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        'fn f() -> Option<&\'static str> { option_env!("X") }',
+        'fn f() -> &\'static str { env!("HOME") }',
+        'fn f() -> &\'static str { env!(concat!("CARGO_PKG_", "NAME")) }',
+        'fn f() -> &\'static str { env!("CARGO_PKG_NAME", "message") }',
+        'fn f() -> &\'static str { core::env!("CARGO_MANIFEST_DIR") }',
+        'macro_rules! m { () => { env!("PATH") } }',
+    ],
+)
+def test_a_50_the_build_environment_is_refused(source: str) -> None:
+    """env!/option_env! of anything but one literal CARGO_PKG_* name is refused (A-50).
+
+    It reads the build machine's environment into the engine build (SPR-014 T-07).
+    """
+    assert rules_hit(source) == ["build-env"]
 
 
 @pytest.mark.parametrize(

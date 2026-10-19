@@ -7,12 +7,12 @@
 )]
 
 use rh_core::access::{AccessSpec, ColumnRead, ColumnWrite, CommandSend, Lag, Plane};
-use rh_core::command::Command;
+use rh_core::command::{Arg, Command};
 use rh_core::fixed::Q16_16;
 use rh_core::system::{InvariantResult, PulseBinding, SimError, StepCtx, SystemModel};
 use rh_core::world::{SystemView, WorldTables};
 use rh_core::{Phase, Pulse};
-use rh_events::EventDraft;
+use rh_events::{EventDraft, EventRef};
 
 use crate::common::{check, fixed, from_skeleton, person, purposes, r64};
 
@@ -57,8 +57,8 @@ impl Polity {
                 ctx.submit(Command {
                     kind: "Settle",
                     person: person(r),
-                    args: vec![r64(r)],
-                    cause: None,
+                    args: vec![Arg::Int(r64(r))],
+                    cause: EventRef::None,
                 })?;
             }
         }

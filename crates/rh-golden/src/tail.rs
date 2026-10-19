@@ -58,6 +58,10 @@ pub struct TailArgs {
     pub canonical: bool,
     /// Follow new segments until the run's last sim-year is sealed.
     pub wait: bool,
+    /// Bounded wait for run.toml in seconds (default 60 s; C9).
+    pub timeout: Option<u64>,
+    /// Read channel C (sift matches) instead of channel A (`--channel C`; SPR-026 T-04).
+    pub channel_c: bool,
 }
 
 /// The names and the calendar a display needs (tool side).
@@ -291,9 +295,28 @@ pub fn tail(
     annotations: &dyn Fn(&Path) -> Result<Annotations, Error>,
     out: &mut dyn std::io::Write,
 ) -> Result<(), Error> {
-    // With --wait a tail may start before the run has written its run.toml.
-    while args.wait && !args.run_dir.join(crate::stream::RUN_TOML).is_file() {
-        std::thread::sleep(Duration::from_millis(50));
+    if args.channel_c {
+        return tail_c(args, out);
+    }
+    // With --wait a tail may start before the run has written its run.toml (C9: bounded wait).
+    if args.wait {
+        let path = args.run_dir.join(crate::stream::RUN_TOML);
+        if !path.is_file() {
+            let timeout = args.timeout.unwrap_or(60);
+            eprintln!("waiting for {} (timeout {timeout} s)...", path.display());
+            let max_iters = timeout.saturating_mul(20);
+            let mut iters = 0u64;
+            while !path.is_file() {
+                if iters >= max_iters {
+                    return Err(Error(format!(
+                        "timed out after {timeout} s waiting for {}",
+                        path.display()
+                    )));
+                }
+                std::thread::sleep(Duration::from_millis(50));
+                iters += 1;
+            }
+        }
     }
     let run = RunToml::read(&args.run_dir)?;
     let display = display_of(&args.repo, &run)?;
@@ -438,4 +461,95 @@ fn header_of_registry(run: &RunToml) -> String {
         format: FORMAT_A.to_owned(),
     }
     .line()
+}
+
+/// `tail --channel C` (SPR-026 T-04): the sealed channel-C segments' records, in seq order, as
+/// canonical lines after the channel's file header or as display lines, then the status line. An
+/// empty sim-year (no match) holds no line.
+fn tail_c(args: &TailArgs, out: &mut dyn std::io::Write) -> Result<(), Error> {
+    if args.wait || args.follow.is_some() || !args.kinds.is_empty() {
+        return Err(Error(
+            "tail --channel C takes --from-seq, --to-seq and --canonical only".to_owned(),
+        ));
+    }
+    let run = RunToml::read(&args.run_dir)?;
+    let io = |e: std::io::Error| Error(format!("tail: {e}"));
+    let display = (!args.canonical)
+        .then(|| display_of(&args.repo, &run))
+        .transpose()?;
+    if args.canonical {
+        let h = FileHeader {
+            timeline_id: TIMELINE,
+            channel: Channel::C,
+            registry_version: run.registry_version.clone(),
+            format: rh_sifter::sift::FORMAT_C.to_owned(),
+        };
+        writeln!(out, "{}", h.line()).map_err(io)?;
+    }
+    let segs = rh_sifter::sift::read_channel_c(&args.run_dir, TIMELINE)
+        .map_err(|e| Error(e.to_string()))?;
+    let mut next = args.from_seq;
+    for seg in &segs {
+        for r in &seg.records {
+            let seq = r.header.seq;
+            if seq < args.from_seq || args.to_seq.is_some_and(|m| seq > m) {
+                continue;
+            }
+            let line = match &display {
+                None => canonical::render(r).map_err(|e| Error(e.to_string()))?,
+                Some(d) => display_line(r, d),
+            };
+            writeln!(out, "{line}").map_err(io)?;
+            next = seq + 1;
+        }
+    }
+    let through = segs.last().map_or_else(
+        || "nothing sealed yet".to_owned(),
+        |s| format!("sealed through y{:06}", s.row.sim_year),
+    );
+    let prefix = if args.canonical { "# " } else { "" };
+    writeln!(out, "{prefix}STATUS channel C {through} | cursor {next}").map_err(io)?;
+    Ok(())
+}
+
+/// The canonical lines of the sealed segments of channel A (or C) with `from <= seq <= to`, in
+/// seq order: a live viewer's sealed read (`wire_v1.md` §6.3; SPR-026 T-05). Channel A reads only
+/// the segments whose rows overlap the range.
+///
+/// # Errors
+/// [`Error`] if a segment does not read.
+pub fn sealed_lines(
+    run_dir: &Path,
+    channel_c: bool,
+    minutes_per_year: i64,
+    from: u64,
+    to: u64,
+) -> Result<Vec<String>, Error> {
+    let err = |e: &dyn std::fmt::Display| Error(e.to_string());
+    let mut out = Vec::new();
+    let mut take = |records: &[Record]| -> Result<(), Error> {
+        for r in records {
+            if (from..=to).contains(&r.header.seq) {
+                out.push(canonical::render(r).map_err(|e| err(&e))?);
+            }
+        }
+        Ok(())
+    };
+    if channel_c {
+        for seg in rh_sifter::sift::read_channel_c(run_dir, TIMELINE).map_err(|e| err(&e))? {
+            take(&seg.records)?;
+        }
+    } else {
+        let dir = channel_dir(&run_dir.join("stream"), TIMELINE, Channel::A);
+        for path in sealed_segments(&dir).map_err(|e| err(&e))?.values() {
+            let row = rh_stream::seal::read_segment_row(path).map_err(|e| err(&e))?;
+            if row.last_seq < from || row.first_seq > to {
+                continue;
+            }
+            let seg = segment::decode(&read_segment(path).map_err(|e| err(&e))?, minutes_per_year)
+                .map_err(|e| Error(format!("{}: {e}", path.display())))?;
+            take(&seg.records)?;
+        }
+    }
+    Ok(out)
 }

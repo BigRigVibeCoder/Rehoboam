@@ -311,6 +311,14 @@ fn every_wrong_keyframe_is_refused() {
         one[k] ^= 0x01;
         assert!(load(&one).is_err(), "byte {k} flipped");
     }
+    // A keyframe of format v1 (SPR-007 to SPR-013) is refused by its format name (SPR-020 T-05;
+    // R12 (d)): its events.held rows are SPR-006's events.
+    let v1 = with_header(&bytes, "format", rh_snapshot::keyframe::KEYFRAME_FORMAT_V1);
+    let err = load(&v1).err().map(|e| e.to_string()).unwrap_or_default();
+    assert!(
+        err.contains("rehoboam/rh-snapshot/keyframe/v1 needs the v1 decoder"),
+        "a v1 keyframe: {err}"
+    );
     // Another history.
     let mut other = history();
     other.world_seed += 1;

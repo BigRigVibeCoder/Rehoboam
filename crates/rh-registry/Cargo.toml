@@ -13,11 +13,18 @@ kind = "machinery"
 [lints]
 workspace = true
 
+[features]
+# SPR-017 T-05: honour the planted effect-language mutants (`effect::Mutant`). Test-only: BCK-002
+# A-52's refusal of `mutant-*` features in `rh-cli run` and `bin/regen_baseline.sh` covers it.
+mutant-effect = []
+
 [dependencies]
 # SPR-005: the single-writer and plane rules live in rh-core (rh-registry -> rh-core, never the
 # reverse; Architect ruling 2026-10-16).
 rh-core = { version = "0.0.0", path = "../rh-core" }
 # SPR-011 T-04: WorldSpec names its systems by SystemId.
 rh-ids = { version = "0.0.0", path = "../rh-ids" }
+# SPR-017 T-07: effect::seam gives a converted command the verb's DraftRef as its cause.
+rh-events = { version = "0.0.0", path = "../rh-events" }
 serde = { version = "=1.0.229", features = ["derive"] }
 toml = "=1.1.8"

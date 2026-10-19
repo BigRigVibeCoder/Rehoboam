@@ -18,3 +18,10 @@ python/.venv/
 .pytest_cache/
 # The document index is generated locally (python -I bin/gen_manifest.py); not committed (GOV-001 §3).
 CODEX/00_INDEX/MANIFEST.yaml
+
+# Claude Code: local worktrees and personal settings (the project settings and agents in .claude/ are tracked)
+.claude/worktrees/
+.claude/settings.local.json
+
+# Red Team game archives were a dead end (voxel viewer, ADR-0036); never track them
+docs/red_team/games/

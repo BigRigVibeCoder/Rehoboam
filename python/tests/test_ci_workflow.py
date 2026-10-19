@@ -1,13 +1,14 @@
 """ci.yml runs every part of bin/check_all.sh (VER-SPR-009-TEST GAP-19; BCK-002 A-41).
 
-The PR tier is two CI jobs, one per part of the chain. Nothing else ties the workflow to the
-parts: with the matrix cut to `[core]`, or both jobs running `--part core`, the golden part (the
-golden runs, the perf gates, the vitals, the allocation budget) would leave CI with every test
-green. This test reads `.github/workflows/ci.yml` and the parts `bin/check_all.sh` declares, and
-proves the `check-all` job's matrix is exactly those parts and that its step passes the matrix
-value to `--part`. The controls plant both mistakes.
+The PR tier is three CI jobs, one per part of the chain (BCK-002 A-63). Nothing else ties the
+workflow to the parts: with the matrix cut to `[core]` or `[core, golden]`, or every job running
+`--part core`, the golden part (the golden runs, the perf gates, the vitals, the allocation budget)
+or the stream part (the stream, serve, tail, sift, replay, rungs and twin gates) would leave CI
+with every test green. This test reads `.github/workflows/ci.yml` and the parts `bin/check_all.sh`
+declares, and proves the `check-all` job's matrix is exactly those parts and that its step passes
+the matrix value to `--part`. The controls plant both mistakes.
 
-Refs: VER-SPR-009-TEST GAP-19; SPR-009 review 2b.
+Refs: VER-SPR-009-TEST GAP-19; SPR-009 review 2b; BCK-002 A-63.
 """
 
 import copy
@@ -64,9 +65,9 @@ def problems(flow: dict[str, Any], parts: list[str]) -> list[str]:
     return found
 
 
-def test_check_all_declares_two_parts() -> None:
-    """The chain's parts, as test_check_all_inventory.py pins them."""
-    assert declared_parts() == ["core", "golden"]
+def test_check_all_declares_three_parts() -> None:
+    """The chain's parts, as test_check_all_inventory.py pins them (BCK-002 A-63)."""
+    assert declared_parts() == ["core", "golden", "stream"]
 
 
 def test_the_workflow_runs_every_part_once() -> None:
@@ -75,9 +76,11 @@ def test_the_workflow_runs_every_part_once() -> None:
 
 
 def test_a_matrix_without_the_golden_part_fails() -> None:
-    """Control: `part: [core]` would drop the golden part from CI."""
+    """Control: `part: [core]` would drop the golden part from CI, `[core, golden]` the stream."""
     flow = copy.deepcopy(workflow())
     flow["jobs"]["check-all"]["strategy"]["matrix"]["part"] = ["core"]
+    assert problems(flow, declared_parts()) != []
+    flow["jobs"]["check-all"]["strategy"]["matrix"]["part"] = ["core", "golden"]
     assert problems(flow, declared_parts()) != []
     flow["jobs"]["check-all"]["strategy"]["matrix"]["part"] = ["core", "core"]
     assert problems(flow, declared_parts()) != []
@@ -101,6 +104,23 @@ def test_a_hard_coded_part_fails() -> None:
 def test_the_pr_tier_times_out_at_20_minutes() -> None:
     """BCK-002 A-38: each PR-tier job's timeout guards the 15-minute budget (V-PERF-04)."""
     assert workflow()["jobs"]["check-all"]["timeout-minutes"] == 20
+
+
+OVERFLOW = 'if [ "$1" = stream ]; then export CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS=true; fi'
+STREAM_KEY = "${{ matrix.part == 'stream' && 'stream-overflow-checks' || matrix.part }}"
+
+
+def test_the_stream_part_s_cache_names_its_overflow_checks() -> None:
+    """PR #89's review C5: part stream builds its release profile with overflow checks.
+
+    check_all.sh's `part` turns them on, where Swatinem/rust-cache cannot see them; a cache
+    restored by its exact key is not saved again, so the stream job's key names them, and a cache
+    of the build without them is never its exact match.
+    """
+    assert OVERFLOW in SCRIPT.read_text(encoding="utf-8")
+    steps = workflow()["jobs"]["check-all"]["steps"]
+    cache = next(s for s in steps if str(s.get("uses", "")).startswith("Swatinem/rust-cache@"))
+    assert cache["with"]["key"] == STREAM_KEY
 
 
 # The director's ruling of 2026-10-17: documentation-only changes skip the golden part's work, and a

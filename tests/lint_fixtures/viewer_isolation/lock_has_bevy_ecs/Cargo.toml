@@ -1,0 +1,7 @@
+# Control for viewer-isolation rule: bevy_ecs in root lock must pass (SPR-033 T-06; A3).
+[workspace]
+members = ["rh-bench"]
+resolver = "3"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"

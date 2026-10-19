@@ -130,11 +130,13 @@ fn specs() -> SpecTable {
         commands: Vec::new(),
         emits: Vec::new(),
         from_manifest: Vec::new(),
+        ..SpecEntry::default()
     };
     let (owners, _) = single_writer(std::slice::from_ref(&declaration), Source::Spec);
     SpecTable {
         owners,
         specs: [(SYSTEM.to_owned(), entry)].into_iter().collect(),
+        ..SpecTable::default()
     }
 }
 

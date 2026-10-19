@@ -1,0 +1,10 @@
+#rehoboam/annals/v0 world=fells group=house:12427197615358897272 timeline=0 chronicle_digest=946c79dcde9ceb04408d55a519a82a01 registry_version=0.2.0+next keyframe_extract=cb5ba15a1a84dc6b state_hash=c4f1a29e07b3d586 manifest_hash=sha256:f886c0deaf070193c3ad0cc02a89e0ee2ef5835388b8881275375fcfbfd9d024 templates=0.4.0 templates_digest=80e215546e2cd0fe renderer=annals_v0/0.3.0 calendar=360
+P 5 prologue.house 2 [] [8599830639058873818,15729040449112377638] [house/12427197615358897272,kf:life/15729040449112377638,kf:life/8599830639058873818]
+P 6 prologue.ancestor 1 [] [13831978776912696371] [kf:life/13831978776912696371]
+P 7 prologue.tenure 1 [] [13831978776912696371] [kf:life/13831978776912696371,kf:tenure/2/-27815040,title/2]
+P 8 prologue.tenure.open 2 [] [15729040449112377638] [kf:tenure/2/-7686720,name/15729040449112377638,title/2]
+S 11 death.natural 1 [2] [15729040449112377638] [name/15729040449112377638]
+S 12 interregnum.after 2 [2,3] [15729040449112377638] [name/15729040449112377638]
+S 13 succeed.after 1 [1,5] [4554286092881966386,6480668151967117525,15729040449112377638] [life/4554286092881966386,name/15729040449112377638,name/6480668151967117525]
+# castless: 1 event(s) with no cast and no told triggered edge into this group: INTERREGNUM_CRISIS x1
+digest c0aea65d9ea64291

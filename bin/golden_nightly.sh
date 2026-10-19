@@ -135,8 +135,9 @@ echo "exp/ln v0: rh-core in release is bit-equal to the golden file and to 2^20 
 cargo nextest run -p rh-sys-demography --release --locked --test schedule_f1_golden --no-capture
 echo "M2 F1 schedule: rh-sys-demography in release is bit-equal to specs/demography/golden/m2_f1_mortality.txt"
 # SPR-030 (REV-SPR-030 R10): the fixture worlds' every case (the PR tier renders kingdom_10k at seed 1 only) and
-# the CRN pairing protocol at seeds 1 to 3 with its controls (the PR tier runs seed 1; a seed whose sovereigns leave
-# no 5-year window after the input is pinned as skipped, REV-SPR-030 R14). Standard-library references.
+# the CRN pairing protocol's nightly tier with its controls: seeds 1, 2, ... until two are VALID, up to seed 12, and
+# a FAIL with fewer (BCK-002 A-62, the review's E4; the PR tier takes the first VALID seed of 1 to 4; a seed whose
+# sovereigns leave no 5-year window after the input is pinned as skipped, REV-SPR-030 R14). Standard-library references.
 "${PYTHON:-python3}" -I specs/worldgen/selftest_fixture_worlds.py --tier nightly
-"${PYTHON:-python3}" -I specs/determinism/selftest_crn_pairing.py --seeds 1,2,3 --controls
+"${PYTHON:-python3}" -I specs/determinism/selftest_crn_pairing.py --tier nightly --controls
 echo "SPR-030 fixture worlds and CRN pairing: every case equals the golden outputs; every control fails as required"

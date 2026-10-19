@@ -1,13 +1,23 @@
 # Your decisions, in one place
 
-*Updated 2026-10-17 (night): D57 (the wave-6 sprint plans: SPR-018, SPR-019, revision 1 after their independent review) is new and waits on you, with D52 to D56. Earlier the same night: D56 (how great houses persist in a T1 world: the membership rule and the readings that keep a house alive; BCK-002 A-56, before SPR-021's plan) waits on you, beside D52 to D55. Earlier (evening): D54 (the wave-5 sprint plans: SPR-015, SPR-016, SPR-027), D53 (the red team's ripped game assets) and D55 (where the red team's voxel proposals go on the roadmap) wait on you, beside D52. Earlier (afternoon): D52 (the SPR-017 effect-language sprint plan) waits on you. The director approved D51, the voxel viewer (ADR-0036). Earlier (noon): the director ruled D46, confirmed D29, approved the CI minute savings and gave the G1a annals labels; nothing is waiting. Earlier the same day: D37, D38, D40–D44 and D47–D50. D48 (the wave-4 sprint plans: SPR-014, SPR-020, SPR-026) is new; D44 (the event envelope, PR #61) is new; D42, D43 and D47 (the World Stream v1 wire, PR #60) are new; D40 and D41 (the births spec, PR #50) earlier. G0 passed (`VER-G0`); D37 (the effect language) and D38 (DATA-5) wait on you. 2026-10-16 (evening): D30 to D36 approved at G0. Earlier: D30 to D36, the P1a plan, waited for G0. Earlier: your rulings (D28: the saga engine). The SPR items below are unchanged. Full reasoning is in [`12_open_questions.md`](12_open_questions.md) and [`06_adr/`](06_adr/README.md). Every ruling is recorded in [`decisions-log.md`](decisions-log.md).*
+*A new row goes at the end of its table. A decided row moves under "Decided on <date>" and into `docs/decisions-log.md`.*
 
 **How to answer:** reply in chat with the ID and your choice. Anything you don't answer keeps its default, and work proceeds on it.
 
 ## Still waiting on you
 
-| ID | Question | Recommendation | Default if you don't answer |
-|---|---|---|---|
+*None. The pending decisions queue is clear.*
+
+## Decided on 2026-10-18
+
+| ID | Ruling |
+|---|---|
+| D58 | **Approved: the wave-7 sprint plans** (`CODEX/05_PROJECT/`, revision 2; SPR-021 M7 F1 (a) and SPR-022 M7 F1 (b)), all eight items approved as recommended: (1) sizes and splits (SPR-021 as 021a/b; SPR-022 as 022a/b); (2) wave 7 C2 throughout, joined in build at SPR-024b's `[C3]` commit; (3) spec prep first (T-00a then T-00b); (4) Registry defaults for M7 via `registry_delta.toml`; (5) SPR-019 stage A before 021a; (6) requirement texts amended; (7) CI deltas accepted; (8) shared owners and merge graph. Status: APPROVED |
+| D59 | **Approved: the minds sprint plans** (`CODEX/05_PROJECT/`, revision 2; SPR-023, SPR-024a/b, SPR-025), all eight items approved as recommended: (1) sizes and interim checkpoints; (2) two spec PRs first (T1-A, T1-I/S); (3) classes C2 with 024b the one `BUILT` move; (4) ADR-0002 §2 addendum (named actors as columns behind `rh-minds`); (5) one owner per shared engine mechanism; (6) grief edge through instant log; (7) stress break band reported at G1a; (8) merge graph. Status: APPROVED |
+| D61 | **Approved: the three wave-8 sprint plans, revision 2** (`CODEX/05_PROJECT/`, revision 2; SPR-028, SPR-029, SPR-030), all nine items approved as recommended: (1) sizes and splits (SPR-028 A/B, SPR-029, SPR-030 A/B1/B2); (2) `twin_vales` as fifth golden world; (3) meso benches with bench 3 reported; (4) sealed bands V-SF-06c/07; (5) A-67 live edge memory bounds; (6) G1a session protocol; (7) G1a reading set; (8) CI deltas accepted; (9) change classes and dispatch rules. Status: APPROVED |
+| D63 | **Approved: the viewer sprint plans, revision 2** (`CODEX/05_PROJECT/`, revision 2; SPR-033a/b, SPR-034, SPR-035; PRJ-003 v1.4.2), all six items approved as recommended: (1) sizes and splits (033a Bevy-free, 033b Bevy, SPR-034, SPR-035); (2) Bevy 0.20 lock wait; (3) CI schedule (PRs touching viewer, twice-weekly, on-demand); (4) jump latency targets; (5) residents per settlement before households; (6) Director inspection protocol. Status: APPROVED |
+| D60 | **Approved: the SPR-038 plan, revision 3** (the per-instant engine cost; BCK-002 A-60), every item as the Architect restated it: two C2 `[perf-baseline]` stages (A: exact gating, O(N + L) checks, positional compaction; B: the cadence parameter with `every-change` the default in every build, the compiled-out value checks, the incremental digest with append marks, the instant log, the one `DropReason` change); SPR-014's narrowing removed; the merge order SPR-014, then SPR-020 and stage A, then SPR-015; G1a: necessary, not sufficient (A-68 decided at SPR-030) |
+| D62 | **Approved: the director's execution priorities.** (1) The engine core, P1a and P1b, through G1a and G1b; everything in flight, including SPR-029's annals. (2) The viewer lane: the plans are commissioned now; SPR-033 starts when SPR-026 merges and SPR-035 waits for SPR-027; FPS and scrub latency are reported targets on the director's P51; 0.35 m voxels by default with a level-of-detail fallback; a viewer-side cache of watched history. (3) Era packs E2 to E4 after G2. Priority 1 wins every contention. The red team's scorecard goes to the inbox for the P1b planning gate (`docs/11` v1.9, PRJ-003 v1.3.0) |
 
 ## Decided on 2026-10-17
 

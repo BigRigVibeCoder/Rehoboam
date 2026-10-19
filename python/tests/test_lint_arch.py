@@ -113,14 +113,14 @@ def test_a_system_may_depend_on_each_allowed_crate(target: str) -> None:
 @pytest.mark.parametrize("plane", ["B", "C"])
 def test_plane_a_depending_on_plane_b_or_c_is_v_pln_01(plane: str) -> None:
     """Plane A never depends on observation or narrative crates."""
-    crates = engine(crate("rh-view", plane=plane), crate("rh-minds", deps=("rh-view",)))
-    assert found(crates) == [("V-PLN-01", "rh-minds")]
+    crates = engine(crate("rh-view", plane=plane), crate("rh-plane-a", deps=("rh-view",)))
+    assert found(crates) == [("V-PLN-01", "rh-plane-a")]
 
 
 def test_plane_a_depending_on_a_tool_crate_breaks_the_closure() -> None:
     """A tool crate would launder planes B and C and unscanned APIs into plane A."""
-    crates = engine(crate("rh-minds", deps=("rh-cli",)))
-    assert found(crates) == [("plane-A-closure", "rh-minds")]
+    crates = engine(crate("rh-plane-a", deps=("rh-cli",)))
+    assert found(crates) == [("plane-A-closure", "rh-plane-a")]
 
 
 @pytest.mark.parametrize("dep_kind", ["dev", "build"])
@@ -128,10 +128,10 @@ def test_dev_and_build_dependencies_are_checked(dep_kind: str) -> None:
     """Every dependency kind counts, not only normal dependencies."""
     crates = engine(
         crate("rh-observe", plane="B"),
-        crate("rh-minds", deps=("rh-observe",), dep_kind=dep_kind),
+        crate("rh-plane-a", deps=("rh-observe",), dep_kind=dep_kind),
     )
     violations = check_workspace(crates)
-    assert [(v.rule, v.crate) for v in violations] == [("V-PLN-01", "rh-minds")]
+    assert [(v.rule, v.crate) for v in violations] == [("V-PLN-01", "rh-plane-a")]
     assert f"as a {dep_kind}-dependency" in violations[0].message
 
 
@@ -274,6 +274,31 @@ def test_system_names_and_system_kind_go_together(name: str, kind: str) -> None:
     assert found(engine(crate(name, kind=kind))) == [("metadata", name)]
 
 
+def test_rh_minds_is_a_system_crate_by_its_pin() -> None:
+    """T1-A (REV-MINDS finding 3): rh-minds declares (A, system) by the pinned-names clause."""
+    minds = crate("rh-minds", kind="system", deps=("rh-core", "rh-contracts", "rh-sample"))
+    assert found(engine(crate("rh-sample"), minds)) == []
+    # judged as a system: another system crate, or a non-allowed crate, is V-INSP-03
+    war = crate("rh-sys-war", kind="system")
+    assert found(engine(crate("rh-minds", kind="system", deps=("rh-sys-war",)), war)) == [
+        ("V-INSP-03", "rh-minds")
+    ]
+    assert ("V-INSP-03", "rh-minds") in found(
+        engine(crate("rh-minds", kind="system", deps=("rh-snapshot",)))
+    )
+
+
+@pytest.mark.parametrize(("plane", "kind"), [("A", "machinery"), ("A", "core"), ("tool", "tool")])
+def test_rh_minds_cannot_leave_its_pin(plane: str, kind: str) -> None:
+    """Relabelled, rh-minds would escape the system-crate rules; the pin refuses it."""
+    assert ("metadata", "rh-minds") in found(engine(crate("rh-minds", plane=plane, kind=kind)))
+
+
+def test_the_pinned_names_clause_admits_only_pinned_names() -> None:
+    """A crate neither named rh-sys-* nor pinned may not declare kind system (as in the fixture)."""
+    assert found(engine(crate("rh-agents", kind="system"))) == [("metadata", "rh-agents")]
+
+
 def test_edges_from_crates_with_invalid_metadata_are_not_judged() -> None:
     """The metadata violation is reported once; its edges are not guessed at."""
     crates = engine(crate("rh-new", plane=None, kind=None, deps=("rh-cli",)))
@@ -290,20 +315,20 @@ def with_external(base: Crate, *deps: str, dep_kind: str = "normal") -> Crate:
 @pytest.mark.parametrize("rng", sorted(UNKEYED_RNG_CRATES))
 def test_plane_a_may_not_depend_on_an_unkeyed_rng_crate(rng: str) -> None:
     """Every crate on the single list is refused in plane A (DEF-1)."""
-    crates = engine(with_external(crate("rh-minds"), rng))
-    assert found(crates) == [("rng-crate", "rh-minds")]
+    crates = engine(with_external(crate("rh-plane-a"), rng))
+    assert found(crates) == [("rng-crate", "rh-plane-a")]
 
 
 def test_the_rng_rule_covers_rh_ids_and_build_dependencies() -> None:
     """rh-ids may not take rand either, and a build-dependency still counts."""
-    crates = engine(with_external(crate("rh-minds"), "rand", dep_kind="build"))
+    crates = engine(with_external(crate("rh-plane-a"), "rand", dep_kind="build"))
     crates = [with_external(c, "getrandom") if c.name == "rh-ids" else c for c in crates]
-    assert sorted(found(crates)) == [("rng-crate", "rh-ids"), ("rng-crate", "rh-minds")]
+    assert sorted(found(crates)) == [("rng-crate", "rh-ids"), ("rng-crate", "rh-plane-a")]
 
 
 def test_dev_dependencies_may_use_rand_for_property_tests() -> None:
     """Test code is not authoritative: proptest and rand are allowed as dev-dependencies."""
-    crates = engine(with_external(crate("rh-minds"), "rand", "rand_chacha", dep_kind="dev"))
+    crates = engine(with_external(crate("rh-plane-a"), "rand", "rand_chacha", dep_kind="dev"))
     assert found(crates) == []
 
 
@@ -312,7 +337,7 @@ def test_rng_building_blocks_are_allowed_only_in_rh_ids(block: str) -> None:
     """rand_core and rand_chacha serve the keyed RNG in rh-ids and nowhere else in plane A."""
     allowed = [with_external(c, block) if c.name == "rh-ids" else c for c in engine()]
     assert found(allowed) == []
-    assert found(engine(with_external(crate("rh-minds"), block))) == [("rng-crate", "rh-minds")]
+    assert found(engine(with_external(crate("rh-plane-a"), block))) == [("rng-crate", "rh-plane-a")]
 
 
 def test_crates_outside_plane_a_may_use_any_rng() -> None:
@@ -326,14 +351,14 @@ def test_crates_outside_plane_a_may_use_any_rng() -> None:
 
 def test_plane_a_may_not_take_an_unreviewed_third_party_crate() -> None:
     """A dependency missing from the reviewed list is refused until it is reviewed (A-20)."""
-    crates = engine(with_external(crate("rh-minds"), "itoa"))
-    assert found(crates) == [("plane-A-external", "rh-minds")]
+    crates = engine(with_external(crate("rh-plane-a"), "itoa"))
+    assert found(crates) == [("plane-A-external", "rh-plane-a")]
 
 
 def test_a_reviewed_crate_is_allowed_where_the_list_allows_it() -> None:
     """Any plane-A crate may use serde; only rh-registry toml; only rh-sample libm."""
     crates = engine(
-        with_external(crate("rh-minds"), "serde"),
+        with_external(crate("rh-plane-a"), "serde"),
         with_external(crate("rh-sample"), "libm"),
     )
     crates = [with_external(c, "serde", "toml") if c.name == "rh-registry" else c for c in crates]
@@ -343,15 +368,15 @@ def test_a_reviewed_crate_is_allowed_where_the_list_allows_it() -> None:
 @pytest.mark.parametrize("dep", ["libm", "toml"])
 def test_a_scoped_crate_is_refused_elsewhere_in_plane_a(dep: str) -> None:
     """The float-bearing crates stay where they were reviewed (the sampler float zone; SPR-004)."""
-    assert found(engine(with_external(crate("rh-minds"), dep))) == [
-        ("plane-A-external", "rh-minds")
+    assert found(engine(with_external(crate("rh-plane-a"), dep))) == [
+        ("plane-A-external", "rh-plane-a")
     ]
 
 
 def test_the_external_rule_skips_dev_dependencies_tools_and_rng_crates() -> None:
     """Tests may use anything; tool crates are not plane A; RNG crates are rng-crate's alone."""
     crates = engine(
-        with_external(crate("rh-minds"), "itoa", dep_kind="dev"),
+        with_external(crate("rh-plane-a"), "itoa", dep_kind="dev"),
         with_external(crate("rh-bench", plane="tool", kind="tool"), "itoa"),
         with_external(crate("rh-dice"), "rand"),
     )
@@ -458,6 +483,8 @@ def test_main_passes_on_the_repository_workspace() -> None:
         ("plane_a_libm_features", "plane-A-external"),
         ("plane_a_libm_target_edge", "plane-A-external"),
         ("relabelled_sample", "metadata"),
+        ("relabelled_minds", "metadata"),
+        ("system_kind_unpinned", "metadata"),
         ("engine_purity_direct", "engine-purity"),
         ("engine_purity_transitive", "engine-purity"),
         ("protocol_depends_on_plane_a", "protocol-leaf"),
@@ -532,7 +559,7 @@ def test_libm_must_come_without_its_default_features() -> None:
     assert found(engine(pinned(crate("rh-sample"), "libm", "=0.2.16", defaults=True))) == [
         ("plane-A-external", "rh-sample")
     ]
-    assert found(engine(pinned(crate("rh-minds"), "serde", "=1.0.0", defaults=True))) == []
+    assert found(engine(pinned(crate("rh-plane-a"), "serde", "=1.0.0", defaults=True))) == []
 
 
 def test_dev_dependencies_need_no_pin() -> None:
@@ -732,6 +759,22 @@ def test_only_the_root_target_and_git_directories_are_skipped(tmp_path: Path) ->
         ".venv/lib/clippy.toml",
         "a/target/clippy.toml",
         "node_modules/x/clippy.toml",
+    ]
+
+
+def test_agent_worktrees_clippy_configs_are_skipped(tmp_path: Path) -> None:
+    """Agent worktrees under .claude/worktrees/ are skipped (BCK-002 A-73)."""
+    worktree_cfg = tmp_path / ".claude" / "worktrees" / "agent-1" / "clippy.toml"
+    worktree_cfg.parent.mkdir(parents=True)
+    worktree_cfg.write_text("")
+    assert check_clippy_configs(tmp_path) == []
+
+    # Real violations outside ignored paths continue to FAIL
+    rogue_cfg = tmp_path / "sub" / "clippy.toml"
+    rogue_cfg.parent.mkdir(parents=True)
+    rogue_cfg.write_text("")
+    assert [(v.rule, v.crate) for v in check_clippy_configs(tmp_path)] == [
+        ("clippy-config", "sub/clippy.toml")
     ]
 
 

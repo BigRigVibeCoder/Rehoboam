@@ -1,5 +1,5 @@
 # The annals of House Ashcombe
-# From the chronicle of ashcombe; templates 0.3.0
+# From the chronicle of ashcombe; templates 0.4.0
 
 ## Before the chronicle began
 House Ashcombe entered the chronicle with four living members.
@@ -30,6 +30,7 @@ On day 1 of month 9, the first daughter of Hugh Thorne bore the first son of Edr
 
 ## The thirteenth year (Year of Ash)
 On day 9 of month 7, the second son of Edric Ashcombe (Founder #9) declared a feud against Hugh Thorne, moved by the death of the first son of Edric Ashcombe (Founder #8).
+On day 10 of month 10, the first daughter of Edric Ashcombe (Founder #10) bore Edric Ashcombe (Founder #5) a daughter, the first daughter of Edric Ashcombe (p-26e1), the second child of that mother.
 
 ## The fourteenth year (Year of Ash)
 On day 2 of month 2, the second son of Edric Ashcombe (Founder #9) and Hugh Thorne were reconciled, and their feud ended.
@@ -66,8 +67,8 @@ On day 4 of month 4, p-aae0 and the second daughter of Hugh Thorne were married.
 ## The thirtieth year (Year of Ash)
 On day 2 of month 2, the second daughter of Hugh Thorne bore p-aae0 a son, p-553c, the first child of that mother.
 
-## The thirty-fifth year (Year of Ash)
-On day 1 of month 1, after the interregnum, p-aae0 succeeded the first son of Hugh Thorne.
+## The thirty-fourth year (Year of Ash)
+On day 6 of month 6, after the death of the first son of Hugh Thorne, p-aae0 succeeded the first son of Hugh Thorne.
 
-## The thirty-sixth year (Year of Ash)
-On day 2 of month 2, p-aae0 granted a seat to p-e400.
+## The thirty-fifth year (Year of Ash)
+On day 1 of month 1, p-aae0 granted a seat to p-e400.

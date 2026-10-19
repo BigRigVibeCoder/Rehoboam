@@ -1,13 +1,13 @@
 //! What the host turns into channel-A records after each instant (T-09): the drained events
 //! (`Engine::drain_events`), the journal rows applied at the instant, and the life-course delta.
 //!
-//! - [`event_body`]: an `rh-events` event as an `EVENT` record, with the verb's id, act classes
-//!   and tellability from the dictionaries, its subjects as roles (ruling 11: the deceased of a
-//!   `DEATH` is its `target`; a natural death has no actor; `EXTINCTION` has no role), and its
-//!   untyped causes as deterministic, told `triggered` edges (kind 1, no motive, weight 0,
-//!   evidence 1) in ascending order. The cast is in ordinal order (role code, then entity;
-//!   `envelope_v0.md` §1). M2's events declare no snapshot, so none is written. P1.0 admits every
-//!   draft (`05.2` §4.0), so every event is a record.
+//! - [`event_body`]: an `rh-events` event as an `EVENT` record (SPR-020 T-06; envelope v0 §1–§5):
+//!   the verb's id, act classes and tellability from the dictionaries; the event's place,
+//!   magnitude, secrecy and origin; its cast (`event_role`, already in ordinal order: `emit` sorts
+//!   it), its snapshots (`event_snapshot`, the attribute by its dictionary index, in key order) and
+//!   its typed edges (`causal_edge`, the motive by its dictionary index), each edge's
+//!   `cause_told` from the writer's admission bitset ([`Admissions`], host memory, never plane A).
+//!   An event the chronicle does not admit is no record ([`Admissions::admits`]).
 //! - [`input_body`]: a journal row as an `INPUT` record, linked to the journal by its row digest.
 //! - [`LifeTracker`]: the `LIFE_ENTRY` and `LIFE_EXIT` records of the life-course log
 //!   (`life_course.*`), which is append-only (SPR-011 ruling 5): a row beyond the last one seen is
@@ -22,79 +22,149 @@ use rh_core::world::WorldTables;
 use rh_snapshot::journal::{JournaledInput, row_digest, stream_fields};
 
 use crate::StreamError;
-use crate::record::{Body, Cause, Event, Input, LifeEntry, LifeExit, Role};
+use crate::record::{Body, Cause, Event, Input, LifeEntry, LifeExit, Role, Snapshot};
 use crate::segment::Dictionaries;
 
-/// `causal_edge.kind` of SPR-006's untyped causes (ruling 11).
-pub const TRIGGERED: u8 = 1;
-/// `event_role.role` of a target (Registry `[event_roles]` index 1).
-pub const ROLE_TARGET: u8 = 1;
+/// The per-timeline admission bitset of the Chronicle Writer (`envelope_v0.md` §5): one bit per
+/// `EventId`, set when the event was admitted. Host memory only; it is rebuilt from the sealed
+/// `event` tables at resume ([`Admissions::from_told`]), so it needs no plane-A memory and no
+/// read-back. In every P1a world every draft is admitted.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Admissions {
+    words: Vec<u64>,
+}
 
-/// The role of each subject of a P1.0 verb, in the emitter's subject order (ruling 11). A verb
-/// not listed has no role mapping yet and is refused rather than guessed.
-#[must_use]
-pub fn roles_of(verb: &str) -> Option<&'static [u8]> {
-    match verb {
-        "DEATH" => Some(&[ROLE_TARGET]),
-        "EXTINCTION" => Some(&[]),
-        _ => None,
+impl Admissions {
+    /// No event seen yet.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The bitset of a resumed timeline: `told` are the ids of the sealed `EVENT` records (every
+    /// record is an admitted event; an id without one was refused).
+    #[must_use]
+    pub fn from_told(told: impl IntoIterator<Item = u64>) -> Self {
+        let mut a = Self::new();
+        for id in told {
+            a.set(id);
+        }
+        a
+    }
+
+    fn set(&mut self, id: u64) {
+        let (w, bit) = (usize::try_from(id / 64).unwrap_or(usize::MAX), id % 64);
+        if self.words.len() <= w {
+            self.words.resize(w + 1, 0);
+        }
+        self.words[w] |= 1 << bit;
+    }
+
+    /// Records the event's admission, and returns whether it gets a record.
+    pub fn admits(&mut self, e: &rh_events::Event) -> bool {
+        if e.admitted {
+            self.set(e.id.to_raw());
+        }
+        e.admitted
+    }
+
+    /// Whether the event `id` was admitted (and so has an `EVENT` record).
+    #[must_use]
+    pub fn told(&self, id: u64) -> bool {
+        usize::try_from(id / 64)
+            .ok()
+            .and_then(|w| self.words.get(w))
+            .is_some_and(|w| w & (1 << (id % 64)) != 0)
     }
 }
 
-/// The `EVENT` body of an emitted event.
+/// The `EVENT` body of an emitted, admitted event; `admissions` gives each edge's `cause_told`.
 ///
 /// # Errors
-/// [`StreamError::Convert`] if the verb is not in the dictionaries, has no P1.0 role mapping, or
-/// the event has another number of subjects.
-pub fn event_body(e: &rh_events::Event, dictionaries: &Dictionaries) -> Result<Body, StreamError> {
+/// [`StreamError::Convert`] if the verb, a snapshot's attribute or an edge's motive is not in the
+/// dictionaries, or a field does not fit its column.
+pub fn event_body(
+    e: &rh_events::Event,
+    dictionaries: &Dictionaries,
+    admissions: &Admissions,
+) -> Result<Body, StreamError> {
+    let bad = |m: String| StreamError::Convert(format!("event {} ({}): {m}", e.id, e.kind));
     let verb = dictionaries.verb(e.kind).ok_or_else(|| {
-        StreamError::Convert(format!(
-            "event {} of kind {} names no verb of the Registry {}",
-            e.id, e.kind, dictionaries.registry_version
+        bad(format!(
+            "names no verb of the Registry {}",
+            dictionaries.registry_version
         ))
     })?;
-    let roles = roles_of(e.kind).ok_or_else(|| {
-        StreamError::Convert(format!(
-            "verb {} has no role mapping in P1.0 (ruling 11)",
-            e.kind
-        ))
-    })?;
-    if roles.len() != e.subjects.len() {
-        return Err(StreamError::Convert(format!(
-            "event {} ({}): {} subjects, the verb's roles are {}",
-            e.id,
-            e.kind,
-            e.subjects.len(),
-            roles.len()
-        )));
-    }
-    let causes: BTreeSet<u64> = e.causes.iter().map(|c| c.to_raw()).collect();
-    let mut cast: Vec<Role> = e
-        .subjects
+    let roles = e
+        .roles
         .iter()
-        .zip(roles)
-        .map(|(s, &role)| Role {
-            entity_kind: s.kind() as u8,
-            entity_id: s.raw(),
-            role,
+        .map(|r| Role {
+            entity_kind: r.entity.kind().tag(),
+            entity_id: r.entity.raw(),
+            role: r.role.0,
         })
         .collect();
-    cast.sort_by_key(Role::order_key);
+    let mut snapshots = e
+        .snapshots
+        .iter()
+        .map(|s| {
+            let attr_id = dictionaries
+                .attributes
+                .binary_search_by(|a| a.name.as_bytes().cmp(s.attr.as_bytes()))
+                .ok()
+                .and_then(|i| u16::try_from(i).ok())
+                .ok_or_else(|| bad(format!("attribute {} is not in the dictionary", s.attr)))?;
+            Ok(Snapshot {
+                attr_id,
+                entity_kind: s.entity.kind().tag(),
+                entity_id: s.entity.raw(),
+                partner_kind: s.partner.map(|p| p.kind().tag()),
+                partner_id: s.partner.map(rh_ids::EntityRef::raw),
+                value: s.value,
+            })
+        })
+        .collect::<Result<Vec<_>, StreamError>>()?;
+    snapshots.sort_by_key(Snapshot::key);
+    let causes = e
+        .causes
+        .iter()
+        .map(|c| {
+            let motive = c
+                .motive
+                .map(|m| {
+                    dictionaries
+                        .motive_edges
+                        .iter()
+                        .position(|x| x == m)
+                        .and_then(|i| u16::try_from(i).ok())
+                        .ok_or_else(|| bad(format!("motive {m} is not in the dictionary")))
+                })
+                .transpose()?;
+            Ok(Cause {
+                cause_id: c.cause.to_raw(),
+                kind: c.kind.code(),
+                motive,
+                weight: c.weight,
+                evidence: c.evidence,
+                cause_told: admissions.told(c.cause.to_raw()),
+            })
+        })
+        .collect::<Result<Vec<_>, StreamError>>()?;
     Ok(Body::Event(Event {
         event_id: e.id.to_raw(),
         phase: e.phase,
         verb_id: verb.verb_id,
         verb: verb.name.clone(),
         act_classes: verb.act_classes,
-        place_id: None,
-        magnitude: 0,
+        place_id: e.place.map(rh_ids::PlaceId::to_raw),
+        magnitude: e.magnitude,
         tellability: verb.tellability,
-        secrecy: 0,
-        origin: 0,
+        secrecy: e.secrecy.code(),
+        origin: e.origin.code(),
         payload: e.payload.clone(),
-        roles: cast,
-        snapshots: Vec::new(),
-        causes: causes.into_iter().map(Cause::triggered).collect(),
+        roles,
+        snapshots,
+        causes,
     }))
 }
 
@@ -261,7 +331,7 @@ pub fn link_exits(records: &mut [(i64, Body)]) {
             Body::Event(e) if e.verb == "DEATH" => e
                 .roles
                 .iter()
-                .find(|r| r.role == ROLE_TARGET)
+                .find(|r| r.role == rh_events::RoleId::TARGET.0)
                 .map(|r| (*t, r.entity_id, e.event_id)),
             _ => None,
         })
