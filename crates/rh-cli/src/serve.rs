@@ -39,9 +39,10 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
+use rh_golden::governor::Governor;
 use rh_golden::run::{Error, LiveHost};
 use rh_golden::stream::{RunToml, TIMELINE};
-use rh_protocol::control::{self, Connection, EndReason, History, HostView, Source};
+use rh_protocol::control::{self, Connection, ControlConn, EndReason, History, HostView, Source};
 use rh_protocol::records::{self, Channel, SUBHEADER_LEN};
 use rh_protocol::wire::{self, Frame, FrameType, MAX_PAYLOAD};
 use rh_stream::live::{End, LiveEdge, Policy, Snapshot};
@@ -66,6 +67,13 @@ pub fn socket_paths(run_dir: &Path, channel: Channel) -> (PathBuf, PathBuf) {
     let dir = timeline_dir(run_dir);
     let c = channel.letter();
     (dir.join(format!("{c}.sock")), dir.join(format!("{c}.lock")))
+}
+
+/// The socket and lock paths of the control channel (`control_v1.md` §1).
+#[must_use]
+pub fn control_paths(run_dir: &Path) -> (PathBuf, PathBuf) {
+    let dir = timeline_dir(run_dir);
+    (dir.join("control.sock"), dir.join("control.lock"))
 }
 
 /// Refuses a socket path the platform cannot bind (§1: never a silent fallback).
@@ -114,6 +122,7 @@ struct Info {
 struct Shared {
     info: Info,
     edge: LiveEdge,
+    governor: Option<Arc<Governor>>,
     cap: usize,
     active: AtomicUsize,
     connections: AtomicU64,
@@ -141,8 +150,13 @@ impl Shared {
             sealed_last_year: snap.last_year,
             sealed_last_seq: snap.s,
             pace: (self.info.channel == Channel::A).then(|| {
-                let state = if finished { "finished" } else { "running" };
-                ("max".to_owned(), state.to_owned())
+                if let Some(gov) = &self.governor {
+                    let s = gov.snapshot();
+                    (s.band.clone(), s.state.clone())
+                } else {
+                    let state = if finished { "finished" } else { "running" };
+                    ("max".to_owned(), state.to_owned())
+                }
             }),
             sifted_through: (self.info.channel == Channel::C).then(|| {
                 let u = snap.upstream.unwrap_or_default();
@@ -395,6 +409,7 @@ impl Server {
         info: Info,
         edge: LiveEdge,
         cap: usize,
+        governor: Option<Arc<Governor>>,
     ) -> Result<Self, String> {
         check_path(sock)?;
         if sock.exists() {
@@ -410,6 +425,7 @@ impl Server {
         let shared = Arc::new(Shared {
             info,
             edge,
+            governor,
             cap,
             active: AtomicUsize::new(0),
             connections: AtomicU64::new(0),
@@ -490,6 +506,172 @@ impl Server {
             sh.active.load(Ordering::Relaxed),
         );
     }
+}
+
+/// A running control socket server (`control_v1.md` §1).
+pub struct ControlServer {
+    governor: Arc<Governor>,
+    sock: PathBuf,
+    accept: Option<JoinHandle<()>>,
+    shutdown: Arc<AtomicBool>,
+    _lock: File,
+}
+
+impl ControlServer {
+    /// Binds `control.sock` under the held `lock`, mode `0600`, and starts accepting.
+    fn start(sock: &Path, lock: File, governor: Arc<Governor>) -> Result<Self, String> {
+        check_path(sock)?;
+        if sock.exists() {
+            std::fs::remove_file(sock).map_err(|e| format!("{}: {e}", sock.display()))?;
+        }
+        let listener = UnixListener::bind(sock).map_err(|e| format!("{}: {e}", sock.display()))?;
+        std::fs::set_permissions(sock, std::fs::Permissions::from_mode(0o600))
+            .map_err(|e| format!("{}: {e}", sock.display()))?;
+        listener
+            .set_nonblocking(true)
+            .map_err(|e| format!("{}: {e}", sock.display()))?;
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let s_shut = Arc::clone(&shutdown);
+        let s_gov = Arc::clone(&governor);
+        let accept = std::thread::Builder::new()
+            .name("rh-ctrl-accept".to_owned())
+            .spawn(move || control_accept_loop(&listener, &s_gov, &s_shut))
+            .map_err(|e| format!("the control accept thread: {e}"))?;
+        Ok(Self {
+            governor,
+            sock: sock.to_path_buf(),
+            accept: Some(accept),
+            shutdown,
+            _lock: lock,
+        })
+    }
+
+    /// Serves for grace period (up to `linger`, default 2s), ending early when 0 controllers connected (C15).
+    fn finish(mut self, linger: Duration) {
+        let poll_interval = Duration::from_millis(10);
+        let mut waited = Duration::ZERO;
+        while waited < linger {
+            if self.governor.connection_count() == 0 {
+                break;
+            }
+            std::thread::sleep(poll_interval);
+            waited += poll_interval;
+        }
+        self.shutdown.store(true, Ordering::Relaxed);
+        if let Some(h) = self.accept.take() {
+            let _ = h.join();
+        }
+        if self.sock.exists() {
+            let _ = std::fs::remove_file(&self.sock);
+        }
+    }
+}
+
+fn control_accept_loop(
+    listener: &UnixListener,
+    governor: &Arc<Governor>,
+    shutdown: &Arc<AtomicBool>,
+) {
+    while !shutdown.load(Ordering::Relaxed) {
+        match listener.accept() {
+            Ok((mut stream, _)) => {
+                if stream.set_nonblocking(false).is_err() {
+                    continue;
+                }
+                let Some(conn) = governor.connect(None) else {
+                    let _ = stream.write_all(&control::too_many_controllers(governor.cap()));
+                    let _ = stream.shutdown(std::net::Shutdown::Both);
+                    continue;
+                };
+                if conn.closed {
+                    let _ = stream.write_all(&control::too_many_controllers(governor.cap()));
+                    let _ = stream.shutdown(std::net::Shutdown::Both);
+                    governor.close(&conn);
+                    continue;
+                }
+                let g = Arc::clone(governor);
+                let shut = Arc::clone(shutdown);
+                let _ = std::thread::Builder::new()
+                    .name("rh-ctrl-conn".to_owned())
+                    .spawn(move || serve_control_connection(stream, conn, &g, &shut));
+            }
+            Err(e) if e.kind() == ErrorKind::WouldBlock => std::thread::sleep(ACCEPT_POLL),
+            Err(_) => std::thread::sleep(ACCEPT_POLL),
+        }
+    }
+}
+
+fn serve_control_connection(
+    mut stream: UnixStream,
+    mut conn: ControlConn,
+    governor: &Arc<Governor>,
+    shutdown: &Arc<AtomicBool>,
+) {
+    let mut buf: Vec<u8> = Vec::new();
+    let mut tmp = vec![0u8; 4096];
+    'serve: while !shutdown.load(Ordering::Relaxed) {
+        let mut idle = true;
+        if stream.set_nonblocking(true).is_err() {
+            break;
+        }
+        let got = stream.read(&mut tmp);
+        if stream.set_nonblocking(false).is_err() {
+            break;
+        }
+        match got {
+            Ok(0) => {
+                // EOF: L9 rule - drain remaining requests in buffer before exiting!
+                while !buf.is_empty() {
+                    let reply = control::dispatch_control(&mut conn, governor.as_ref(), &buf);
+                    if reply.frames.is_empty() && reply.used == 0 {
+                        break;
+                    }
+                    buf.drain(..reply.used.min(buf.len()));
+                    if reply.close {
+                        break;
+                    }
+                }
+                break;
+            }
+            Ok(n) => {
+                buf.extend_from_slice(&tmp[..n]);
+                idle = false;
+            }
+            Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::Interrupted) => {}
+            Err(_) => break,
+        }
+        while !buf.is_empty() {
+            let reply = control::dispatch_control(&mut conn, governor.as_ref(), &buf);
+            if reply.frames.is_empty() && reply.used == 0 {
+                break;
+            }
+            for f in &reply.frames {
+                if stream.write_all(f).is_err() {
+                    buf.drain(..reply.used.min(buf.len()));
+                    while !buf.is_empty() {
+                        let rep = control::dispatch_control(&mut conn, governor.as_ref(), &buf);
+                        if rep.frames.is_empty() && rep.used == 0 {
+                            break;
+                        }
+                        buf.drain(..rep.used.min(buf.len()));
+                        if rep.close {
+                            break;
+                        }
+                    }
+                    break 'serve;
+                }
+            }
+            buf.drain(..reply.used.min(buf.len()));
+            if reply.close {
+                let _ = stream.shutdown(std::net::Shutdown::Both);
+                break 'serve;
+            }
+        }
+        if idle {
+            std::thread::sleep(POLL);
+        }
+    }
+    governor.close(&conn);
 }
 
 /// The host's seal clock: nanoseconds since the host started (tool plane: plane A reads none).
@@ -740,54 +922,83 @@ fn run_inner(world: &str, words: &[&str], repo: &Path) -> Result<u8, String> {
         .ok_or("--socket serves a run directory's stream: it needs --run-dir")?;
     let existed = run_dir.exists();
     let (sock, lock_path) = socket_paths(&run_dir, Channel::A);
-    // Refused before anything is written (§1).
-    check_path(&sock)?;
-    // A resumed run's directory holds a lock file: it is taken first, before the run touches
-    // anything (a refusal writes nothing). A missing one is created once the run's own checks
+    let (control_sock, control_lock_path) = control_paths(&run_dir);
+    // Refused before anything is written (§1): check control_sock (the longer of the two paths: C24).
+    check_path(&control_sock)?;
+    // A resumed run's directory holds lock files: they are taken first, before the run touches
+    // anything (a refusal writes nothing). Missing ones are created once the run's own checks
     // have passed.
     let early = if lock_path.is_file() {
         Some(take_lock(&lock_path)?)
     } else {
         None
     };
+    let early_ctrl = if control_lock_path.is_file() {
+        Some(take_lock(&control_lock_path)?)
+    } else {
+        None
+    };
     let clock = Arc::new(Clock::new());
     let server: Rc<RefCell<Option<Server>>> = Rc::new(RefCell::new(None));
     let slot = Rc::clone(&server);
+    let ctrl_server: Rc<RefCell<Option<ControlServer>>> = Rc::new(RefCell::new(None));
+    let ctrl_slot = Rc::clone(&ctrl_server);
     let cap = opts.cap;
     let wait_viewer = opts.wait_viewer;
     let name = world.to_owned();
-    let on_edge = move |edge: LiveEdge, dir: &Path| -> Result<(), Error> {
-        let run = RunToml::read(dir)?;
-        private_dir(dir, existed).map_err(Error)?;
-        let lock = if let Some(l) = early {
-            l
-        } else {
-            std::fs::create_dir_all(timeline_dir(dir))
-                .map_err(|e| Error(format!("{}: {e}", dir.display())))?;
-            take_lock(&lock_path).map_err(Error)?
-        };
-        let info = info_of(&run, Channel::A, rh_stream::segment::FORMAT_A, run_nonce());
-        let s = Server::start(&sock, lock, info, edge, cap).map_err(Error)?;
-        println!("{name}: serving channel A live on {}", sock.display());
-        if wait_viewer {
-            println!("{name}: waiting for a viewer's first request (--test-wait-viewer)");
-            if !s.wait_for_request(Duration::from_mins(1)) {
-                return Err(Error(
-                    "--test-wait-viewer: no viewer sent a request within 60 s".to_owned(),
-                ));
+    let nonce = run_nonce();
+    let on_edge =
+        move |edge: LiveEdge, dir: &Path, governor: Option<Arc<Governor>>| -> Result<(), Error> {
+            let run = RunToml::read(dir)?;
+            private_dir(dir, existed).map_err(Error)?;
+            let lock = if let Some(l) = early {
+                l
+            } else {
+                std::fs::create_dir_all(timeline_dir(dir))
+                    .map_err(|e| Error(format!("{}: {e}", dir.display())))?;
+                take_lock(&lock_path).map_err(Error)?
+            };
+            let info = info_of(&run, Channel::A, rh_stream::segment::FORMAT_A, nonce);
+            let s = Server::start(&sock, lock, info, edge, cap, governor.clone()).map_err(Error)?;
+            println!("{name}: serving channel A live on {}", sock.display());
+            if let Some(gov) = governor {
+                let ctrl_lock = if let Some(l) = early_ctrl {
+                    l
+                } else {
+                    std::fs::create_dir_all(timeline_dir(dir))
+                        .map_err(|e| Error(format!("{}: {e}", dir.display())))?;
+                    take_lock(&control_lock_path).map_err(Error)?
+                };
+                let cs = ControlServer::start(&control_sock, ctrl_lock, gov).map_err(Error)?;
+                println!(
+                    "{name}: serving control endpoint live on {}",
+                    control_sock.display()
+                );
+                *ctrl_slot.borrow_mut() = Some(cs);
             }
-        }
-        *slot.borrow_mut() = Some(s);
-        Ok(())
-    };
+            if wait_viewer {
+                println!("{name}: waiting for a viewer's first request (--test-wait-viewer)");
+                if !s.wait_for_request(Duration::from_mins(1)) {
+                    return Err(Error(
+                        "--test-wait-viewer: no viewer sent a request within 60 s".to_owned(),
+                    ));
+                }
+            }
+            *slot.borrow_mut() = Some(s);
+            Ok(())
+        };
     let live = LiveHost {
         policy: opts.policy,
         clock: Some(clock.clone()),
+        nonce: Some(nonce),
         on_edge: Box::new(on_edge),
     };
     let code = rh_golden::cli::run_world_live(world, &rest, repo, Some(live));
     for line in clock.report(opts.seal_log) {
         println!("{world}: {line}");
+    }
+    if let Some(cs) = ctrl_server.borrow_mut().take() {
+        cs.finish(Duration::from_secs(2));
     }
     if let Some(s) = server.borrow_mut().take() {
         s.finish(opts.linger, world);
@@ -841,7 +1052,7 @@ fn sift_inner(words: &[&str], repo: &Path) -> Result<u8, String> {
             .map_err(|e| format!("{}: {e}", run_dir.display()))?;
         let lock = take_lock(&lock_path)?;
         let info = info_of(&run, Channel::C, rh_sifter::sift::FORMAT_C, run_nonce());
-        let s = Server::start(&sock, lock, info, edge.clone(), opts.cap)?;
+        let s = Server::start(&sock, lock, info, edge.clone(), opts.cap, None)?;
         println!("sift: serving channel C live on {}", sock.display());
         Some(s)
     } else {
@@ -961,6 +1172,7 @@ struct LiveTail<'a> {
     canonical: bool,
     mpy: i64,
     display: Option<rh_golden::tail::Display>,
+    filters: rh_golden::tail::Filters,
     out: &'a mut dyn Write,
     conn: Option<ViewerConn>,
     next_id: i64,
@@ -979,6 +1191,9 @@ impl LiveTail<'_> {
     fn print(&mut self, first_seq: u64, lines: &[String]) -> Result<(), String> {
         for (i, l) in lines.iter().enumerate() {
             let seq = first_seq + u64::try_from(i).unwrap_or(u64::MAX);
+            if !self.filters.matches_live_line(l) {
+                continue;
+            }
             let shown = match &self.display {
                 Some(d) => rh_golden::tail::display_line(
                     &rh_stream::canonical::parse(l).map_err(|e| e.to_string())?,
@@ -1180,6 +1395,14 @@ pub fn tail_live(words: &[&str], repo: &Path) -> u8 {
 )]
 fn tail_live_inner(words: &[&str], repo: &Path) -> Result<u8, String> {
     let (mut run_dir, mut channel_c, mut canonical, mut from) = (None, false, false, 0u64);
+    let mut channel_specified = false;
+    let mut to_seq: Option<u64> = None;
+    let mut follow: Option<String> = None;
+    let mut kinds: Vec<String> = Vec::new();
+    let mut place: Option<String> = None;
+    let mut pattern: Option<String> = None;
+    let mut min_tellability: Option<u8> = None;
+    let mut digest = false;
     let mut timeout = 60u64;
     let mut repo = repo.to_path_buf();
     let mut it = words.iter();
@@ -1193,6 +1416,7 @@ fn tail_live_inner(words: &[&str], repo: &Path) -> Result<u8, String> {
             "--live" => {}
             "--canonical" => canonical = true,
             "--channel" => {
+                channel_specified = true;
                 channel_c = match value()? {
                     "A" => false,
                     "C" => true,
@@ -1205,6 +1429,45 @@ fn tail_live_inner(words: &[&str], repo: &Path) -> Result<u8, String> {
                     .parse()
                     .map_err(|_| format!("--from-seq {v} is not a number"))?;
             }
+            "--to-seq" => {
+                let v = value()?;
+                to_seq = Some(
+                    v.parse()
+                        .map_err(|_| format!("--to-seq {v} is not a number"))?,
+                );
+            }
+            "--follow" => follow = Some(value()?.to_owned()),
+            "--kind" => kinds.push(value()?.to_owned()),
+            "--place" => place = Some(value()?.to_owned()),
+            "--pattern" => {
+                pattern = Some(value()?.to_owned());
+                if !channel_specified {
+                    channel_c = true;
+                }
+            }
+            "--min-tellability" => {
+                let v = value()?;
+                min_tellability = Some(
+                    v.parse()
+                        .map_err(|_| format!("--min-tellability {v} is a number (0..255)"))?,
+                );
+            }
+            "--digest" => {
+                if it.clone().next() == Some(&"region") {
+                    let _ = it.next();
+                    return Err("tail: --digest region waits for regions in SPR-018".to_owned());
+                }
+                digest = true;
+            }
+            "--digest=region" => {
+                return Err("tail: --digest region waits for regions in SPR-018".to_owned());
+            }
+            s if s == "--sig" || s.starts_with("--sig") => {
+                return Err(
+                    "tail: --sig waits for channel-C significance in P2.1; use --min-tellability N instead"
+                        .to_owned(),
+                );
+            }
             "--timeout" => {
                 let v = value()?;
                 timeout = v
@@ -1213,9 +1476,7 @@ fn tail_live_inner(words: &[&str], repo: &Path) -> Result<u8, String> {
             }
             "--repo" => repo = PathBuf::from(value()?),
             flag if flag.starts_with("--") => {
-                return Err(format!(
-                    "tail --live: {flag} is not a live flag (--channel, --from-seq, --canonical, --timeout)"
-                ));
+                return Err(format!("tail --live: unknown flag {flag}"));
             }
             dir => run_dir = Some(PathBuf::from(dir)),
         }
@@ -1228,6 +1489,24 @@ fn tail_live_inner(words: &[&str], repo: &Path) -> Result<u8, String> {
     } else {
         Some(rh_golden::tail::display_of(&repo, &run).map_err(|e| e.0)?)
     };
+    let tail_args = rh_golden::tail::TailArgs {
+        run_dir: run_dir.clone(),
+        repo: repo.clone(),
+        from_seq: from,
+        to_seq,
+        follow,
+        kinds,
+        canonical,
+        wait: false,
+        timeout: Some(timeout),
+        channel_c,
+        place,
+        pattern,
+        min_tellability,
+        digest,
+    };
+    let filters =
+        rh_golden::tail::resolve_filters(&tail_args, display.as_ref()).map_err(|e| e.0)?;
     let channel = if channel_c { Channel::C } else { Channel::A };
     let (sock, _) = socket_paths(&run_dir, channel);
     let stdout = std::io::stdout();
@@ -1257,6 +1536,7 @@ fn tail_live_inner(words: &[&str], repo: &Path) -> Result<u8, String> {
         canonical,
         mpy: run.minutes_per_year,
         display,
+        filters,
         out: &mut lock,
         conn: None,
         next_id: 0,
@@ -1279,6 +1559,11 @@ fn tail_live_inner(words: &[&str], repo: &Path) -> Result<u8, String> {
     };
     let prefix = if t.canonical { "# " } else { "" };
     loop {
+        if let Some(m) = to_seq
+            && lp.cursor > m
+        {
+            break Ok(rh_golden::cli::OK);
+        }
         action = match action {
             Action::Subscribe(seq) => {
                 if t.request(
@@ -1308,8 +1593,25 @@ fn tail_live_inner(words: &[&str], repo: &Path) -> Result<u8, String> {
                 }
             }
             Action::ReadSealed { from, to } => {
-                let lines = rh_golden::tail::sealed_lines(&t.run_dir, t.channel_c, t.mpy, from, to)
-                    .map_err(|e| e.0)?;
+                let effective_to = match to_seq {
+                    Some(m) => to.min(m),
+                    None => to,
+                };
+                if from > effective_to {
+                    lp.next(Event::SealedRead {
+                        first_seq: from,
+                        count: 0,
+                    });
+                    break Ok(rh_golden::cli::OK);
+                }
+                let lines = rh_golden::tail::sealed_lines(
+                    &t.run_dir,
+                    t.channel_c,
+                    t.mpy,
+                    from,
+                    effective_to,
+                )
+                .map_err(|e| e.0)?;
                 t.print(from, &lines)?;
                 lp.next(Event::SealedRead {
                     first_seq: from,
@@ -1323,21 +1625,26 @@ fn tail_live_inner(words: &[&str], repo: &Path) -> Result<u8, String> {
             Action::Status => {
                 let Some(e) = t.reconnect()? else {
                     // No host any more, and the writer is gone: the rest is on disk.
-                    let lines = rh_golden::tail::sealed_lines(
-                        &t.run_dir,
-                        t.channel_c,
-                        t.mpy,
-                        lp.cursor,
-                        u64::MAX,
-                    )
-                    .map_err(|e| e.0)?;
-                    t.print(lp.cursor, &lines)?;
+                    let end_to = to_seq.unwrap_or(u64::MAX);
+                    let mut added = 0;
+                    if lp.cursor <= end_to {
+                        let lines = rh_golden::tail::sealed_lines(
+                            &t.run_dir,
+                            t.channel_c,
+                            t.mpy,
+                            lp.cursor,
+                            end_to,
+                        )
+                        .map_err(|e| e.0)?;
+                        added = lines.len();
+                        t.print(lp.cursor, &lines)?;
+                    }
                     writeln!(
                         t.out,
                         "{prefix}STATUS live: no host serves {}; the sealed segments are printed \
                          through seq {}",
                         t.sock.display(),
-                        lp.cursor + u64::try_from(lines.len()).unwrap_or(0)
+                        lp.cursor + u64::try_from(added).unwrap_or(0)
                     )
                     .map_err(|e| format!("tail: {e}"))?;
                     return Ok(rh_golden::cli::OK);

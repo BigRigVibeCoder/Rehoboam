@@ -20,7 +20,7 @@
 //! `CODEX/05_PROJECT/SPR-005_CoreTimeAndScheduler.md` T-04, T-05.
 
 use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::Ordering;
 
 use crate::access::AccessSpec;
 use crate::system::SimError;
@@ -91,7 +91,8 @@ struct Slot {
 pub(crate) struct ColumnId(usize);
 
 /// The process-wide source of [`WorldTables`] identities (bookkeeping only; see the type docs).
-static NEXT_IDENTITY: AtomicU64 = AtomicU64::new(0);
+// LINT-ALLOW(hidden-state): bookkeeping identity, never in a hash
+static NEXT_IDENTITY: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 fn fresh_identity() -> u64 {
     NEXT_IDENTITY.fetch_add(1, Ordering::Relaxed)

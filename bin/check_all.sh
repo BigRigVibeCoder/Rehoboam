@@ -656,7 +656,8 @@ FORBIDDEN_API_CONTROLS="hash_map:hash-collections:HashMap hash_set:hash-collecti
   extern_crate_std:std-rename:extern~crate~std~as
   net_socket:network:std::os::unix::net net_parent_alias:network:net::UnixListener
   net_parent_glob:network:net::TcpListener net_parent_self:network:net::UnixDatagram
-  path_attr:source-include:#[path include_macro:source-include:include!("
+  path_attr:source-include:#[path include_macro:source-include:include!(
+  hidden_state_mutex:hidden-state:Mutex hidden_state_thread_local:hidden-state:thread_local!"
 forbidden_api_controls() {
   local - spec file rest rule token tick='`'
   set -f  # tokens such as #[path must not be glob-expanded; `local -` restores the option
@@ -713,14 +714,14 @@ baseline_hand_edited_control() {
 
 # SPR-026 C1: live edge overhead (reported, ungated): solo 3,000 years monthly headless vs --socket
 live_edge_overhead() {
-  local d="$GOLDEN/live_edge_overhead" t0 t1 headless socket pct
+  local d="$GOLDEN/live" t0 t1 headless socket pct out
   rm -rf "$d"; mkdir -p "$d"
   t0=$(date +%s%N)
-  "$RH_CLI_RELEASE" run solo --years 3000 --ladder monthly --out "$d/headless.ladder" >/dev/null 2>&1 || return 1
+  out=$("$RH_CLI_RELEASE" run solo --years 3000 --ladder monthly --out "$d/headless.ladder" 2>&1) || { echo "$out"; return 1; }
   t1=$(date +%s%N)
   headless=$(( (t1 - t0) / 1000000 ))
   t0=$(date +%s%N)
-  "$RH_CLI_RELEASE" run solo --years 3000 --ladder monthly --run-dir "$d/socket" --socket >/dev/null 2>&1 || return 1
+  out=$("$RH_CLI_RELEASE" run solo --years 3000 --ladder monthly --run-dir "$d/socket" --socket 2>&1) || { echo "$out"; return 1; }
   t1=$(date +%s%N)
   socket=$(( (t1 - t0) / 1000000 ))
   if [ "$headless" -gt 0 ]; then

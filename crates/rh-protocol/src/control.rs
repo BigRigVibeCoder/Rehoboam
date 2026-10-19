@@ -33,8 +33,76 @@ pub const CANONICAL_FORMAT: &str = "rehoboam/stream/canonical/v0";
 /// The one answer to an attempt to act on a stream socket (§4.4, §4.5).
 pub const READ_ONLY_MESSAGE: &str =
     "this socket carries the stream only and accepts no input; inputs go through the input journal";
+/// This control wire's format string (`control_v1.md` §2).
+pub const CONTROL_FORMAT: &str = "rehoboam/stream/control/v1";
+/// This control wire's version.
+pub const CONTROL_VERSION: u64 = 1;
+/// The one answer to an attempt to act on a control socket with an unknown method (`control_v1.md` §5).
+pub const CONTROL_MESSAGE: &str = "this socket carries the control channel; v1 accepts the pace command only (control.status, control.pace, control.pause, control.resume, control.step) and no input";
 /// The host's default connection cap (§1).
 pub const DEFAULT_CAP: usize = 64;
+/// The host's default controller connection cap (`control_v1.md` §1).
+pub const DEFAULT_CONTROLLER_CAP: usize = 8;
+
+/// The speed band tokens (`control_v1.md` §3.1).
+pub const BANDS: &[&str] = &["live", "1h", "1d", "1w", "1mo", "1y", "10y", "max"];
+
+/// The P2 operations refused by name on control.sock (`control_v1.md` §5.1).
+pub const RESERVED: &[(&str, &str)] = &[
+    (
+        "timeline.run",
+        "v1 spells timeline.run(band) as control.pace (W30); the IF-3 name arrives with rh-server in P2",
+    ),
+    (
+        "timeline.pause",
+        "v1 spells timeline.pause() as control.pause (W30); the IF-3 name arrives with rh-server in P2",
+    ),
+    (
+        "timeline.run_until",
+        "reserved for P2: run-until on a predicate needs the sifter (05.1 section 4.4); advancing to a tick is control.step",
+    ),
+    (
+        "timeline.seek",
+        "reserved for P2: seek is a keyframe plus replay, read-only (05.9 IF-3); in P1a rh-cli materialize rebuilds a past tick (SPR-027 T-02) and control.step advances the tip",
+    ),
+    (
+        "timeline.fork",
+        "reserved for P2.7 (D47): a fork is a new timeline with its own directory and sockets (ADR-0025 section 5); v1 has one timeline",
+    ),
+    (
+        "player.act",
+        "reserved for P2.7 (D47): a material input is journaled through IF-2 with its acceptance cursor (BCK-002 A-36) before it is applied; v1 accepts no input",
+    ),
+    (
+        "control.schedule",
+        "reserved for P2.7 (D47), a provisional name: a scheduled input is journaled when issued and applied at its tick (05.10 section 2); IF-3 has no name for it; v1 accepts no input",
+    ),
+    (
+        "sift.set_autopause",
+        "reserved for P2 (D-5): the Watch and Play auto-pause is the sifter's and the viewer's (05.4 section 2.3), not v1's",
+    ),
+];
+
+/// The namespaces reserved for IF-3 (`control_v1.md` §5.1).
+pub const RESERVED_NAMESPACES: &[&str] = &[
+    "player",
+    "oracle",
+    "timeline",
+    "console",
+    "sift",
+    "world",
+    "chronicle",
+    "entity",
+    "foresight",
+    "bubble",
+    "map",
+    "dialogue",
+    "compile",
+    "narrative",
+];
+
+/// The detail for methods in reserved namespaces not specifically named in [`RESERVED`].
+pub const IF3_DETAIL: &str = "reserved for IF-3 (05.9), not carried by control v1";
 
 /// What a method of the table does to the host.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -75,7 +143,31 @@ pub const METHOD_TABLE: &[(&str, Method, Access)] = &[
     ("stream.pace", Method::Pace, Access::Write),
 ];
 
-/// The machine-readable reasons of §4.4.
+/// A method of the control table (`control_v1.md` §4).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ControlMethod {
+    /// `control.status`.
+    Status,
+    /// `control.pace`.
+    Pace,
+    /// `control.pause`.
+    Pause,
+    /// `control.resume`.
+    Resume,
+    /// `control.step`.
+    Step,
+}
+
+/// The control dispatcher's method table: name, method, access (`control_v1.md` §4).
+pub const CONTROL_METHOD_TABLE: &[(&str, ControlMethod, Access)] = &[
+    ("control.status", ControlMethod::Status, Access::Read),
+    ("control.pace", ControlMethod::Pace, Access::Write),
+    ("control.pause", ControlMethod::Pause, Access::Write),
+    ("control.resume", ControlMethod::Resume, Access::Write),
+    ("control.step", ControlMethod::Step, Access::Write),
+];
+
+/// The machine-readable reasons of §4.4 and `control_v1.md` §5.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Reason {
     /// −32700.
@@ -100,10 +192,16 @@ pub enum Reason {
     NotSubscribed,
     /// −32116.
     TooManyViewers,
+    /// −32120.
+    TooManyControllers,
+    /// −32121.
+    RunFinished,
+    /// −32122.
+    PastTick,
 }
 
 /// Every reason, in code order.
-pub const REASONS: [Reason; 11] = [
+pub const REASONS: [Reason; 14] = [
     Reason::ParseError,
     Reason::InvalidRequest,
     Reason::MethodNotFound,
@@ -115,6 +213,9 @@ pub const REASONS: [Reason; 11] = [
     Reason::AlreadySubscribed,
     Reason::NotSubscribed,
     Reason::TooManyViewers,
+    Reason::TooManyControllers,
+    Reason::RunFinished,
+    Reason::PastTick,
 ];
 
 impl Reason {
@@ -133,6 +234,9 @@ impl Reason {
             Self::AlreadySubscribed => "already_subscribed",
             Self::NotSubscribed => "not_subscribed",
             Self::TooManyViewers => "too_many_viewers",
+            Self::TooManyControllers => "too_many_controllers",
+            Self::RunFinished => "run_finished",
+            Self::PastTick => "past_tick",
         }
     }
 
@@ -151,6 +255,9 @@ impl Reason {
             Self::AlreadySubscribed => -32114,
             Self::NotSubscribed => -32115,
             Self::TooManyViewers => -32116,
+            Self::TooManyControllers => -32120,
+            Self::RunFinished => -32121,
+            Self::PastTick => -32122,
         }
     }
 
@@ -171,6 +278,9 @@ impl Reason {
             Self::AlreadySubscribed => "this connection already holds a subscription",
             Self::NotSubscribed => "this connection holds no subscription",
             Self::TooManyViewers => "the host's connection cap is reached",
+            Self::TooManyControllers => "the host's controller cap is reached",
+            Self::RunFinished => "the run has ended; the pace can no longer change",
+            Self::PastTick => "the step's tick is at or below the tip",
         }
     }
 
@@ -186,10 +296,13 @@ impl Reason {
         REASONS.into_iter().find(|r| r.code() == code)
     }
 
-    /// Whether a viewer retries it with backoff (§6.3).
+    /// Whether a viewer or controller retries it with backoff (§6.3, `control_v1.md` §5).
     #[must_use]
     pub const fn retriable(self) -> bool {
-        matches!(self, Self::FutureSeq | Self::TooManyViewers)
+        matches!(
+            self,
+            Self::FutureSeq | Self::TooManyViewers | Self::TooManyControllers
+        )
     }
 }
 
@@ -454,6 +567,91 @@ fn no_params(params: Option<&Value>) -> Result<(), WireError> {
     }
 }
 
+/// The `until` parameter of `control.step` (`control_v1.md` §4.5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StepUntil {
+    /// Advance one instant.
+    Instant,
+    /// Advance to the given tick.
+    Tick(i64),
+}
+
+/// A validated control command (`control_v1.md` §4).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ControlCommand {
+    /// `control.status`.
+    Status,
+    /// `control.pace`.
+    Pace {
+        /// The requested band.
+        band: String,
+    },
+    /// `control.pause`.
+    Pause,
+    /// `control.resume`.
+    Resume,
+    /// `control.step`.
+    Step {
+        /// The requested target.
+        until: StepUntil,
+    },
+}
+
+/// The `band` parameter of `control.pace` (`control_v1.md` §4.2).
+///
+/// # Errors
+/// [`WireError`] (`invalid_params`) for anything but `{band: "<token>"}` where `<token>` is in [`BANDS`].
+pub fn band_param(params: Option<&Value>) -> Result<String, WireError> {
+    let Some(Value::Object(p)) = params else {
+        return Err(invalid_params("params are exactly {band}"));
+    };
+    if p.len() != 1 || !p.contains_key("band") {
+        return Err(invalid_params("params are exactly {band}"));
+    }
+    let Some(band) = p["band"].as_str() else {
+        return Err(invalid_params(
+            "band is one of live, 1h, 1d, 1w, 1mo, 1y, 10y, max",
+        ));
+    };
+    if !BANDS.contains(&band) {
+        return Err(invalid_params(
+            "band is one of live, 1h, 1d, 1w, 1mo, 1y, 10y, max",
+        ));
+    }
+    Ok(band.to_owned())
+}
+
+/// The `until` parameter of `control.step` (`control_v1.md` §4.5).
+///
+/// # Errors
+/// [`WireError`] (`invalid_params`) for anything but `{until: "instant"}` or `{until: {tick: i64}}`.
+pub fn step_param(params: Option<&Value>) -> Result<StepUntil, WireError> {
+    let Some(Value::Object(p)) = params else {
+        return Err(invalid_params("params are exactly {until}"));
+    };
+    if p.len() != 1 || !p.contains_key("until") {
+        return Err(invalid_params("params are exactly {until}"));
+    }
+    let until = &p["until"];
+    if until.as_str() == Some("instant") {
+        return Ok(StepUntil::Instant);
+    }
+    if let Value::Object(u) = until
+        && u.len() == 1
+        && u.contains_key("tick")
+    {
+        let tick_val = &u["tick"];
+        if tick_val.is_boolean() {
+            return Err(invalid_params("until.tick is an i64"));
+        }
+        if let Some(t) = tick_val.as_i64() {
+            return Ok(StepUntil::Tick(t));
+        }
+        return Err(invalid_params("until.tick is an i64"));
+    }
+    Err(invalid_params("until is {tick: i64} or 'instant'"))
+}
+
 /// The history tuple a socket's segments carry (§4.1).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct History {
@@ -578,6 +776,21 @@ pub struct Connection {
     pub closed: bool,
 }
 
+/// One controller's connection as the host sees it: its number and whether it closed (`control_v1.md` §1).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ControlConn {
+    /// Per-host connection counter from 1.
+    pub number: usize,
+    /// Whether the host closes the connection.
+    pub closed: bool,
+}
+
+/// How a host serves the control channel (`control_v1.md` §2, §3.3).
+pub trait ControlHost {
+    /// Submits a command or reads status, returning the JSON-RPC response or error object.
+    fn submit(&self, conn: &ControlConn, id: &Value, cmd: ControlCommand) -> Value;
+}
+
 /// The host's answer to one frame from a viewer.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Reply {
@@ -640,6 +853,132 @@ pub fn dispatch(conn: &mut Connection, source: &dyn Source, data: &[u8]) -> Repl
         close,
         used,
     }
+}
+
+/// The `too_many_controllers` frame a host sends first on a connection over its cap, then closes.
+#[must_use]
+pub fn too_many_controllers(limit: usize) -> Vec<u8> {
+    let mut d = Map::new();
+    d.insert("limit".into(), json!(limit));
+    frame_or_internal(&error(&None, Reason::TooManyControllers, d))
+}
+
+/// Answers the frame at the start of `data` from a controller (`control_v1.md` §4): the host's control dispatcher.
+///
+/// The header is judged first; a short buffer is answered with nothing and `used` 0 (read more).
+#[must_use]
+pub fn dispatch_control(conn: &mut ControlConn, host: &dyn ControlHost, data: &[u8]) -> Reply {
+    let header = wire::decode_header(data, VIEWER_MAX_PAYLOAD).and_then(|(ftype, _)| {
+        if ftype == FrameType::Records {
+            return Err(WireError::frame("a RECORDS frame on the control socket"));
+        }
+        wire::decode(data, VIEWER_MAX_PAYLOAD)
+    });
+    let (frame, used) = match header {
+        Ok(x) => x,
+        Err(e) if e.is_incomplete() => return Reply::default(),
+        Err(e) => {
+            conn.closed = true;
+            let v = if e.kind == WireErrorKind::UnsupportedVersion {
+                let mut d = Map::new();
+                d.insert("supported".into(), json!([wire::VERSION]));
+                error(&None, Reason::UnsupportedVersion, d)
+            } else {
+                error_detail(&None, Reason::InvalidFrame, &e.message)
+            };
+            return Reply {
+                frames: vec![frame_or_internal(&v)],
+                close: true,
+                used: data.len(),
+            };
+        }
+    };
+    let answer = answer_control(conn, host, &frame.payload);
+    let close = answer.get("id").is_none_or(Value::is_null);
+    conn.closed |= close;
+    Reply {
+        frames: vec![frame_or_internal(&answer)],
+        close,
+        used,
+    }
+}
+
+fn answer_control(conn: &mut ControlConn, host: &dyn ControlHost, payload: &[u8]) -> Value {
+    let (kind, obj) = match decode_control(payload) {
+        Ok(x) => x,
+        Err(e) => {
+            let reason = match e.kind {
+                WireErrorKind::Parse => Reason::ParseError,
+                WireErrorKind::Params => Reason::InvalidParams,
+                _ => Reason::InvalidRequest,
+            };
+            return error_detail(&None, reason, &e.message);
+        }
+    };
+    if kind != Kind::Request {
+        return error_detail(
+            &None,
+            Reason::InvalidRequest,
+            &format!("a {} from a controller", kind.name()),
+        );
+    }
+    let id = obj.get("id").cloned();
+    let method = obj
+        .get("method")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let Some((_, m, _)) = CONTROL_METHOD_TABLE
+        .iter()
+        .find(|(name, _, _)| *name == method)
+    else {
+        return refuse_control_method(&id, method);
+    };
+    let params = obj.get("params");
+    let req_id = id.clone().unwrap_or(Value::Null);
+    match m {
+        ControlMethod::Status => match no_params(params) {
+            Ok(()) => host.submit(conn, &req_id, ControlCommand::Status),
+            Err(e) => error_detail(&id, Reason::InvalidParams, &e.message),
+        },
+        ControlMethod::Pace => match band_param(params) {
+            Ok(band) => host.submit(conn, &req_id, ControlCommand::Pace { band }),
+            Err(e) => error_detail(&id, Reason::InvalidParams, &e.message),
+        },
+        ControlMethod::Pause => match no_params(params) {
+            Ok(()) => host.submit(conn, &req_id, ControlCommand::Pause),
+            Err(e) => error_detail(&id, Reason::InvalidParams, &e.message),
+        },
+        ControlMethod::Resume => match no_params(params) {
+            Ok(()) => host.submit(conn, &req_id, ControlCommand::Resume),
+            Err(e) => error_detail(&id, Reason::InvalidParams, &e.message),
+        },
+        ControlMethod::Step => match step_param(params) {
+            Ok(until) => host.submit(conn, &req_id, ControlCommand::Step { until }),
+            Err(e) => error_detail(&id, Reason::InvalidParams, &e.message),
+        },
+    }
+}
+
+fn refuse_control_method(id: &Id, method: &str) -> Value {
+    let mut data = Map::new();
+    if let Some((_, detail)) = RESERVED.iter().find(|(name, _)| *name == method) {
+        data.insert("detail".into(), (*detail).into());
+    } else if let Some((ns, _)) = method.split_once('.')
+        && RESERVED_NAMESPACES.contains(&ns)
+    {
+        data.insert("detail".into(), IF3_DETAIL.into());
+    }
+    data.insert("reason".into(), Reason::MethodNotFound.name().into());
+    data.insert("socket".into(), "control".into());
+    json!({
+        "error": {
+            "code": Reason::MethodNotFound.code(),
+            "data": Value::Object(data),
+            "message": CONTROL_MESSAGE,
+        },
+        "id": id.clone().unwrap_or(Value::Null),
+        "jsonrpc": JSONRPC,
+    })
 }
 
 fn answer(conn: &mut Connection, source: &dyn Source, payload: &[u8]) -> Value {
