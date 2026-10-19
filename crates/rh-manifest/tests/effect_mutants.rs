@@ -141,7 +141,10 @@ const SENTINELS: &[(Mutant, &str, &str, Option<u64>)] = &[
     ignore = "needs --features mutant-effect"
 )]
 fn mutants_are_killed() {
-    assert!(Mutant::enabled(), "run with --features mutant-effect");
+    if !Mutant::enabled() {
+        // Needs --features mutant-effect (run by bin/check_all.sh with the feature flag).
+        return;
+    }
     let golden = golden();
     assert_eq!(
         failures(&golden, Mutant::None),
