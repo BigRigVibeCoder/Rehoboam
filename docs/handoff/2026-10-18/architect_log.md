@@ -395,3 +395,6 @@ EOF; df -h / | tail -1
 - 19:46 Corrected my first-pass records (`VER-SPR-015-INTERIM` 0.2.0, work order rev 1, HANDOFF, viewer briefing): they stated checks as done that were not run, and named a probe and dossier that are not on `main`. Rewritten from verified facts.
 - 19:48 Filed BCK-002 A-78..A-82. Wrote `pm_status_report.md`.
 - Open: Tester pass on SPR-015; rerun PR #111 stream job; SPR-027 branch not pushed; red-team branch has no PR.
+- 20:05 PR #112 merged as `736e8e5b` (pinned to `4717f421`, CI green 3/3). uv 0.11.32 and `python/.venv` installed (A-82). Games, extracted sprites and unpacking work deleted on the Director's ruling.
+- 20:06 PR #113 opened: Batch 09 dossier and probe only, ruff-clean, with scope notes. Reran PR #111's stream job once.
+- 20:10 Probe B09-01 verified: passes 6/6 but tests a Python spec model, not the engine. Records corrected in `arch/pm-records-20261018`; Rust tests required of SPR-015.
