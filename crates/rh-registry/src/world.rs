@@ -48,15 +48,20 @@ pub struct NamedSystem {
     pub built: bool,
 }
 
-/// `M2.demography`'s rung-0 parameters (SPR-011 rulings 7 and 8): each from the manifest, else
-/// from the Registry's `defaults`. Rung 0 reads no other parameter; `brass_alpha` and any
-/// `brass_beta` other than 1 are refused at compile time until P1.3.
+/// `M2.demography`'s F1 parameters (SPR-011 rulings 7 and 8; extended by SPR-015 and SPR-016):
+/// each from the manifest, else from the Registry's `defaults`. F1 reads `brass_beta` in the bounds
+/// [0.6, 1.65]; `brass_alpha` stays refused; `density_capacity` and `density_mortality_slope`
+/// are the density modifier's parameters (MR2, MR11).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DemographyParams {
     /// Life expectancy at birth, in years.
     pub e0: Q16_16,
-    /// The Brass slope; exactly 1 at rung 0.
+    /// The Brass slope; exactly 1 at rung 0, any value in [0.6, 1.65] at F1.
     pub brass_beta: Q16_16,
+    /// The carrying capacity N above which the density modifier raises mortality (MR11; default 10M).
+    pub density_capacity: u64,
+    /// The slope of the density modifier above the capacity (MR11; default 1.0).
+    pub density_mortality_slope: Q16_16,
 }
 
 /// A founder's sex: as the manifest gives it, else drawn by `rh-worldgen` (ruling 10).

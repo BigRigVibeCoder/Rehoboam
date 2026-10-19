@@ -303,7 +303,7 @@ fn demography(
             "rung 0 runs Brass at beta = 1 only until P1.3 (SPR-011 ruling 7)",
         );
     }
-    Some(DemographyParams { e0, brass_beta })
+    Some(DemographyParams { e0, brass_beta, density_capacity: 10_000_000, density_mortality_slope: Q16_16::ONE })
 }
 
 /// Why an authored value is outside its Registry bounds, compared as exact decimals (G-2): a

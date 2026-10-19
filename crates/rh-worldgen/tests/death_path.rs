@@ -382,6 +382,8 @@ fn engine_with(
         demography: Some(DemographyParams {
             e0: Q16_16::from_int(e0),
             brass_beta: Q16_16::ONE,
+            density_capacity: 10_000_000,
+            density_mortality_slope: Q16_16::ONE,
         }),
         founders: (0..founders)
             .map(|_| Founder {

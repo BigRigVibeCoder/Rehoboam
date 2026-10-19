@@ -17,7 +17,7 @@ use rh_core::Phase;
 use rh_core::access::{AccessSpec, ColumnWrite, CommandApply, Plane};
 use rh_core::agenda::TimerEntry;
 use rh_core::command::QueuedCommand;
-use rh_core::fixed::Q16_16;
+use rh_core::fixed::{Prob32, Q16_16};
 use rh_core::system::{
     AggregateSpec, DropReason, InvariantResult, ParamSchema, PulseBinding, ResampleCtx, SimError,
     SpecPurpose, StepCtx, SystemDescriptor, SystemModel, TimerSpec,
@@ -27,7 +27,8 @@ use rh_core::world::{SystemView, WorldTables};
 use rh_events::{EdgeKind, EventDraft, EventRef};
 use rh_ids::{EntityKind, EntityRef, PersonId};
 
-use crate::schedule::{DAY, Schedule, ScheduleError, death_day, resample_day};
+use crate::schedule::{DAY, Schedule, ScheduleError, death_day, resample_day, rhe};
+use crate::schedule::f1::F1Schedule;
 
 /// The skeleton `lint_odd.py --rust M2.demography` generated (ADR-0033 §3), checked by
 /// `bin/gen_skeletons.py --check`; private, as the smoke systems keep theirs.
@@ -41,7 +42,7 @@ mod skeleton {
     include!("../../rh-core/tests/generated/M2_demography.rs");
 }
 
-use skeleton::{DRAINS, ROLE_TARGET, ROLES, RngPurpose, SCHEDULE, SPEC_VERSION, SYSTEM_ID};
+use skeleton::{DRAINS, ROLE_ACTOR, ROLE_TARGET, ROLES, RngPurpose, SCHEDULE, SPEC_VERSION, SYSTEM_ID};
 
 impl SpecPurpose for RngPurpose {
     const ALL: &'static [Self] = &[Self::DeathTime];
@@ -128,13 +129,8 @@ pub const EXTINCTION: &str = "EXTINCTION";
 /// Why M2 refused its parameters (ruling 7).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DemographyError {
-    /// `brass_alpha` set: rung 0 takes its level from e₀, and any α needs fixed-point `exp` (P1.3).
+    /// `brass_alpha` set: rung 0 takes its level from e₀, and F1 refuses any α given (MR2).
     AlphaRefused {
-        /// The `Q16_16` bits given.
-        bits: i32,
-    },
-    /// `brass_beta` other than exactly 1 (65536): Brass at β ≠ 1 needs fixed-point `exp`, `ln`.
-    BetaNotOne {
         /// The `Q16_16` bits given.
         bits: i32,
     },
@@ -155,13 +151,8 @@ impl fmt::Display for DemographyError {
         match self {
             Self::AlphaRefused { bits } => write!(
                 f,
-                "M2.demography refuses brass_alpha = {bits} / 2^16 at rung 0: e0 sets the level, \
-                 and any alpha needs fixed-point exp (P1.3; SPR-011 ruling 7)"
-            ),
-            Self::BetaNotOne { bits } => write!(
-                f,
-                "M2.demography refuses brass_beta = {bits} / 2^16 at rung 0: only beta = 1 \
-                 (65536) runs until P1.3 (SPR-011 ruling 7)"
+                "M2.demography refuses brass_alpha = {bits} / 2^16: e0 sets the level, \
+                 and any alpha needs fixed-point exp (SPR-016 MR2)"
             ),
             Self::Schedule(e) => write!(f, "M2.demography: {e}"),
             Self::Construction { step, reason } => write!(
@@ -177,11 +168,19 @@ impl std::error::Error for DemographyError {}
 /// The system `M2.demography`: its schedule, computed once at construction.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Demography {
+    /// The rung-0 schedule (kept for backwards compatibility tests).
     schedule: Schedule,
+    /// The F1 mortality schedule (SPR-016 T-02).
+    f1: F1Schedule,
+    /// The carrying capacity for the density modifier (MR11; default 10M).
+    density_capacity: u64,
+    /// The slope of the density modifier (MR11; default 1.0).
+    density_mortality_slope: Q16_16,
 }
 
 impl Demography {
-    /// M2 for e₀ on `calendar`, refusing `brass_alpha` (any `Some`) and β ≠ 1 (ruling 7).
+    /// M2 for e₀, β and the density parameters on `calendar`, refusing `brass_alpha` (any `Some`).
+    /// At F1 any β in the Registry bounds [0.6, 1.65] is accepted (MR2).
     ///
     /// # Errors
     /// [`DemographyError`], each naming the refused parameter.
@@ -189,6 +188,8 @@ impl Demography {
         e0: Q16_16,
         brass_alpha: Option<Q16_16>,
         brass_beta: Q16_16,
+        density_capacity: u64,
+        density_mortality_slope: Q16_16,
         calendar: Calendar,
     ) -> Result<Self, DemographyError> {
         if let Some(alpha) = brass_alpha {
@@ -196,32 +197,42 @@ impl Demography {
                 bits: alpha.to_bits(),
             });
         }
-        if brass_beta != Q16_16::ONE {
-            return Err(DemographyError::BetaNotOne {
-                bits: brass_beta.to_bits(),
-            });
-        }
         let schedule = Schedule::new(e0, calendar).map_err(DemographyError::Schedule)?;
-        Ok(Self { schedule })
+        let f1 = F1Schedule::new(e0, brass_beta, calendar)?;
+        Ok(Self {
+            schedule,
+            f1,
+            density_capacity,
+            density_mortality_slope,
+        })
     }
 
-    /// The schedule.
+    /// The rung-0 schedule.
     #[must_use]
     pub const fn schedule(&self) -> &Schedule {
         &self.schedule
     }
 
-    #[allow(clippy::needless_pass_by_value, reason = "a map_err adapter")]
-    fn sched_err(e: ScheduleError) -> SimError {
-        fail(e.to_string())
+    /// The F1 schedule (SPR-016).
+    #[must_use]
+    pub const fn f1(&self) -> &F1Schedule {
+        &self.f1
     }
 
-    /// S8-S10 at the Month pulse instant.
+    /// MR10-MR12 at the Month pulse instant: F1 mortality with density modifier (SPR-016 T-03/04).
     fn mortality(&self, view: &SystemView<'_>, ctx: &mut StepCtx<'_>) -> Result<(), SimError> {
         let t_m = ctx.now();
         let ids = view.read(PERSON_ID)?;
         let births = view.read(PERSON_BIRTH)?;
         let alive = view.read(PERSON_ALIVE)?;
+        // MR11: living count N for the density modifier
+        let n: u64 = alive.iter().filter(|&&a| a == 1).count().try_into().unwrap_or(u64::MAX);
+        let m_d = density_multiplier(n, self.density_capacity, self.density_mortality_slope);
+        let month_start = t_m.minutes();
+        let end = self.f1.calendar().next_boundary(Pulse::Month, t_m)
+            .ok_or_else(|| fail(format!("calendar cannot place month boundary after {t_m}")))?;
+        let d = end.minutes() - month_start;
+        let prev_month = t_m.minutes() - d;
         for ((&id, &birth), &a) in ids.iter().zip(births).zip(alive) {
             if a == 0 {
                 continue;
@@ -234,12 +245,50 @@ impl Demography {
                     id.cast_unsigned()
                 )));
             }
-            let (q, end) = self.schedule.month_q(t_m, birth).map_err(Self::sched_err)?;
-            if !ctx.chance(&RngPurpose::DeathTime, person, 0, q)? {
+            let x = month_start - birth;
+            // MR10: ordinary probability q = rhe(2^32 (l(x) - l(x + D)) / l(x))
+            let lx = self.f1.survivors_at(x).map_err(|e| fail(e.to_string()))?;
+            if lx == 0 {
+                // already past the cap: certain death
+                let q = Prob32::ONE;
+                let qp = density_modified_q(q, m_d);
+                if ctx.chance(&RngPurpose::DeathTime, person, 0, qp)? {
+                    let d1 = ctx.rng(&RngPurpose::DeathTime, person, 1)?;
+                    let tau = death_day(month_start, d, d1);
+                    ctx.schedule(
+                        &RngPurpose::DeathTime,
+                        TimerSpec {
+                            time: SimTime::from_minutes(tau),
+                            phase: Phase::Vital,
+                            entity,
+                            kind: DEATH_TIMER,
+                            payload: birth,
+                            cause: rh_events::EventRef::None,
+                        },
+                    )?;
+                }
+                continue;
+            }
+            // MR10: newborn rule: born after the previous Month pulse
+            let is_newborn = month_start > 0 && birth > prev_month;
+            let q_bits = if is_newborn {
+                // q = 2^32 - l(x + D) exactly (the full [0, x + D) interval)
+                let lxd = self.f1.survivors_at(x + d).map_err(|e| fail(e.to_string()))?;
+                Prob32::from_bits((1u64 << 32) - lxd).unwrap()
+            } else {
+                let lxd = self.f1.survivors_at(x + d).map_err(|e| fail(e.to_string()))?;
+                // rhe(2^32 * (l(x) - l(x + D)) / l(x))
+                let num = u128::from(lx - lxd) << 32;
+                let bits = rhe(num, u128::from(lx));
+                Prob32::from_bits(u64::try_from(bits).unwrap_or(1 << 32)).unwrap()
+            };
+            // MR11: density modifier
+            let qp = density_modified_q(q_bits, m_d);
+            if !ctx.chance(&RngPurpose::DeathTime, person, 0, qp)? {
                 continue;
             }
             let d1 = ctx.rng(&RngPurpose::DeathTime, person, 1)?;
-            let tau = death_day(t_m.minutes(), end.minutes() - t_m.minutes(), d1);
+            let tau = death_day(month_start, d, d1);
             ctx.schedule(
                 &RngPurpose::DeathTime,
                 TimerSpec {
@@ -254,6 +303,40 @@ impl Demography {
         }
         Ok(())
     }
+}
+
+/// MR11: the density multiplier m_d in Q16_16 bits.
+/// m_d = min(4 * 65536, 65536 + rhe(S_d * max(0, N - K_cap) / K_cap))
+fn density_multiplier(n: u64, cap: u64, slope: Q16_16) -> i32 {
+    if n <= cap || cap == 0 {
+        return 1 << 16;
+    }
+    let excess = n - cap;
+    // S_d (as u32 from i32 bits, positive) * excess / cap, rounded half to even
+    let s_bits = slope.to_bits().cast_unsigned();
+    let term = rhe(
+        u128::from(s_bits) * u128::from(excess),
+        u128::from(cap),
+    );
+    let m = (1_i64 << 16) + (term as i64);
+    let ceiling = 4_i64 << 16;
+    if m > ceiling {
+        ceiling as i32
+    } else if m < 0 {
+        (1 << 16) as i32
+    } else {
+        m as i32
+    }
+}
+
+/// MR11: q' = min(2^32, rhe(q * m_d / 2^16)) where q is a Prob32 and m_d is Q16_16.
+fn density_modified_q(q: Prob32, m_d: i32) -> Prob32 {
+    if m_d == 1 << 16 {
+        return q;
+    }
+    let num = u128::from(q.to_bits()) * u128::from(m_d.cast_unsigned());
+    let bits = rhe(num, 1 << 16);
+    Prob32::from_bits(u64::try_from(bits).unwrap_or(1 << 32).min(1 << 32)).unwrap()
 }
 
 fn fail(message: String) -> SimError {
@@ -324,6 +407,7 @@ pub fn apply_death(
     view.write(LC_DEATH_CAUSE)?[open] = cause;
     // person.spouse is cleared on the spouse's death (0.2.3 [[owns]]; the Tester's DEF-2).
     let spouse = view.read(PERSON_SPOUSE)?[row].cast_unsigned();
+    let birth = view.read(PERSON_BIRTH)?[row];
     if let Some(survivor) = ledger_row(view, spouse)?.filter(|_| spouse != 0) {
         let spouses = view.write(PERSON_SPOUSE)?;
         if spouses[survivor].cast_unsigned() == id {
@@ -331,8 +415,9 @@ pub fn apply_death(
         }
     }
     let mut draft = EventDraft::new(DEATH)
+        .role(ROLE_ACTOR, EntityRef::person(person))
         .role(ROLE_TARGET, EntityRef::person(person))
-        .with_payload(vec![cause]);
+        .with_payload(vec![cause, now - birth, 0]);  // [cause, age_minutes, vocation=0]
     if !cause_event.is_none() {
         draft = draft.caused_by(cause_event, EdgeKind::Triggered);
     }
@@ -497,7 +582,7 @@ impl SystemModel for Demography {
             return Err(fail(format!("{} is not a death timer", timer.id())));
         }
         let at = timer.key.time;
-        if self.schedule.calendar().is_boundary(Pulse::Month, at) || at.minutes() % DAY != 0 {
+        if self.f1.calendar().is_boundary(Pulse::Month, at) || at.minutes() % DAY != 0 {
             return Err(fail(format!(
                 "{} fires at {at}, not a day start inside a month: INV-M2-03",
                 timer.id()
@@ -519,12 +604,21 @@ impl SystemModel for Demography {
     ) -> Result<Option<SimTime>, SimError> {
         let t_in = ctx.now();
         let birth = timer.timer.payload;
-        let end = self.schedule.month_end(t_in).map_err(Self::sched_err)?;
-        let q = self
-            .schedule
-            .interval_q(t_in.minutes() - birth, end.minutes() - birth)
-            .map_err(Self::sched_err)?;
-        if !q.hits(ctx.draw(K_HIT)) {
+        let end = self.f1.calendar().next_boundary(Pulse::Month, t_in)
+            .ok_or_else(|| fail(format!("calendar cannot place month boundary after {t_in}")))?;
+        let x = t_in.minutes() - birth;
+        let x1 = end.minutes() - birth;
+        let lx = self.f1.survivors_at(x).map_err(|e| fail(e.to_string()))?;
+        let qr = if lx == 0 {
+            Prob32::ONE
+        } else {
+            let lx1 = self.f1.survivors_at(x1).map_err(|e| fail(e.to_string()))?;
+            // rhe(2^32 * (l(x) - l(x1)) / l(x))
+            let num = u128::from(lx - lx1) << 32;
+            let bits = rhe(num, u128::from(lx));
+            Prob32::from_bits(u64::try_from(bits).unwrap_or(1 << 32)).unwrap()
+        };
+        if !qr.hits(ctx.draw(K_HIT)) {
             return Ok(None);
         }
         Ok(resample_day(t_in.minutes(), end.minutes(), ctx.draw(K_DAY)).map(SimTime::from_minutes))

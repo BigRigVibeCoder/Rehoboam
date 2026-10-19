@@ -140,7 +140,7 @@ fn run(w: &World) -> Vec<(i64, u64)> {
         365 => Calendar::new(DaysPerYear::D365, SeasonsPerYear::Four),
         d => panic!("{d} days a year"),
     };
-    let m2 = Demography::new(Q16_16::from_bits(w.e0_bits), None, Q16_16::ONE, calendar).unwrap();
+    let m2 = Demography::new(Q16_16::from_bits(w.e0_bits), None, Q16_16::ONE, 10_000_000, Q16_16::ONE, calendar).unwrap();
     let registered = register(
         vec![Box::new(m2) as Box<dyn SystemModel>],
         &specs.spec_table(),

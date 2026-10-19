@@ -28,7 +28,7 @@ fn spec_path() -> PathBuf {
 
 /// Every drain-only binding of M2's code must be a spec entry whose only step is the drain.
 fn check(spec: &SystemSpec) -> Result<usize, String> {
-    let m2 = Demography::new(Q16_16::from_int(30), None, Q16_16::ONE, CALENDAR).unwrap();
+    let m2 = Demography::new(Q16_16::from_int(30), None, Q16_16::ONE, 10_000_000, Q16_16::ONE, CALENDAR).unwrap();
     let declared = m2.access().drain_only;
     for b in &declared {
         let (pulse, phase) = (b.pulse.name(), b.phase.name());
