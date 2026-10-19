@@ -38,8 +38,7 @@ pub const CONTROL_FORMAT: &str = "rehoboam/stream/control/v1";
 /// This control wire's version.
 pub const CONTROL_VERSION: u64 = 1;
 /// The one answer to an attempt to act on a control socket with an unknown method (`control_v1.md` §5).
-pub const CONTROL_MESSAGE: &str =
-    "this socket carries the control channel; v1 accepts the pace command only (control.status, control.pace, control.pause, control.resume, control.step) and no input";
+pub const CONTROL_MESSAGE: &str = "this socket carries the control channel; v1 accepts the pace command only (control.status, control.pace, control.pause, control.resume, control.step) and no input";
 /// The host's default connection cap (§1).
 pub const DEFAULT_CAP: usize = 64;
 /// The host's default controller connection cap (`control_v1.md` §1).
@@ -928,7 +927,10 @@ fn answer_control(conn: &mut ControlConn, host: &dyn ControlHost, payload: &[u8]
         .get("method")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    let Some((_, m, _)) = CONTROL_METHOD_TABLE.iter().find(|(name, _, _)| *name == method) else {
+    let Some((_, m, _)) = CONTROL_METHOD_TABLE
+        .iter()
+        .find(|(name, _, _)| *name == method)
+    else {
         return refuse_control_method(&id, method);
     };
     let params = obj.get("params");

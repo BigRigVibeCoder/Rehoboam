@@ -116,7 +116,12 @@ fn every_method_outside_the_table_is_the_read_only_refusal() {
 struct MockControlHost;
 
 impl control::ControlHost for MockControlHost {
-    fn submit(&self, _conn: &control::ControlConn, id: &Value, cmd: control::ControlCommand) -> Value {
+    fn submit(
+        &self,
+        _conn: &control::ControlConn,
+        id: &Value,
+        cmd: control::ControlCommand,
+    ) -> Value {
         match cmd {
             control::ControlCommand::Status => {
                 control::response(&Some(id.clone()), json!({"mock": "status"}))

@@ -41,6 +41,10 @@ use crate::stream::{RunToml, TIMELINE};
 
 /// What to print.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "CLI argument flags are boolean"
+)]
 pub struct TailArgs {
     /// The run directory.
     pub run_dir: PathBuf,
@@ -62,6 +66,14 @@ pub struct TailArgs {
     pub timeout: Option<u64>,
     /// Read channel C (sift matches) instead of channel A (`--channel C`; SPR-026 T-04).
     pub channel_c: bool,
+    /// Keep records with this place id on `EVENT.place_id` (SPR-027 T-04).
+    pub place: Option<String>,
+    /// Keep matches with this pattern id on channel-C `MATCH` lines (SPR-027 T-04).
+    pub pattern: Option<String>,
+    /// Keep events with at least this tellability on `EVENT.tellability` (SPR-027 T-04).
+    pub min_tellability: Option<u8>,
+    /// Print only `STEP_DIGEST` rows (SPR-027 T-04).
+    pub digest: bool,
 }
 
 /// The names and the calendar a display needs (tool side).
@@ -228,6 +240,220 @@ fn kind_matches(r: &Record, kinds: &[String]) -> bool {
             .any(|k| k == r.kind().name() || matches!(&r.body, Body::Event(e) if &e.verb == k))
 }
 
+/// Predicate filters applied to records (sealed segments or live stream lines).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Filters {
+    /// The first sequence number to include.
+    pub from_seq: u64,
+    /// The optional last sequence number to include.
+    pub to_seq: Option<u64>,
+    /// Optional person id to follow.
+    pub follow: Option<u64>,
+    /// Record kinds or verbs to include (empty means all).
+    pub kinds: Vec<String>,
+    /// Optional place id to match on `EVENT.place_id`.
+    pub place: Option<u32>,
+    /// Optional pattern id to match on `MATCH.pattern_id`.
+    pub pattern: Option<String>,
+    /// Optional minimum tellability threshold on `EVENT.tellability`.
+    pub min_tellability: Option<u8>,
+    /// Whether to print only `STEP_DIGEST` rows.
+    pub digest: bool,
+}
+
+impl Filters {
+    /// Tests a decoded record against all configured filters.
+    #[must_use]
+    pub fn matches_record(&self, r: &Record) -> bool {
+        let seq = r.header.seq;
+        if seq < self.from_seq || self.to_seq.is_some_and(|m| seq > m) {
+            return false;
+        }
+        if self.digest && !matches!(&r.body, Body::StepDigest(_)) {
+            return false;
+        }
+        if let Some(ref pat) = self.pattern
+            && !matches!(&r.body, Body::Match(m) if &m.pattern_id == pat)
+        {
+            return false;
+        }
+        if let Some(pid) = self.place
+            && !matches!(&r.body, Body::Event(e) if e.place_id == Some(pid))
+        {
+            return false;
+        }
+        if let Some(min_t) = self.min_tellability
+            && !matches!(&r.body, Body::Event(e) if e.tellability >= min_t)
+        {
+            return false;
+        }
+        if !self.kinds.is_empty() && !kind_matches(r, &self.kinds) {
+            return false;
+        }
+        if let Some(person) = self.follow
+            && !about(r, person)
+        {
+            return false;
+        }
+        true
+    }
+
+    /// Fast prefix split for live canonical lines (W36: split frozen prefix before full parse).
+    #[must_use]
+    pub fn matches_live_line(&self, line: &str) -> bool {
+        let mut tokens = line.split(' ');
+        let Some(kind_str) = tokens.next() else {
+            return false;
+        };
+        let Some(_timeline) = tokens.next() else {
+            return false;
+        };
+        let Some(seq_str) = tokens.next() else {
+            return false;
+        };
+        let Ok(seq) = seq_str.parse::<u64>() else {
+            return false;
+        };
+        if seq < self.from_seq || self.to_seq.is_some_and(|m| seq > m) {
+            return false;
+        }
+        if self.digest && kind_str != "STEP_DIGEST" {
+            return false;
+        }
+        if let Some(ref pat) = self.pattern {
+            if kind_str != "MATCH" {
+                return false;
+            }
+            // MATCH: kind(0), timeline(1), seq(2), tick(3), match_id(4), pack(5), pattern_id(6)
+            let _tick = tokens.next();
+            let _match_id = tokens.next();
+            let _pack = tokens.next();
+            let pattern_id = tokens.next();
+            if pattern_id != Some(pat.as_str()) {
+                return false;
+            }
+        }
+        if (self.place.is_some() || self.min_tellability.is_some()) && kind_str != "EVENT" {
+            return false;
+        }
+        if kind_str == "EVENT" {
+            let _tick = tokens.next();
+            let _event_id = tokens.next();
+            let _phase = tokens.next();
+            let _verb_id = tokens.next();
+            let verb = tokens.next(); // index 7
+            if !self.kinds.is_empty() {
+                let verb_match = verb.is_some_and(|v| self.kinds.iter().any(|k| k == v));
+                let kind_match = self.kinds.iter().any(|k| k == "EVENT");
+                if !verb_match && !kind_match {
+                    return false;
+                }
+            }
+            let _act_classes = tokens.next(); // index 8
+            let place_tok = tokens.next(); // index 9
+            if let Some(pid) = self.place {
+                let pid_str = pid.to_string();
+                if place_tok != Some(pid_str.as_str()) {
+                    return false;
+                }
+            }
+            let _magnitude = tokens.next(); // index 10
+            let tell_tok = tokens.next(); // index 11
+            if let Some(min_t) = self.min_tellability {
+                let Ok(t_val) = tell_tok.unwrap_or("").parse::<u8>() else {
+                    return false;
+                };
+                if t_val < min_t {
+                    return false;
+                }
+            }
+            if let Some(p) = self.follow {
+                let _secrecy = tokens.next();
+                let _origin = tokens.next();
+                let _payload = tokens.next();
+                let roles_tok = tokens.next(); // index 15
+                let target = format!("1/{p}/");
+                if !roles_tok.is_some_and(|r| r.contains(&target)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        if !self.kinds.is_empty() && !self.kinds.iter().any(|k| k == kind_str) {
+            return false;
+        }
+        if let Some(p) = self.follow {
+            let _tick = tokens.next();
+            match kind_str {
+                "INPUT" => {
+                    let _journal_seq = tokens.next();
+                    let _class = tokens.next();
+                    let _input_kind = tokens.next();
+                    let scope = tokens.next();
+                    let scope_id = tokens.next();
+                    let p_str = p.to_string();
+                    if scope != Some("person") || scope_id != Some(p_str.as_str()) {
+                        return false;
+                    }
+                }
+                "LIFE_ENTRY" | "LIFE_EXIT" => {
+                    let person_id = tokens.next();
+                    let p_str = p.to_string();
+                    if person_id != Some(p_str.as_str()) {
+                        return false;
+                    }
+                }
+                _ => return false,
+            }
+        }
+        true
+    }
+}
+
+/// Resolves string place and person parameters to IDs against the world's display context.
+///
+/// # Errors
+/// [`Error`] if a person or place name cannot be resolved.
+pub fn resolve_filters(args: &TailArgs, display: Option<&Display>) -> Result<Filters, Error> {
+    let follow = match &args.follow {
+        None => None,
+        Some(p) => {
+            let id = if let Some(d) = display {
+                d.names
+                    .iter()
+                    .find(|(_, n)| *n == p)
+                    .map(|(id, _)| *id)
+                    .or_else(|| p.parse().ok())
+            } else {
+                p.parse().ok()
+            };
+            Some(id.ok_or_else(|| {
+                Error(format!(
+                    "--follow {p}: no such person in the cast, nor an id"
+                ))
+            })?)
+        }
+    };
+    let place = match &args.place {
+        None => None,
+        Some(p) => Some(p.parse::<u32>().map_err(|_| {
+            Error(format!(
+                "--place {p}: no such place in the manifest, nor an id"
+            ))
+        })?),
+    };
+    Ok(Filters {
+        from_seq: args.from_seq,
+        to_seq: args.to_seq,
+        follow,
+        kinds: args.kinds.clone(),
+        place,
+        pattern: args.pattern.clone(),
+        min_tellability: args.min_tellability,
+        digest: args.digest,
+    })
+}
+
 /// The channel-C annotations of a run, by the channel-A seq they close at (none before a sift).
 pub type Annotations = BTreeMap<u64, Vec<String>>;
 
@@ -320,22 +546,7 @@ pub fn tail(
     }
     let run = RunToml::read(&args.run_dir)?;
     let display = display_of(&args.repo, &run)?;
-    let follow = match &args.follow {
-        None => None,
-        Some(p) => Some(
-            display
-                .names
-                .iter()
-                .find(|(_, n)| *n == p)
-                .map(|(id, _)| *id)
-                .or_else(|| p.parse().ok())
-                .ok_or_else(|| {
-                    Error(format!(
-                        "--follow {p}: no such person in the cast, nor an id"
-                    ))
-                })?,
-        ),
-    };
+    let filters = resolve_filters(args, Some(&display))?;
     let dir = channel_dir(&args.run_dir.join("stream"), TIMELINE, Channel::A);
     let last_year = run.years - 1;
     let mut cursor = Cursor {
@@ -376,8 +587,7 @@ pub fn tail(
             for r in &seg.records {
                 let seq = r.header.seq;
                 let in_range = seq >= args.from_seq && args.to_seq.is_none_or(|m| seq <= m);
-                let keep =
-                    in_range && kind_matches(r, &args.kinds) && follow.is_none_or(|p| about(r, p));
+                let keep = filters.matches_record(r);
                 if keep {
                     let line = if args.canonical {
                         canonical::render(r).map_err(|e| Error(e.to_string()))?
@@ -386,6 +596,11 @@ pub fn tail(
                     };
                     writeln!(out, "{line}").map_err(io)?;
                     for note in notes.get(&seq).into_iter().flatten() {
+                        if let Some(ref pat) = args.pattern
+                            && (!note.starts_with("match ") || !note.contains(&format!("/{pat} ")))
+                        {
+                            continue;
+                        }
                         if args.canonical {
                             writeln!(out, "#^ {note}").map_err(io)?;
                         } else {
@@ -467,9 +682,16 @@ fn header_of_registry(run: &RunToml) -> String {
 /// canonical lines after the channel's file header or as display lines, then the status line. An
 /// empty sim-year (no match) holds no line.
 fn tail_c(args: &TailArgs, out: &mut dyn std::io::Write) -> Result<(), Error> {
-    if args.wait || args.follow.is_some() || !args.kinds.is_empty() {
+    if args.wait
+        || args.follow.is_some()
+        || !args.kinds.is_empty()
+        || args.place.is_some()
+        || args.min_tellability.is_some()
+        || args.digest
+    {
         return Err(Error(
-            "tail --channel C takes --from-seq, --to-seq and --canonical only".to_owned(),
+            "tail --channel C takes --from-seq, --to-seq, --pattern and --canonical only"
+                .to_owned(),
         ));
     }
     let run = RunToml::read(&args.run_dir)?;
@@ -477,6 +699,7 @@ fn tail_c(args: &TailArgs, out: &mut dyn std::io::Write) -> Result<(), Error> {
     let display = (!args.canonical)
         .then(|| display_of(&args.repo, &run))
         .transpose()?;
+    let filters = resolve_filters(args, display.as_ref())?;
     if args.canonical {
         let h = FileHeader {
             timeline_id: TIMELINE,
@@ -492,7 +715,7 @@ fn tail_c(args: &TailArgs, out: &mut dyn std::io::Write) -> Result<(), Error> {
     for seg in &segs {
         for r in &seg.records {
             let seq = r.header.seq;
-            if seq < args.from_seq || args.to_seq.is_some_and(|m| seq > m) {
+            if !filters.matches_record(r) {
                 continue;
             }
             let line = match &display {

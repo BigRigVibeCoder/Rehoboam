@@ -258,14 +258,8 @@ fn materialize_dump_equality_and_at_digest() {
         .find(|r| matches!(r.body, Body::StepDigest(_)))
         .unwrap();
 
-    let m_digest = materialize_with(
-        &repo(),
-        &dir,
-        None,
-        Some(first_digest.header.seq),
-        false,
-    )
-    .unwrap();
+    let m_digest =
+        materialize_with(&repo(), &dir, None, Some(first_digest.header.seq), false).unwrap();
     assert_eq!(m_digest.tick, first_digest.header.tick);
     if let Body::StepDigest(sd) = &first_digest.body {
         assert_eq!(m_digest.state_hash, sd.state_hash);

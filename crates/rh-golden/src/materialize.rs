@@ -299,7 +299,11 @@ pub fn materialize_with(
     let digest = rh_snapshot::state::state_digest(&engine.snapshot());
     let state_hash = digest.hash;
     let dump = Dump::of(&engine.snapshot(), SimTime::from_minutes(target_tick));
-    let table_roots = digest.tables.into_iter().map(|(k, v)| (k, v.root)).collect();
+    let table_roots = digest
+        .tables
+        .into_iter()
+        .map(|(k, v)| (k, v.root))
+        .collect();
 
     if let Some(expected) = reference_hash
         && state_hash != expected

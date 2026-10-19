@@ -415,10 +415,13 @@ fn every_control_golden_frame_encodes_to_its_bytes_and_decodes_back() {
         }
         let parts: Vec<&str> = lines[i].split(' ').collect();
         let (name, data) = (parts[1], unhex(parts[2]));
-        let (decoded, used) = wire::decode(&data, MAX_PAYLOAD).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let (decoded, used) =
+            wire::decode(&data, MAX_PAYLOAD).unwrap_or_else(|e| panic!("{name}: {e}"));
         assert_eq!(used, data.len(), "{name}: unused bytes");
         assert_eq!(decoded.ftype, FrameType::Control, "{name}: not CONTROL");
-        let next = lines[i + 1].strip_prefix("control ").unwrap_or_else(|| panic!("{name}: no control line"));
+        let next = lines[i + 1]
+            .strip_prefix("control ")
+            .unwrap_or_else(|| panic!("{name}: no control line"));
         assert_eq!(
             hex(&wire::encode(&decoded).unwrap_or_default()),
             parts[2],
@@ -510,10 +513,7 @@ impl SimulatedControlHost {
     }
 
     fn status(&self) -> serde_json::Value {
-        let end = self
-            .end
-            .as_ref()
-            .map(|r| serde_json::json!({"reason": r}));
+        let end = self.end.as_ref().map(|r| serde_json::json!({"reason": r}));
         serde_json::json!({
             "calendar": {"minutes_per_year": 518_400},
             "control": {"format": control::CONTROL_FORMAT, "version": control::CONTROL_VERSION},
@@ -607,8 +607,8 @@ impl control::ControlHost for SimulatedControlHost {
                     d.insert("tip_tick".into(), serde_json::json!(self.tip));
                     return control::error(&Some(id.clone()), control::Reason::PastTick, d);
                 }
-                let changed = *self.step_target.borrow() != Some(target)
-                    || *self.state.borrow() != "running";
+                let changed =
+                    *self.step_target.borrow() != Some(target) || *self.state.borrow() != "running";
                 if changed {
                     *self.state.borrow_mut() = "running".to_owned();
                     *self.step_target.borrow_mut() = Some(target);
@@ -630,7 +630,10 @@ impl control::ControlHost for SimulatedControlHost {
 #[test]
 fn every_control_dispatch_line_is_answered_byte_for_byte() {
     let (mut n, mut closed) = (0, 0);
-    for line in golden_control().iter().filter(|l| l.starts_with("dispatch ")) {
+    for line in golden_control()
+        .iter()
+        .filter(|l| l.starts_with("dispatch "))
+    {
         let parts: Vec<&str> = line.split(' ').collect();
         let (name, request, want) = (parts[1], unhex(parts[2]), parts[3]);
         let finished = name.ends_with("_finished");
@@ -664,5 +667,7 @@ fn every_control_dispatch_line_is_answered_byte_for_byte() {
     }
     assert_eq!(n, 41, "the control golden file's dispatch lines");
     assert_eq!(closed, 7, "closed connections");
-    println!("control_v1 conformance: {n} golden dispatch lines answered byte for byte ({closed} closed)");
+    println!(
+        "control_v1 conformance: {n} golden dispatch lines answered byte for byte ({closed} closed)"
+    );
 }

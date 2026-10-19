@@ -44,11 +44,7 @@ pub const DECADE: i64 = 10;
 /// Ceiling of `a / b` for non-negative `a` and positive `b`.
 #[must_use]
 pub fn ceil_div(a: i128, b: i128) -> i128 {
-    if a <= 0 {
-        0
-    } else {
-        (a - 1) / b + 1
-    }
+    if a <= 0 { 0 } else { (a - 1) / b + 1 }
 }
 
 /// The band's rate in sim-minutes per wall-second (`control_v1.md` §3.1); `None` for `max`.
@@ -416,9 +412,7 @@ impl Governor {
     /// Current connection count.
     #[must_use]
     pub fn connection_count(&self) -> usize {
-        self.inner
-            .lock()
-            .map_or(0, |inner| inner.connections.len())
+        self.inner.lock().map_or(0, |inner| inner.connections.len())
     }
 
     /// Opens a controller connection. Returns `None` if cap exceeded.
@@ -608,8 +602,10 @@ impl Governor {
             inner.answers_given += 1;
             p.applied_at_ns = Some(self.clock.now_monotonic_ns());
             p.answered_seq = Some(inner.answers_given);
-            let rep =
-                response(&Some(p.rid.clone()), self.status_from_snapshot(&snap_arc, num_conns));
+            let rep = response(
+                &Some(p.rid.clone()),
+                self.status_from_snapshot(&snap_arc, num_conns),
+            );
             if let Ok(mut slot) = p.reply.lock() {
                 *slot = Some(rep);
             }
@@ -657,7 +653,13 @@ impl Governor {
                 if changed {
                     "running".clone_into(&mut inner.cell.state);
                     inner.cell.step_target = None;
-                    self.log_pace(inner, "control.resume", Some(p.conn_number), p.conn_pid, tip);
+                    self.log_pace(
+                        inner,
+                        "control.resume",
+                        Some(p.conn_number),
+                        p.conn_pid,
+                        tip,
+                    );
                 }
                 let mut pace = inner.cell_pace(tip, next_seq);
                 if let Value::Object(ref mut m) = pace {
@@ -668,16 +670,17 @@ impl Governor {
             ControlCommand::Step { until } => {
                 let Some(nxt) = next_tick else {
                     let mut d = Map::new();
-                    d.insert("end".into(), json!(inner.end.as_deref().unwrap_or("finished")));
+                    d.insert(
+                        "end".into(),
+                        json!(inner.end.as_deref().unwrap_or("finished")),
+                    );
                     return Err(error(&Some(p.rid.clone()), Reason::RunFinished, d));
                 };
                 let target = match until {
                     StepUntil::Instant => nxt,
                     StepUntil::Tick(t) => *t,
                 };
-                if (tip.is_none() && target < self.first_tick)
-                    || tip.is_some_and(|t| target <= t)
-                {
+                if (tip.is_none() && target < self.first_tick) || tip.is_some_and(|t| target <= t) {
                     let mut d = Map::new();
                     d.insert("tip_tick".into(), json!(tip));
                     return Err(error(&Some(p.rid.clone()), Reason::PastTick, d));
@@ -720,7 +723,12 @@ impl Governor {
         if state != "running" {
             return None;
         }
-        Some(deadline_ns(inner.cell.anchor_wall_ns, inner.cell.anchor_tick, tick, r))
+        Some(deadline_ns(
+            inner.cell.anchor_wall_ns,
+            inner.cell.anchor_tick,
+            tick,
+            r,
+        ))
     }
 
     /// Waits for turn in the live run loop (`control_v1.md` §3.3 items 1-3).
@@ -752,7 +760,12 @@ impl Governor {
             }
             // State is running.
             let (_, r) = guard.cell.effective(self.minutes_per_year);
-            let dl = deadline_ns(guard.cell.anchor_wall_ns, guard.cell.anchor_tick, next_tick, r);
+            let dl = deadline_ns(
+                guard.cell.anchor_wall_ns,
+                guard.cell.anchor_tick,
+                next_tick,
+                r,
+            );
             let now = self.clock.now_monotonic_ns();
             if now >= dl {
                 // Reached deadline: run instant at once (item 4, L4)
@@ -826,7 +839,10 @@ impl Governor {
             p.applied_at_ns = Some(self.clock.now_monotonic_ns());
             p.answered_seq = Some(inner.answers_given);
             let rep = if matches!(p.cmd, ControlCommand::Status) {
-                response(&Some(p.rid.clone()), self.status_from_snapshot(&snap_arc, num_conns))
+                response(
+                    &Some(p.rid.clone()),
+                    self.status_from_snapshot(&snap_arc, num_conns),
+                )
             } else {
                 let mut d = Map::new();
                 d.insert("end".into(), json!(reason));
@@ -883,7 +899,10 @@ impl ControlHost for Governor {
                 );
             }
             let mut d = Map::new();
-            d.insert("end".into(), json!(inner.end.as_deref().unwrap_or("finished")));
+            d.insert(
+                "end".into(),
+                json!(inner.end.as_deref().unwrap_or("finished")),
+            );
             return error(&Some(id.clone()), Reason::RunFinished, d);
         }
 

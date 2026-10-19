@@ -425,7 +425,6 @@ pub struct RunToml {
     pub first_keyframe_year: Option<i64>,
 }
 
-
 impl RunToml {
     /// Reads `run.toml` from a run directory.
     ///

@@ -550,6 +550,7 @@ fn parse_tail(words: &[String], repo: &Path) -> Result<crate::tail::TailArgs, Er
         ..crate::tail::TailArgs::default()
     };
     let mut run_dir = None;
+    let mut channel_specified = false;
     let mut it = words.iter();
     while let Some(w) = it.next() {
         let mut value = || it.next().ok_or_else(|| bad(&format!("{w} needs a value")));
@@ -569,12 +570,44 @@ fn parse_tail(words: &[String], repo: &Path) -> Result<crate::tail::TailArgs, Er
             }
             "--follow" => args.follow = Some(value()?.clone()),
             "--kind" => args.kinds.push(value()?.clone()),
+            "--place" => args.place = Some(value()?.clone()),
+            "--pattern" => {
+                args.pattern = Some(value()?.clone());
+                if !channel_specified {
+                    args.channel_c = true;
+                }
+            }
+            "--min-tellability" => {
+                let v = value()?;
+                args.min_tellability = Some(
+                    v.parse()
+                        .map_err(|_| bad("--min-tellability is a number (0..255)"))?,
+                );
+            }
+            "--digest" => {
+                if it.clone().next().is_some_and(|next| next == "region") {
+                    let _ = it.next();
+                    return Err(bad("--digest region waits for regions in SPR-018"));
+                }
+                args.digest = true;
+            }
+            "--digest=region" => {
+                return Err(bad("--digest region waits for regions in SPR-018"));
+            }
+            s if s == "--sig" || s.starts_with("--sig") => {
+                return Err(bad(
+                    "--sig waits for channel-C significance in P2.1; use --min-tellability N instead",
+                ));
+            }
             // SPR-026 T-04: the sealed channel C.
-            "--channel" => match value()?.as_str() {
-                "A" => args.channel_c = false,
-                "C" => args.channel_c = true,
-                other => return Err(bad(&format!("--channel {other}: A or C"))),
-            },
+            "--channel" => {
+                channel_specified = true;
+                match value()?.as_str() {
+                    "A" => args.channel_c = false,
+                    "C" => args.channel_c = true,
+                    other => return Err(bad(&format!("--channel {other}: A or C"))),
+                }
+            }
             "--repo" => args.repo = PathBuf::from(value()?),
             flag if flag.starts_with("--") => return Err(bad(&format!("unknown flag {flag}"))),
             dir if run_dir.is_none() => run_dir = Some(PathBuf::from(dir)),
@@ -902,4 +935,3 @@ fn parse_materialize(
         any_tick,
     })
 }
-

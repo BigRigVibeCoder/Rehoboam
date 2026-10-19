@@ -41,4 +41,3 @@ pub const MUTANTS: &[&str] = &[
     #[cfg(feature = "mutant-materialize-no-journal")]
     "mutant-materialize-no-journal",
 ];
-

@@ -30,7 +30,9 @@ fn repo() -> PathBuf {
 }
 
 fn scratch(name: &str) -> PathBuf {
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("governor_tests").join(name);
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join("governor_tests")
+        .join(name);
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir
@@ -52,7 +54,13 @@ fn start_paused_is_refused_without_socket() {
 #[test]
 fn pace_invariance_on_solo_at_max_vs_10y() {
     let dir_max = scratch("solo_max");
-    let mut a_max = RunArgs::new(&repo(), 60, 1, RungKind::Yearly, &dir_max.join("run.ladder"));
+    let mut a_max = RunArgs::new(
+        &repo(),
+        60,
+        1,
+        RungKind::Yearly,
+        &dir_max.join("run.ladder"),
+    );
     "solo".clone_into(&mut a_max.world);
     a_max.journal = dir_max.join("journal.sqlite");
     a_max.run_dir = Some(dir_max.clone());
@@ -60,7 +68,13 @@ fn pace_invariance_on_solo_at_max_vs_10y() {
     assert!(out_max.failed.is_none());
 
     let dir_10y = scratch("solo_10y");
-    let mut a_10y = RunArgs::new(&repo(), 60, 1, RungKind::Yearly, &dir_10y.join("run.ladder"));
+    let mut a_10y = RunArgs::new(
+        &repo(),
+        60,
+        1,
+        RungKind::Yearly,
+        &dir_10y.join("run.ladder"),
+    );
     "solo".clone_into(&mut a_10y.world);
     a_10y.journal = dir_10y.join("journal.sqlite");
     a_10y.run_dir = Some(dir_10y.clone());
@@ -167,9 +181,14 @@ fn governor_pause_probe_and_step_invariants() {
     assert_eq!(rep_p2["result"]["changed"], false);
 
     // 3. Step while paused -> state: running, target set
-    let rx = submit_in_background(&gov, &conn, serde_json::json!(4), ControlCommand::Step {
-        until: StepUntil::Tick(43_200),
-    });
+    let rx = submit_in_background(
+        &gov,
+        &conn,
+        serde_json::json!(4),
+        ControlCommand::Step {
+            until: StepUntil::Tick(43_200),
+        },
+    );
     while gov.pending_count() == 0 {
         std::thread::yield_now();
     }

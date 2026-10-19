@@ -805,14 +805,11 @@ pub fn run_live(args: &RunArgs, live: Option<LiveHost>) -> Result<Outcome, Error
             clippy::disallowed_methods,
             reason = "tool plane: run nonce for control server and governor"
         )]
-        let nonce = live
-            .as_ref()
-            .and_then(|l| l.nonce)
-            .unwrap_or_else(|| {
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map_or(0, |d| u64::try_from(d.as_nanos()).unwrap_or(u64::MAX))
-            });
+        let nonce = live.as_ref().and_then(|l| l.nonce).unwrap_or_else(|| {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| u64::try_from(d.as_nanos()).unwrap_or(u64::MAX))
+        });
         let history = rh_protocol::control::History {
             engine_build: world.provenance.build.clone(),
             registry_version: world.provenance.registry_version.clone(),
