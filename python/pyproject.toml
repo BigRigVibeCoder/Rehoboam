@@ -77,6 +77,9 @@ extend-exclude = [
     "specs/systems/lint_odd.py",
     # Red-team prototypes: illustrative evidence for design proposals, not product code (docs/red_team/).
     "docs/red_team/prototypes",
+    # Red-team probe B09-01: a Python model of the M2 spec, evidence only. SPR-015 replaces its six traps
+    # with Rust tests against the engine (BCK-002 A-80); remove this entry when the probe is retired.
+    "tests/probes/probe_fertility_adversarial_traps.py",
 ]
 
 [tool.ruff.format]
