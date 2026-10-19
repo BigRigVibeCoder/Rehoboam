@@ -75,6 +75,8 @@ extend-exclude = [
     "specs/stream/compress_probe.py",
     "specs/stream/selftest_virtual_telemetry.py",
     "specs/systems/lint_odd.py",
+    "specs/validation/selftest_harness_v0.py",
+    "specs/validation/selftest_validation_harness.py",
     # Red-team prototypes: illustrative evidence for design proposals, not product code (docs/red_team/).
     "docs/red_team/prototypes",
     # Red-team probe B09-01: a Python model of the M2 spec, evidence only. SPR-015 replaces its six traps
@@ -129,6 +131,8 @@ module = [
     "compress_probe",
     "selftest_virtual_telemetry",
     "lint_odd",
+    "selftest_harness_v0",
+    "selftest_validation_harness",
     "prototype_1_tantrum_spiral",
     "prototype_2_story_sifter_motifs",
     "prototype_3_epistemic_ghost_king",
