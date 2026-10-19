@@ -159,6 +159,24 @@ pub fn parse_run(words: &[String], repo: &Path) -> Result<RunArgs, Error> {
             "--resume" => args.resume = Some(PathBuf::from(value)),
             "--run-dir" => args.run_dir = Some(PathBuf::from(value)),
             "--inputs" => args.inputs = Some(PathBuf::from(value)),
+            "--pace" => {
+                if !rh_protocol::control::BANDS.contains(&value.as_str()) {
+                    return Err(bad(&format!(
+                        "--pace {value}: must be one of {}",
+                        rh_protocol::control::BANDS.join(", ")
+                    )));
+                }
+                args.pace = Some(value.to_owned());
+            }
+            "--start" => match value.as_str() {
+                "paused" => args.start_paused = true,
+                "running" => args.start_paused = false,
+                other => {
+                    return Err(bad(&format!(
+                        "--start {other}: must be 'paused' or 'running'"
+                    )));
+                }
+            },
             "--test-pace-ms" => args.pace_ms = Some(number("--test-pace-ms")?),
             "--test-poison" => {
                 args.poison = Some(
@@ -792,11 +810,11 @@ pub fn materialize_cmd(words: &[String], repo: &Path) -> u8 {
             } else if args.hash_only {
                 println!("{:016x}", m.state_hash);
             } else {
-                if let Some(path) = &args.dump {
-                    if let Err(e) = std::fs::write(path, m.dump.render()) {
-                        eprintln!("materialize: {}: {e}", path.display());
-                        return TOOL;
-                    }
+                if let Some(path) = &args.dump
+                    && let Err(e) = std::fs::write(path, m.dump.render())
+                {
+                    eprintln!("materialize: {}: {e}", path.display());
+                    return TOOL;
                 }
                 println!(
                     "materialize: tick {} state_hash {:016x} from {}",

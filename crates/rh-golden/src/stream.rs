@@ -547,6 +547,12 @@ impl StreamHost {
         })
     }
 
+    /// Channel A's next seq.
+    #[must_use]
+    pub const fn next_seq(&self) -> u64 {
+        self.writer.next_seq()
+    }
+
     /// The per-instant callback: the life-course delta of the instant.
     pub fn after_instant(&mut self, tables: &WorldTables) {
         if self.failed.is_some() {

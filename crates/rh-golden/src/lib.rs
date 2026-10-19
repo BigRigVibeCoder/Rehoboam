@@ -23,6 +23,7 @@
 pub mod bisect;
 pub mod cli;
 pub mod dump;
+pub mod governor;
 pub mod ladder;
 pub mod leak;
 pub mod materialize;

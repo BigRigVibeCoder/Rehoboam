@@ -101,7 +101,8 @@ fn main() {
         let live = LiveHost {
             policy: Policy::YearEnd,
             clock: None,
-            on_edge: Box::new(move |edge, _| {
+            nonce: None,
+            on_edge: Box::new(move |edge, _, _| {
                 viewers(&edge, &s, &p);
                 Ok(())
             }),

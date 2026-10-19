@@ -200,13 +200,13 @@ pub fn materialize_with(
                     }
                 }
             }
-            if published.is_none() && src.ladder().is_file() {
-                if let Ok(text) = std::fs::read_to_string(src.ladder())
-                    && let Ok(ladder) = Ladder::parse(&text)
-                    && let Some(rung) = ladder.rungs.iter().find(|r| r.tick == t)
-                {
-                    published = Some(rung.hash);
-                }
+            if published.is_none()
+                && src.ladder().is_file()
+                && let Ok(text) = std::fs::read_to_string(src.ladder())
+                && let Ok(ladder) = Ladder::parse(&text)
+                && let Some(rung) = ladder.rungs.iter().find(|r| r.tick == t)
+            {
+                published = Some(rung.hash);
             }
             if published.is_none() && !any_tick {
                 return Err(Error(format!(
@@ -301,12 +301,12 @@ pub fn materialize_with(
     let dump = Dump::of(&engine.snapshot(), SimTime::from_minutes(target_tick));
     let table_roots = digest.tables.into_iter().map(|(k, v)| (k, v.root)).collect();
 
-    if let Some(expected) = reference_hash {
-        if state_hash != expected {
-            return Err(Error(format!(
-                "materialize: tick {target_tick} state_hash {state_hash:016x} != published hash {expected:016x}"
-            )));
-        }
+    if let Some(expected) = reference_hash
+        && state_hash != expected
+    {
+        return Err(Error(format!(
+            "materialize: tick {target_tick} state_hash {state_hash:016x} != published hash {expected:016x}"
+        )));
     }
 
     Ok(Materialized {
