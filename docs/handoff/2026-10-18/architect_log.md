@@ -388,3 +388,10 @@ EOF; df -h / | tail -1
 - 05:24Z AN-0 REVIEW AFTER SMALL FIXES 0/0/7/6 (oracle 607/0; mutants 28/35); rulings an0_review/RULINGS.md; fix agent next. SPR-029 plan edits pending (R7 port, R12 wording, P3 -P -s, F2 message).
 - 05:25Z SPR-017 DONE: PR #90 34a7f56 CI green core 7:21 golden 14:37 stream 5:17; local 609. RULED: fuzz control seeds 1-4, per-gate times printed; if golden >12:00 on next run move fuzz pair to stream (75%). Deviations 1-10 for VER-SPR-017. Code review pending.
 - 05:27Z SPR-026 tester before-readings on 762bd84: C1 solo 3000y monthly +7.9% (median), hamlet 6000y +12.5% (reviewer saw +44%, +81-120%; still >5% target); C2 rc 0, C3 exits after 30 s, C4 0755->0700, C9 hangs >100 s, C19 hangs 40 s no panic. Probes ready; waits for dev head.
+
+## 2026-10-18 evening (Antigravity session, Architect)
+- 19:30 Took the Architect role from HANDOFF.md and pm_inbox.md. `main` `01690f6d`.
+- 19:44 SPR-015 head moved to `cda5d16d` (T-04); CI red 3/3. Reproduced the two pytest failures in a worktree. T-01 was a copy, not a move.
+- 19:46 Corrected my first-pass records (`VER-SPR-015-INTERIM` 0.2.0, work order rev 1, HANDOFF, viewer briefing): they stated checks as done that were not run, and named a probe and dossier that are not on `main`. Rewritten from verified facts.
+- 19:48 Filed BCK-002 A-78..A-82. Wrote `pm_status_report.md`.
+- Open: Tester pass on SPR-015; rerun PR #111 stream job; SPR-027 branch not pushed; red-team branch has no PR.

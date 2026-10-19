@@ -9,7 +9,7 @@ tags: [backlog, project-management]
 related: [BCK-001, AGT-001, GOV-007]
 created: 2026-10-16
 updated: 2026-10-18
-version: 1.25.0
+version: 1.26.0
 ---
 
 > **BLUF:** The Architect's own work stream, run in parallel with development: operating-model upkeep, audit tooling, gate preparation, and documentation debt.
@@ -95,3 +95,8 @@ version: 1.25.0
 | A-75 | **Sealed `DraftRef` constructor** (SPR-014 review K8; `VER-SPR-014` §4). Seal `DraftRef::from_index` or reword `05.1` ("not a draw key; the index is engine bookkeeping") | With SPR-021a | Open |
 | A-76 | **Marriage input validation** (SPR-014 review K12; `VER-SPR-014` §4). Validate `Marry{a,a}`, a stale former spouse, and `death_cause = none` on admission | With SPR-015 N7 | Open |
 | A-77 | **Tester survivors and diagnostics left by SPR-014** (`VER-SPR-014-TEST` §4; `session_reports.md`). Surviving mutants M4, M5, M7 and S2; K4 pending test for event-keyed draw refusal; and clean up the "with a event" message wart | With Wave 5 / Wave 6 | Open |
+| A-78 | **Audit records behind the merges** (`docs/handoff/2026-10-18/pm_status_report.md` §6). SPR-038a (PR #104) merged with no `VER-SPR-038a` and no Tester record; SPR-020 (PR #84) has a `VER-SPR-020` whose evidence is the Architect's runs and no `VER-SPR-020-TEST`; the SPR-038 plan still reads `APPROVED`. Backfill `VER-SPR-038a` from the PR and `rulings_by_message.md`; commission an independent Tester pass (a different model from the developer's) on both sprints; do not mark either audited until it reports | Before SPR-018 starts | Open |
+| A-79 | **A spec promotion is a move** (`VER-SPR-015-INTERIM` §3, cause 2). SPR-015 T-01 copied M2 0.3.0 over the frozen file and left `next/M2.demography.odd.toml`, so `lint_odd --next` failed and two further edits (the delta's M2 section and verbs, the README) were missed. Add to `specs/systems/next/README.md` a promotion checklist (remove the next file, strip the delta section and verbs, update the README, regenerate the lock) and a gate or test that fails when a next file has the same `spec_version` as its frozen file | Before SPR-021a T-01 promotes M7 0.6.0 | Open |
+| A-80 | **Red-team probes outside the gates** (`VER-SPR-015-INTERIM` §5). `tests/probes/probe_fertility_adversarial_traps.py` and the Batch 09 dossier live on `arch/red-team-batch-04` (43 commits ahead of `main`, no PR). No gate runs a probe. Open the PR for the dossier; decide per probe whether it becomes a `check_all` gate with a planted-violation control, or stays evidence | Before SPR-015 audit | Open |
+| A-81 | **Possible flaky serve test** (`pm_status_report.md` §3). `rh-cli::serve probe_c_the_ladder_with_viewers_attached_is_the_ladder_without` failed with `ConnectionRefused` (`tests/support/mod.rs:173`) on PR #111, which changes no `crates/` file. Rerun once; if it fails again or on any other PR, find the startup race (the client connecting before the host listens) and wait on the socket's existence or a ready line, not a sleep | At PR #111's audit | Open |
+| A-82 | **CI is fail-fast, so a red part hides later red gates** (`VER-SPR-015-INTERIM` §3). Every developer reproduces locally with `bin/check_all.sh`, but `uv` is absent on this workstation, so the Architect's local runs use system Python and miss `duckdb`. Install `uv` and `python/.venv` on the Architect's machine (RUN-001 §4), or run audits on `adjutant` | Before the next audit | Open |
