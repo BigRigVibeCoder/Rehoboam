@@ -465,12 +465,14 @@ impl SimulatedControlHost {
         let tip = if instants == 0 {
             None
         } else {
-            Some(FIRST_TICK + (instants as i64 - 1) * INSTANT_MINUTES)
+            let inst = i64::try_from(instants).unwrap();
+            Some(FIRST_TICK + (inst - 1) * INSTANT_MINUTES)
         };
         let next_tick = if finished {
             None
         } else {
-            Some(FIRST_TICK + (instants as i64) * INSTANT_MINUTES)
+            let inst = i64::try_from(instants).unwrap();
+            Some(FIRST_TICK + inst * INSTANT_MINUTES)
         };
         let keyframes = instants / (2 * INSTANTS_PER_YEAR);
         let next_seq = if instants == 0 {
@@ -481,8 +483,8 @@ impl SimulatedControlHost {
         let (band, state, step_target, end) = if finished {
             ("max", "finished", None, Some("finished".to_owned()))
         } else if with_step {
-            let last_instant_tick =
-                FIRST_TICK + ((HORIZON_YEARS * INSTANTS_PER_YEAR - 1) as i64) * INSTANT_MINUTES;
+            let last_inst = i64::try_from(HORIZON_YEARS * INSTANTS_PER_YEAR - 1).unwrap();
+            let last_instant_tick = FIRST_TICK + last_inst * INSTANT_MINUTES;
             ("max", "running", Some(last_instant_tick), None)
         } else {
             ("max", "running", None, None)
@@ -566,7 +568,7 @@ impl control::ControlHost for SimulatedControlHost {
             control::ControlCommand::Pause => {
                 let changed = *self.state.borrow() == "running";
                 if changed {
-                    *self.state.borrow_mut() = "paused".to_owned();
+                    "paused".clone_into(&mut self.state.borrow_mut());
                     *self.step_target.borrow_mut() = None;
                 }
                 let mut res = self.pace();
@@ -579,7 +581,7 @@ impl control::ControlHost for SimulatedControlHost {
                 let changed =
                     *self.state.borrow() == "paused" || self.step_target.borrow().is_some();
                 if changed {
-                    *self.state.borrow_mut() = "running".to_owned();
+                    "running".clone_into(&mut self.state.borrow_mut());
                     *self.step_target.borrow_mut() = None;
                 }
                 let mut res = self.pace();
@@ -610,10 +612,10 @@ impl control::ControlHost for SimulatedControlHost {
                 let changed =
                     *self.step_target.borrow() != Some(target) || *self.state.borrow() != "running";
                 if changed {
-                    *self.state.borrow_mut() = "running".to_owned();
+                    "running".clone_into(&mut self.state.borrow_mut());
                     *self.step_target.borrow_mut() = Some(target);
                     if nxt > target {
-                        *self.state.borrow_mut() = "paused".to_owned();
+                        "paused".clone_into(&mut self.state.borrow_mut());
                         *self.step_target.borrow_mut() = None;
                     }
                 }
@@ -638,11 +640,8 @@ fn every_control_dispatch_line_is_answered_byte_for_byte() {
         let (name, request, want) = (parts[1], unhex(parts[2]), parts[3]);
         let finished = name.ends_with("_finished");
         let with_step = name.contains("_with_step") || name == "dispatch_step_replace";
-        let years = if name == "dispatch_step_genesis" || name == "dispatch_step_before_first" {
-            0
-        } else {
-            1
-        };
+        let years =
+            usize::from(name != "dispatch_step_genesis" && name != "dispatch_step_before_first");
         let host = SimulatedControlHost::new(years, finished, with_step);
         let mut conn = control::ControlConn::default();
         let reply = control::dispatch_control(&mut conn, &host, &request);

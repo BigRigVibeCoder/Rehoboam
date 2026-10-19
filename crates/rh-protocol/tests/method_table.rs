@@ -212,14 +212,14 @@ fn every_method_outside_control_table_is_refused_with_control_message_and_socket
         assert_eq!(reply["error"]["data"]["socket"], "control", "{method}");
         if let Some((_, detail)) = control::RESERVED.iter().find(|(name, _)| *name == method) {
             assert_eq!(reply["error"]["data"]["detail"], *detail, "{method}");
-        } else if let Some((ns, _)) = method.split_once('.') {
-            if control::RESERVED_NAMESPACES.contains(&ns) {
-                assert_eq!(
-                    reply["error"]["data"]["detail"],
-                    control::IF3_DETAIL,
-                    "{method}"
-                );
-            }
+        } else if let Some((ns, _)) = method.split_once('.')
+            && control::RESERVED_NAMESPACES.contains(&ns)
+        {
+            assert_eq!(
+                reply["error"]["data"]["detail"],
+                control::IF3_DETAIL,
+                "{method}"
+            );
         }
     }
 }
