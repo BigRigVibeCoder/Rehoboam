@@ -151,7 +151,7 @@ version: 0.3.1
   - **The synthetic ensemble:** 32 synthetic seeds with a planted q(15) of 0.45 and censoring at a horizon give PASS for V-SF-02; the `km-ignores-censoring` control (censored children counted as survivors) fails by name; 12 seeds of 300 births give INSUFFICIENT (the `minimum-ignored` control fails); a held-out band prints `SEALED` (the `heldout-printed` control fails the grep check); two runs give the same report bytes under different `PYTHONHASHSEED` values (the `bootstrap-unkeyed` control fails); **32 synthetic seeds with r = +0.114% and the spread of `expected_spread`** give PASS for V-SF-01's r and a reported population range, never a FAIL (the `range-gated` control, which gates the range per seed, fails on the same input in at least one of three fixed synthetic seed sets, which is G10's point made executable); a synthetic two-polity reign set with one law per polity gives V-SF-06b INSUFFICIENT with "law constant within every stratum" (F-25), and a set with a law change inside one polity gives an HR.
   - `lint_forcing.py` passes on the real specs and fails, by name, on four plants (an `[isolation]` forcing with no typed entry, a head word that differs, a rate read neither forced nor neutral, a `sine` series).
   - The review is recorded and its rulings applied before T-02 lands.
-- **Status:** [ ] not started
+- **Status:** [x] done (REV-SPR-028-harness 1.0.0 APPROVED; PR #124)
 
 #### T-02: `rehoboam_calib`: the statistics, the readers, the band evaluator and the report (G11, G14, G18; 1.5 days)
 - **Deliverable:**
