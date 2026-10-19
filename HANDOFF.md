@@ -8,7 +8,7 @@
 >   - `GOV-011`: ownership, independence, records and handoffs.
 >
 >   `CLAUDE.md` binds every agent whatever its vendor; `GEMINI.md` points here.
-> - **main:** `01690f6d` (the merge of PR #110, 2026-10-18); check it with `git ls-remote origin main`.
+> - **main:** `736e8e5b` (the merge of PR #112, 2026-10-18); check it with `git ls-remote origin main`.
 > - **Priority (the director's D62, binding):**
 >   - **P1:** the engine core (P1a "Bloodlines", gate G1a), which wins every contention for CI minutes, review time and merge slots.
 >   - **P2:** the voxel viewer lane.
@@ -67,10 +67,12 @@
 |:---|:---|:---|:---|
 | `sprint/SPR-015-births-f1`<br>@ `cda5d16` | **Exuberant** (`100.115.214.32`)<br>`AGT-002-CORE` | PR #107 (draft): T-01..T-04 committed. **CI red on all three parts** (core, golden, stream). T-01 incomplete (`next/M2` not removed). No Tester pass yet. | Work order revision 2: [`exuberant_stage_b_work_order.md`](file:///home/bdavidriggins/Documents/Rehoboam/docs/handoff/2026-10-18/exuberant_stage_b_work_order.md). Evidence: `VER-SPR-015-INTERIM.md` |
 | `sprint/SPR-016-mortality-f1`<br>@ `da6c74d` | Developer<br>`AGT-002-CORE` | PR #88 (draft): stage 1 only, Tester PASS on stage 1. **232 commits behind `main`.** | Held until SPR-015 merges; then merge `main` by gate name (expect conflicts in the M2 spec and `check_all`) |
-| `sprint/SPR-027-…` | `AGT-002-TOOLS` | **No remote branch exists.** `pm_inbox.md` reports a local T-03 in progress; unverified | Owner pushes it, or the Architect reassigns |
+| `sprint/SPR-027-stream-materializer` | Adjutant Agent 1 (`AGT-002-TOOLS`, VM `adjutant`) | Pushed to `origin` 2026-10-18 (T-02 done; T-03 `governor.rs` in progress). Do not reassign | Owner continues |
+| `sprint/SPR-021a-…` | Unassigned | No branch. Queued behind SPR-015, SPR-016 and SPR-019 stage A (D58 item 5) | Dispatch to `AGT-002-CORE` when the gate arrives |
 | `sprint/SPR-033a-viewer-core`<br>@ `17f6ca7` | `AGT-002-TOOLS` | PR #111 (draft): core, golden and viewer checks green; **stream red** on `serve::probe_c…` `ConnectionRefused` (suspected flaky test, A-81) | Rerun once; audit and merge |
-| `arch/pm-agenda-wave5-wave7` | Architect<br>`AGT-001` | PR #112 (draft): this record, the status report, BCK-002 A-78..A-82 | Merge when reviewed |
-| `arch/red-team-batch-04`<br>@ `63046c9` | Red Team | **43 commits ahead of `main`, no PR.** Holds Batch 09 dossier and probe `B09-01` | Open a PR (A-80) |
+| `arch/pm-records-20261018` | Architect<br>`AGT-001` | This refresh: probe-record corrections, rulings record, `.gitignore` | Merge when CI green |
+| `arch/red-team-b09` | Architect<br>`AGT-001` | PR #113 (draft): Batch 09 dossier and probe only | Merge when CI green |
+| `arch/red-team-batch-04`<br>@ `63046c9` | Red Team | **Do not open a PR from it.** Carries `tools/asset_ripper`, 7 copyrighted PDFs and a viewer HTML that ADR-0036 and the licence rules keep out | Red Team retires it |
 
 ---
 
@@ -81,7 +83,8 @@
 - **Work orders and briefings:**
   - [`exuberant_stage_b_work_order.md`](file:///home/bdavidriggins/Documents/Rehoboam/docs/handoff/2026-10-18/exuberant_stage_b_work_order.md) (revision 2).
   - [`viewer_lane_briefing.md`](file:///home/bdavidriggins/Documents/Rehoboam/docs/handoff/2026-10-18/viewer_lane_briefing.md): P2 lane (SPR-033a/b, 034, 035).
-- **Red-team files** (on `arch/red-team-batch-04` only; not on `main`): `docs/red_team/RT-2026-10-18-batch-09-dossier.md` (RT-039..041) and `tests/probes/probe_fertility_adversarial_traps.py` (B09-01, reported 6 of 6 by the Red Team; not re-run by the Architect).
+- **Red-team files** (PR #113): `docs/red_team/RT-2026-10-18-batch-09-dossier.md` (RT-039..041) and `tests/probes/probe_fertility_adversarial_traps.py` (B09-01). The probe passes 6 of 6 but tests a Python model of the M2 spec, not the engine; the six traps must become Rust tests against `rh-core` / `rh-ids` in SPR-015.
+- **Director rulings of 2026-10-18:** [`director_rulings_20261018.md`](file:///home/bdavidriggins/Documents/Rehoboam/docs/handoff/2026-10-18/director_rulings_20261018.md).
 - **Roadmap & Plans:**
   - `CODEX/05_PROJECT/PRJ-002_P1aPlan.md` (P1a "Bloodlines" plan through Gate G1a).
   - `CODEX/05_PROJECT/PRJ-003_BevyVoxelViewer.md` (P2 Viewer lane plan).
@@ -121,7 +124,7 @@ flowchart TD
 ```
 
 ### 1. Close Wave 5: SPR-015 & SPR-016
-1. **SPR-015 (M2 F1 Births, PR #107):** work order revision 2, in order:
+1. **SPR-015 (M2 F1 Births, PR #107):** work order revision 2, in order (also: implement the six Batch 09 traps as Rust tests against the engine):
    1. Finish T-01: remove `next/M2`, strip M2 from `next/registry_delta.toml`, update the README, regenerate the lock with its tool.
    2. Regenerate the registry fixture.
    3. Explain the +62% quiet-instant cost before any baseline moves.
@@ -143,6 +146,6 @@ flowchart TD
 2. **G1a performance bar:** `kingdom_10k`, 1,000 sim-years in at most 60 s. See the status report §1: expect a miss; SPR-030a's probe decides A-68.
 
 ### 5. P2 Viewer Lane Execution
-1. **SPR-033a (PR #111):** rerun the red stream job once (A-81), audit, merge.
+1. **SPR-033a (PR #111):** the red stream job was rerun once on 2026-10-18; if it fails again on `ConnectionRefused`, file under A-81. Then audit and merge.
 2. **SPR-033b:** Stage Bevy 0.20 application once 14-day lock age criterion matures (2026-10-22).
-3. **SPR-034 & SPR-035:** Stream ingestion and timeline scrubber hookup to SPR-027's materializer (no remote branch yet).
+3. **SPR-034 & SPR-035:** Stream ingestion and timeline scrubber hookup to SPR-027's materializer (branch now on `origin`).

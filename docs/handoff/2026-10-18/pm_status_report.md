@@ -66,7 +66,7 @@ Size (lines of Rust, `crates/`): `rh-core` 21.3k, `rh-manifest` 11.9k, `rh-golde
 | F1 | SPR-015 T-01 was a copy, not a move; `next/M2` remains | Pytest failure reproduced; `lint_odd --next` output | Work order rev 2, step 1 |
 | F2 | The first CI run's registry fixture failure is real, but it was only one of two Python failures | Reproduced | Work order rev 2, step 2 |
 | F3 | Quiet instant +62% (14,306 to 23,230) with no work in it | `V-PERF-04` report on `cda5d16d` | Explain before re-recording (work order step 3) |
-| F4 | Red-team probe `B09-01` and Batch 09 dossier are on `arch/red-team-batch-04` only, 43 commits ahead, no PR, not in any gate | `git cat-file`, `grep` of `check_all.sh` | A-80: open a PR for the dossier; decide whether the probe becomes a gate |
+| F4 | Red-team probe `B09-01` and Batch 09 dossier are on `arch/red-team-batch-04` only, 43 commits ahead, no PR, not in any gate | `git cat-file`, `grep` of `check_all.sh` | A-80: PR #113 brings the dossier and probe. Re-run: 6/6 pass, but the probe tests a Python spec model, not the engine (blake2b not SplitMix64; Trap 5 is 10,000 births, no collision). The six traps must become Rust tests against `rh-core` / `rh-ids` (Director ruling) |
 | F5 | The Stage A checkpoint was skipped: T-04 pushed within the hour | `git log` times | Recorded in the work order |
 | F6 | SPR-027 and SPR-021a have no remote branch | `git ls-remote` | Ask the owners to push, or reassign |
 | F7 | SPR-016 is 232 commits behind `main` | `git rev-list` | Merge `main` after SPR-015 |
