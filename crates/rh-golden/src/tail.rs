@@ -299,6 +299,10 @@ impl Filters {
     }
 
     /// Fast prefix split for live canonical lines (W36: split frozen prefix before full parse).
+    #[allow(
+        clippy::too_many_lines,
+        reason = "fast token prefix split over all record types in one place (W36)"
+    )]
     #[must_use]
     pub fn matches_live_line(&self, line: &str) -> bool {
         let mut tokens = line.split(' ');
