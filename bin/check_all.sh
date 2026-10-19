@@ -425,8 +425,8 @@ odd_next_control() {
       grep -q "planted_first" "$dir/M2.demography.odd.toml" || { echo "control not planted: no [[rng]] found"; return 1; }
       "$PY" -I specs/systems/lint_odd.py --next "$dir" --overlay specs/systems/next/registry_delta.toml ;;
     bound)
-      sed 's/tfr = \[1.2, 7.5\]/tfr = [1.2, 9.5]/' specs/systems/next/registry_delta.toml > "$dir/registry_delta.toml" || return 1
-      grep -q "9.5" "$dir/registry_delta.toml" || { echo "control not planted: tfr bounds not found"; return 1; }
+      sed 's/murder_hazard_base = \[0.001, 0.03\]/murder_hazard_base = [0.001, 0.05]/' specs/systems/next/registry_delta.toml > "$dir/registry_delta.toml" || return 1
+      grep -q "0.05" "$dir/registry_delta.toml" || { echo "control not planted: murder_hazard_base bounds not found"; return 1; }
       "$PY" -I specs/systems/lint_odd.py --next specs/systems/next --overlay "$dir/registry_delta.toml" ;;
     lock)
       # REV-SPR-015 round 3 MIN-1: the committed lock pins every amendment's path and text digest; one digest changed
@@ -1453,10 +1453,10 @@ run "lint_odd observes positive control: a kind observed twice must FAIL (EVO-00
 run "lint_odd observes positive control: a system observing its own kind must FAIL (EVO-002; T-00a MIN-8)" "fail:[[observes]] X_FIXTURE_FORMED: a system does not observe its own kind" odd_observes_control own &&
 run "lint_odd observes positive control: an observer bound only before its emitter's phase must FAIL (EVO-002; T-00a MIN-8)" "fail:[[observes]] DEATH: M3.agriculture binds no phase at or after one M2.demography binds" odd_observes_control phase &&
 run "lint_odd observes positive control: an entry that is not a table must FAIL (EVO-002; T-00a MIN-8)" "fail:an [[observes]] entry must be a table" odd_observes_control table &&
-run "System specs, next version: the M2 F1 draft supersedes the frozen rung-0 slice and preserves it (lint_odd --next; SPR-015)" "pass:self-check (next of M2.demography): 46 planted changes rejected (3 of them by the amendments lock), 46 amendments recorded and locked, the clean next version kept" "$PY" -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml &&
+run "System specs, next version: the M2 F1 draft supersedes the frozen rung-0 slice and preserves it (lint_odd --next; SPR-015)" "pass:self-check (next of M7.dynasty): 42 planted changes rejected (2 of them by the amendments lock), 34 amendments recorded and locked, the clean next version kept" "$PY" -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml &&
 run "lint_odd next positive control: a next version that changes a frozen algorithm step must FAIL (SPR-015)" "fail:frozen [algorithm.mortality_rung0] changed" odd_next_control algorithm &&
 run "lint_odd next positive control: a new RNG purpose before a frozen one must FAIL (SPR-015)" "fail:frozen RNG purpose death_time must stay at position 0" odd_next_control rng &&
-run "lint_odd next positive control: a Registry overlay that moves a frozen parameter bound must FAIL (SPR-015)" "fail:replacement changes or drops parameter tfr bounds" odd_next_control bound &&
+run "lint_odd next positive control: a Registry overlay that moves a frozen parameter bound must FAIL (SPR-015)" "fail:replacement changes or drops parameter murder_hazard_base bounds" odd_next_control bound &&
 run "lint_odd next positive control: an amendment whose text changed since the committed lock must FAIL (SPR-015)" "fail:changed its text since amendments.lock.toml" odd_next_control lock &&
 run "lint_odd next positive control: a frozen submodel summary changed without a record must FAIL (deny by default; PR #79 review R3)" "fail:frozen submodels.regency.summary changed without an [[amends]] record" odd_next_control submodel &&
 run "lint_odd next positive control: a frozen command why changed without a record must FAIL (R3)" "fail:frozen commands.ScheduleDeath.why changed without an [[amends]] record" odd_next_control command &&

@@ -188,7 +188,7 @@ fn living(v: &SystemView<'_>, who: PersonId) -> Result<bool, SimError> {
 
 impl SystemModel for Sender {
     type Index = ();
-    
+
     fn descriptor(&self) -> SystemDescriptor {
         SystemDescriptor {
             id: self.id,
@@ -384,7 +384,7 @@ fn engine_with(
         demography: Some(DemographyParams {
             e0: Q16_16::from_int(e0),
             brass_beta: Q16_16::ONE,
-            tfr: Q16_16::from_bits(321126), // 4.9 in Q16_16
+            tfr: Q16_16::from_bits(321_126), // 4.9 in Q16_16
             elite_fertility_mult: Q16_16::ONE,
         }),
         founders: (0..founders)
@@ -394,6 +394,7 @@ fn engine_with(
                 age_years: Some(age),
             })
             .collect(),
+        households: Vec::new(),
     };
     let table = specs();
     let mut tables = rh_worldgen::genesis(&spec, &table).unwrap();

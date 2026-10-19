@@ -28,7 +28,15 @@ fn spec_path() -> PathBuf {
 
 /// Every drain-only binding of M2's code must be a spec entry whose only step is the drain.
 fn check(spec: &SystemSpec) -> Result<usize, String> {
-    let m2 = Demography::new(Q16_16::from_int(30), None, Q16_16::ONE, Q16_16::from_int(4), Q16_16::ONE, CALENDAR).unwrap();
+    let m2 = Demography::new(
+        Q16_16::from_int(30),
+        None,
+        Q16_16::ONE,
+        Q16_16::from_int(4),
+        Q16_16::ONE,
+        CALENDAR,
+    )
+    .unwrap();
     let declared = m2.access().drain_only;
     for b in &declared {
         let (pulse, phase) = (b.pulse.name(), b.phase.name());
@@ -59,9 +67,10 @@ fn m2s_drain_only_binding_has_the_drain_as_its_only_step() {
     let text = std::fs::read_to_string(&path).unwrap();
     let spec = SystemSpec::from_toml(&path, &text).unwrap();
     let n = check(&spec).unwrap_or_else(|e| panic!("{e}"));
-    assert_eq!(n, 0, "M2 F1 no longer declares Day/Vital drain-only: birth/partnering timers fire there");
-    // F1: no drain-only binding, so the planted second step is irrelevant
-    println!(
-        "drain-only: M2's Day/Vital entry is no longer drain-only in F1"
+    assert_eq!(
+        n, 0,
+        "M2 F1 no longer declares Day/Vital drain-only: birth/partnering timers fire there"
     );
+    // F1: no drain-only binding, so the planted second step is irrelevant
+    println!("drain-only: M2's Day/Vital entry is no longer drain-only in F1");
 }

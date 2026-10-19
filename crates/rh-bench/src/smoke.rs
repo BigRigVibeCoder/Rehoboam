@@ -40,7 +40,7 @@ pub struct Allocating(pub Box<dyn SystemModel<Index = ()>>);
 
 impl SystemModel for Allocating {
     type Index = ();
-    
+
     fn descriptor(&self) -> SystemDescriptor {
         self.0.descriptor()
     }

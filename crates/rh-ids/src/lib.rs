@@ -22,7 +22,8 @@ pub mod salt;
 pub use entity::{EntityKind, EntityRef};
 pub use hash::{BranchSalt, PurposeId, RngKey, StreamKey, SystemKey, h};
 pub use ids::{
-    EntityKey, EventId, HouseholdId, MatchId, PersonId, PlaceId, RegionId, SystemId, TimelineId, WorldKey,
+    EntityKey, EventId, HouseholdId, MatchId, PersonId, PlaceId, RegionId, SystemId, TimelineId,
+    WorldKey,
 };
 pub use person::{IdError, PersonIdTable};
 pub use rng::{LightStream, Purpose, PurposeRegistry, RngStream};

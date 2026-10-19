@@ -115,7 +115,7 @@ impl TestSystem {
 
 impl SystemModel for TestSystem {
     type Index = ();
-    
+
     fn descriptor(&self) -> SystemDescriptor {
         SystemDescriptor {
             id: self.id,

@@ -58,8 +58,8 @@ fn every_m2_accessor_matches_the_spec() {
     // Stage A (SPR-015 T-03): the accessors are a subset of the spec's [[owns]] in order;
     // household/marriage/f1-person accessors arrive in Stage B.
     let mut ri = 0;
-    for oi in 0..owned.len() {
-        if ri < read.len() && owned[oi] == read[ri] {
+    for &o in &owned {
+        if ri < read.len() && o == read[ri] {
             ri += 1;
         }
     }

@@ -23,7 +23,9 @@ use std::path::Path;
 use rh_core::fixed::Q16_16;
 use rh_core::register::system_id;
 use rh_core::time::{Calendar, DaysPerYear, SeasonsPerYear};
-use rh_registry::{DemographyParams, Founder, FounderRole, NamedSystem, Sex, WorldSpec};
+use rh_registry::{
+    DemographyParams, Founder, FounderRole, HouseholdSpec, NamedSystem, Sex, WorldSpec,
+};
 
 use crate::exact::{Decimal, DecimalError};
 use crate::manifest::{Authored, Manifest, Outcome, People, Verdict, validate_file};
@@ -125,7 +127,7 @@ pub fn compile(
     } else {
         None
     };
-    let founders = founders(manifest, &mut errors);
+    let (founders, households) = founders(manifest, &mut errors);
     if errors.0.is_empty() {
         Ok(WorldSpec {
             seed,
@@ -134,6 +136,7 @@ pub fn compile(
             systems,
             demography,
             founders,
+            households,
         })
     } else {
         Err(CompileErrors(errors.0))
@@ -329,20 +332,16 @@ fn outside_bounds(bounds: Option<&ExactBounds>, value: &Authored) -> Option<Stri
     }
 }
 
-fn founders(manifest: &Manifest, errors: &mut Errors) -> Vec<Founder> {
+fn cast_founders(manifest: &Manifest, errors: &mut Errors) -> Vec<Founder> {
     let mut out = Vec::new();
     for (i, member) in manifest.cast.iter().enumerate() {
-        let sex = match member.sex.as_str() {
-            "female" => Some(Sex::Female),
-            "male" => Some(Sex::Male),
-            other => {
-                errors.push(
-                    format!("cast[{i}].sex"),
-                    format!("{other} is not male or female"),
-                );
-                None
-            }
-        };
+        let sex = sex_of(&member.sex).or_else(|| {
+            errors.push(
+                format!("cast[{i}].sex"),
+                format!("{} is not male or female", member.sex),
+            );
+            None
+        });
         let age = u8::try_from(member.age_years).ok().filter(|&a| a <= 120);
         if age.is_none() {
             errors.push(format!("cast[{i}].age_years"), "outside [0, 120]");
@@ -353,6 +352,15 @@ fn founders(manifest: &Manifest, errors: &mut Errors) -> Vec<Founder> {
             age_years: age,
         });
     }
+    out
+}
+
+fn household_founders(
+    manifest: &Manifest,
+    out: &mut Vec<Founder>,
+    errors: &mut Errors,
+) -> Vec<HouseholdSpec> {
+    let mut households = Vec::new();
     for (i, household) in manifest.households.iter().enumerate() {
         let count = |n: i64, what: &str, errors: &mut Errors| {
             usize::try_from(n).unwrap_or_else(|_| {
@@ -360,9 +368,31 @@ fn founders(manifest: &Manifest, errors: &mut Errors) -> Vec<Founder> {
                 0
             })
         };
+        // The head and the one other adult of the other sex are the household's married couple
+        // (SPR-015 H2); validation (`cast_and_agents`) guarantees the head is a cast member.
+        let Some(head) = manifest.cast.iter().position(|c| c.id == household.head) else {
+            errors.push(
+                format!("households[{i}].head"),
+                format!("'{}' is not a cast member", household.head),
+            );
+            continue;
+        };
+        let head_sex = sex_of(&manifest.cast[head].sex);
+        let spouse = manifest
+            .cast
+            .iter()
+            .enumerate()
+            .find(|(j, c)| {
+                *j != head
+                    && c.household.as_deref() == Some(household.id.as_str())
+                    && opposite_sex(head_sex, sex_of(&c.sex))
+            })
+            .map(|(j, _)| j);
+
         let sons = count(household.children.sons, "children.sons", errors);
         let daughters = count(household.children.daughters, "children.daughters", errors);
         let servants = count(household.servants, "servants", errors);
+        let children_start = out.len();
         let child = |sex| Founder {
             role: FounderRole::Child,
             sex: Some(sex),
@@ -370,13 +400,26 @@ fn founders(manifest: &Manifest, errors: &mut Errors) -> Vec<Founder> {
         };
         out.extend(std::iter::repeat_n(child(Sex::Male), sons));
         out.extend(std::iter::repeat_n(child(Sex::Female), daughters));
+        let servants_start = out.len();
         let servant = Founder {
             role: FounderRole::Servant,
             sex: None,
             age_years: None,
         };
         out.extend(std::iter::repeat_n(servant, servants));
+        households.push(HouseholdSpec {
+            head,
+            spouse,
+            children: children_start..servants_start,
+            servants: servants_start..out.len(),
+        });
     }
+    households
+}
+
+fn founders(manifest: &Manifest, errors: &mut Errors) -> (Vec<Founder>, Vec<HouseholdSpec>) {
+    let mut out = cast_founders(manifest, errors);
+    let households = household_founders(manifest, &mut out, errors);
     let population: i64 = manifest
         .peoples
         .iter()
@@ -403,5 +446,22 @@ fn founders(manifest: &Manifest, errors: &mut Errors) -> Vec<Founder> {
             ),
         ),
     }
-    out
+    (out, households)
+}
+
+/// `Some(sex)` for the manifest's `"male"`/`"female"`, else `None`.
+fn sex_of(text: &str) -> Option<Sex> {
+    match text {
+        "female" => Some(Sex::Female),
+        "male" => Some(Sex::Male),
+        _ => None,
+    }
+}
+
+/// Whether `a` and `b` are a female-male pair.
+fn opposite_sex(a: Option<Sex>, b: Option<Sex>) -> bool {
+    matches!(
+        (a, b),
+        (Some(Sex::Male), Some(Sex::Female)) | (Some(Sex::Female), Some(Sex::Male))
+    )
 }

@@ -24,7 +24,7 @@ pub const TAG_HOUSEHOLD: u64 = tag("rehoboam/rh-ids/household/v1");
 /// Domain of household collision rehashes.
 pub const TAG_HOUSEHOLD_REHASH: u64 = tag("rehoboam/rh-ids/household/rehash/v1");
 
-/// Rehash attempts before giving up (same bound as PersonId).
+/// Rehash attempts before giving up (same bound as `PersonId`).
 pub const MAX_REHASH: u64 = 64;
 
 /// The base identifier of a household formed at `formed_tick` by `head`.

@@ -1240,8 +1240,15 @@ pub trait SystemModel: Send + Sync {
     /// SPR-015 adds this hook (the Architect's W4 ruling).
     ///
     /// The default implementation panics. Systems that want to use indexing must override this.
+    #[allow(
+        clippy::panic,
+        reason = "INVARIANT: SystemModel::build_index default stub panics if indexing is used without an implementation"
+    )]
     fn build_index(&self, _tables: &WorldTables) -> Self::Index {
-        panic!("System {} does not implement build_index but tries to use indexing", std::any::type_name::<Self>())
+        panic!(
+            "System {} does not implement build_index but tries to use indexing",
+            std::any::type_name::<Self>()
+        )
     }
 
     /// Updates the system's index from exactly the columns the step wrote (W4). The engine calls
@@ -1257,8 +1264,15 @@ pub trait SystemModel: Send + Sync {
     /// SPR-015 adds this hook (the Architect's W4 ruling).
     ///
     /// The default implementation panics. Systems that want to use indexing must override this.
+    #[allow(
+        clippy::panic,
+        reason = "INVARIANT: SystemModel::post_merge default stub panics if indexing is used without an implementation"
+    )]
     fn post_merge(&self, _index: &mut Self::Index, _writes: BTreeMap<&str, &[i64]>) {
-        panic!("System {} does not implement post_merge but tries to use indexing", std::any::type_name::<Self>())
+        panic!(
+            "System {} does not implement post_merge but tries to use indexing",
+            std::any::type_name::<Self>()
+        )
     }
 
     /// The spec header.

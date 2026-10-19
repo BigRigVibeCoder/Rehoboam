@@ -171,7 +171,7 @@ fn entry_value(c: &str, id: i64, birth: i64) -> i64 {
 
 impl SystemModel for Ledger {
     type Index = ();
-    
+
     fn descriptor(&self) -> SystemDescriptor {
         SystemDescriptor {
             id: SYSTEM,

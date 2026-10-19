@@ -322,7 +322,7 @@ impl Stub {
 
 impl SystemModel for Stub {
     type Index = ();
-    
+
     fn descriptor(&self) -> SystemDescriptor {
         SystemDescriptor {
             id: self.id,

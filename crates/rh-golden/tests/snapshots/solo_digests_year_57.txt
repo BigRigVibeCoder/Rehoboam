@@ -1,22 +1,22 @@
-    690 0056-12-01 00:00 DIGEST living 1 births 0 deaths 0 state 70f6507b2e147ca0
-    691 0057-01-01 00:00 DIGEST living 1 births 0 deaths 0 state ccb5e23a879a6530
-    692 0057-02-01 00:00 DIGEST living 1 births 0 deaths 0 state 57a6c4eb971cb92c
-    693 0057-03-01 00:00 DIGEST living 1 births 0 deaths 0 state dc68932933f722db
-    694 0057-04-01 00:00 DIGEST living 1 births 0 deaths 0 state cacc385ec7e10d5e
-    695 0057-05-01 00:00 DIGEST living 1 births 0 deaths 0 state 5db757205a75390a
-    696 0057-06-01 00:00 DIGEST living 1 births 0 deaths 0 state 893ae9d8c672dca8
-    697 0057-07-01 00:00 DIGEST living 1 births 0 deaths 0 state 0119c3852407b6be
-    698 0057-08-01 00:00 DIGEST living 1 births 0 deaths 0 state 8167cd18d56e6760
-    699 0057-09-01 00:00 DIGEST living 1 births 0 deaths 0 state b883d5d557f341a0
-    700 0057-10-01 00:00 DIGEST living 1 births 0 deaths 0 state adafdef3df3cc1be
+    690 0056-12-01 00:00 DIGEST living 1 births 0 deaths 0 state 481266819e95f7c3
+    691 0057-01-01 00:00 DIGEST living 1 births 0 deaths 0 state cd82eaf17bdff2d9
+    692 0057-02-01 00:00 DIGEST living 1 births 0 deaths 0 state d641603e7a8f09be
+    693 0057-03-01 00:00 DIGEST living 1 births 0 deaths 0 state e3d1cdd4cfe8e6cf
+    694 0057-04-01 00:00 DIGEST living 1 births 0 deaths 0 state 5e25b361a10b683b
+    695 0057-05-01 00:00 DIGEST living 1 births 0 deaths 0 state baeb5bdf2d78dd6c
+    696 0057-06-01 00:00 DIGEST living 1 births 0 deaths 0 state dbd7f1c072d5b497
+    697 0057-07-01 00:00 DIGEST living 1 births 0 deaths 0 state e00606dd92c28372
+    698 0057-08-01 00:00 DIGEST living 1 births 0 deaths 0 state c864386895aa55a6
+    699 0057-09-01 00:00 DIGEST living 1 births 0 deaths 0 state 38ea8b4d706ad75d
+    700 0057-10-01 00:00 DIGEST living 1 births 0 deaths 0 state 3f0960c974e15ddc
     701 0057-10-27 00:00 DEATH target Ada (natural) [event #0]
     702 0057-10-27 00:00 EXTINCTION [event #1] <- #0
     703 0057-10-27 00:00 LEAVES Ada: death (natural) <- #0
-    704 0057-11-01 00:00 DIGEST living 0 births 0 deaths 1 state cf884c38c1dfc867
-    705 0057-12-01 00:00 DIGEST living 0 births 0 deaths 0 state 9dcc3dca3e7c6b55
-    706 0058-01-01 00:00 DIGEST living 0 births 0 deaths 0 state 0a9a78c73770897f
-    707 0058-02-01 00:00 DIGEST living 0 births 0 deaths 0 state d6ab92de7f468ee1
-    708 0058-03-01 00:00 DIGEST living 0 births 0 deaths 0 state 88458f5a783ed6c5
-    709 0058-04-01 00:00 DIGEST living 0 births 0 deaths 0 state ae41a7bfdf8dcf21
-    710 0058-05-01 00:00 DIGEST living 0 births 0 deaths 0 state 2ba42df3cde4832c
+    704 0057-11-01 00:00 DIGEST living 0 births 0 deaths 1 state 7346bd48b8919bf9
+    705 0057-12-01 00:00 DIGEST living 0 births 0 deaths 0 state 4428320061f11383
+    706 0058-01-01 00:00 DIGEST living 0 births 0 deaths 0 state 52ef4917df8f5860
+    707 0058-02-01 00:00 DIGEST living 0 births 0 deaths 0 state e87b489d5350f552
+    708 0058-03-01 00:00 DIGEST living 0 births 0 deaths 0 state e7a9a9d5b1e979f3
+    709 0058-04-01 00:00 DIGEST living 0 births 0 deaths 0 state 606cae040e2b4831
+    710 0058-05-01 00:00 DIGEST living 0 births 0 deaths 0 state 3fa0ea37d1ba800e
 STATUS sealed through y000199 (tick 103679999, seq 2424) | cursor 711 | lag 1714 records

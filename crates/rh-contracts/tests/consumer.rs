@@ -91,7 +91,7 @@ struct Reader;
 
 impl SystemModel for Reader {
     type Index = ();
-    
+
     fn descriptor(&self) -> SystemDescriptor {
         SystemDescriptor {
             id: "Z1.reader",
@@ -162,7 +162,11 @@ impl SystemModel for Reader {
 }
 
 /// The real specs plus a reader's, registered with the real M2 and the reader.
-fn registered(reader: Box<dyn SystemModel<Index = ()>>, id: &str, spec: &str) -> rh_core::register::Registered {
+fn registered(
+    reader: Box<dyn SystemModel<Index = ()>>,
+    id: &str,
+    spec: &str,
+) -> rh_core::register::Registered {
     let mut files: Vec<(PathBuf, String)> = std::fs::read_dir(repo().join("specs/systems"))
         .unwrap()
         .map(|e| e.unwrap().path())
@@ -179,8 +183,20 @@ fn registered(reader: Box<dyn SystemModel<Index = ()>>, id: &str, spec: &str) ->
     let mut ids = parse_registry_system_ids("registry_v0.toml", &registry).unwrap();
     ids.insert(id.to_owned());
     let table = Ownership::build(&specs, &ids).spec_table();
-    let m2 = Demography::new(Q16_16::from_int(30), None, Q16_16::ONE, Q16_16::from_int(4), Q16_16::ONE, CALENDAR).unwrap();
-    register(vec![Box::new(m2) as Box<dyn SystemModel<Index = ()>>, reader], &table).unwrap_or_else(|e| panic!("{e}"))
+    let m2 = Demography::new(
+        Q16_16::from_int(30),
+        None,
+        Q16_16::ONE,
+        Q16_16::from_int(4),
+        Q16_16::ONE,
+        CALENDAR,
+    )
+    .unwrap();
+    register(
+        vec![Box::new(m2) as Box<dyn SystemModel<Index = ()>>, reader],
+        &table,
+    )
+    .unwrap_or_else(|e| panic!("{e}"))
 }
 
 #[test]
@@ -260,7 +276,7 @@ struct AllReader {
 
 impl SystemModel for AllReader {
     type Index = ();
-    
+
     fn descriptor(&self) -> SystemDescriptor {
         SystemDescriptor {
             id: "Z2.all",

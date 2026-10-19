@@ -33,7 +33,7 @@ pub const COLUMN: &str = "market.ticks";
 
 impl SystemModel for Leaky {
     type Index = ();
-    
+
     fn descriptor(&self) -> SystemDescriptor {
         self.0.descriptor()
     }

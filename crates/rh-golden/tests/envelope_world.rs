@@ -91,7 +91,7 @@ fn descriptor(id: &'static str) -> SystemDescriptor {
 
 impl SystemModel for Stage {
     type Index = ();
-    
+
     fn descriptor(&self) -> SystemDescriptor {
         descriptor(STAGE)
     }
@@ -164,7 +164,7 @@ impl SystemModel for Stage {
 
 impl SystemModel for Crowd {
     type Index = ();
-    
+
     fn descriptor(&self) -> SystemDescriptor {
         descriptor(CROWD)
     }
