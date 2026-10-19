@@ -323,7 +323,8 @@ fn the_display_form_matches_its_snapshots() {
     assert!(digest_text.contains("DIGEST living"));
     snapshot("hamlet_digests", &digest_text);
 
-    println!("T-10 / SPR-027 T-04: the display form matches its 7 snapshots");
+    println!("T-10: the display form matches its 4 snapshots");
+    println!("SPR-027 T-04: the display form matches its 7 snapshots");
 }
 
 #[test]
