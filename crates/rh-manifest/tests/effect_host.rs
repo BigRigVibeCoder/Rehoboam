@@ -114,6 +114,8 @@ impl TestSystem {
 }
 
 impl SystemModel for TestSystem {
+    type Index = ();
+
     fn descriptor(&self) -> SystemDescriptor {
         SystemDescriptor {
             id: self.id,
@@ -228,7 +230,7 @@ fn engine(systems: Vec<TestSystem>, tables: WorldTables) -> Engine {
     let registered = register(
         systems
             .into_iter()
-            .map(|s| Box::new(s) as Box<dyn SystemModel>)
+            .map(|s| Box::new(s) as Box<dyn SystemModel<Index = ()>>)
             .collect(),
         &specs,
     )

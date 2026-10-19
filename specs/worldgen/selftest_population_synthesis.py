@@ -126,7 +126,7 @@ NEW_PURPOSES = (
 # M2 F1 constants: read from specs/systems/next/M2.demography.odd.toml ([algorithm.fertility_f1] and
 # [algorithm.partnering_f1] `constants`) through the births reference: a changed constant moves the
 # goldens here. The schedule is [algorithm.mortality_f1]'s, through the mortality reference (knots).
-M2_SPEC = m2f1.load_spec(m2f1.NEXT_SPEC)
+M2_SPEC = m2f1.load_spec(m2f1.NEXT_SPEC if m2f1.NEXT_SPEC.exists() else m2f1.MAIN_SPEC)
 STANDARDS = m2f1.Standards(M2_SPEC)
 NATURAL = tuple(int(n) for n in STANDARDS.natural)  # Coale-Trussell n(a), thousandths
 GESTATION = int(STANDARDS.gestation)

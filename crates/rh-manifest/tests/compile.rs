@@ -14,7 +14,7 @@ use rh_core::register::system_id;
 use rh_core::time::{Calendar, DaysPerYear, SeasonsPerYear};
 use rh_manifest::manifest::{Outcome, Verdict, validate_str};
 use rh_manifest::{CompileErrors, Registry, compile, compile_file};
-use rh_registry::{FounderRole, Sex, WorldSpec};
+use rh_registry::{FounderRole, HouseholdSpec, Sex, WorldSpec};
 
 const BUILT: [&str; 1] = ["M2.demography"];
 
@@ -108,7 +108,68 @@ fn uz_job_household_and_hamlet_compile_with_their_founders_in_genesis_order() {
     );
     let hamlet = example("hamlet").unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(roles(&hamlet), roles(&uz));
-    assert_eq!(hamlet.demography, uz.demography);
+    assert_eq!(
+        hamlet.demography.map(|d| (d.e0, d.brass_beta)),
+        uz.demography.map(|d| (d.e0, d.brass_beta))
+    );
+    // uz_job authors tfr 6.0; hamlet takes the Registry default 4.9 (SPR-015 F1).
+    assert_eq!(
+        uz.demography.map(|d| d.tfr),
+        Some(Q16_16::from_bits(393_216))
+    );
+    assert_eq!(
+        hamlet.demography.map(|d| d.tfr),
+        Some(Q16_16::from_bits(321_126))
+    );
+}
+
+#[test]
+fn manifest_households_resolve_to_founder_indices() {
+    let household = example("household").unwrap_or_else(|e| panic!("{e}"));
+    // Oswin (head) and Maren (spouse) are cast members 0 and 1; the three children follow, then
+    // Wulf alone.
+    assert_eq!(
+        household.households,
+        [
+            HouseholdSpec {
+                head: 0,
+                spouse: Some(1),
+                children: 3..6,
+                servants: 6..6,
+            },
+            HouseholdSpec {
+                head: 2,
+                spouse: None,
+                children: 6..6,
+                servants: 6..6,
+            },
+        ]
+    );
+
+    let hamlet = example("hamlet").unwrap_or_else(|e| panic!("{e}"));
+    // Job (head) and his wife (spouse) are cast members 0 and 1; the ten children are 6..16 and
+    // the thirty servants 16..46. The other cast members and the fourteen commoners name no
+    // household, so they get one-person households in `rh-worldgen`, not here.
+    assert_eq!(
+        hamlet.households,
+        [HouseholdSpec {
+            head: 0,
+            spouse: Some(1),
+            children: 6..16,
+            servants: 16..46,
+        }]
+    );
+
+    let solo = example("solo").unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        solo.households,
+        [HouseholdSpec {
+            head: 0,
+            spouse: None,
+            children: 1..1,
+            servants: 1..1,
+        }]
+    );
 }
 
 #[test]
@@ -187,7 +248,7 @@ fn registry_with(m2: &str) -> Registry {
 #[test]
 fn a_value_that_does_not_fit_q16_16_is_refused_by_name() {
     let reg = registry_with(
-        "fidelity_levels = [\"F0\", \"F1\", \"F2\"]\nparams = { e0 = [0.0, 1.0e9], brass_beta = [0.6, 1.65] }\ndefaults = { brass_beta = 1.0 }",
+        "fidelity_levels = [\"F0\", \"F1\", \"F2\"]\nparams = { e0 = [0.0, 1.0e9], brass_beta = [0.6, 1.65], tfr = [1.2, 7.5], elite_fertility_mult = [1.0, 1.6] }\ndefaults = { brass_beta = 1.0, tfr = 4.9, elite_fertility_mult = 1.0 }",
     );
     let manifest = solo_text().replace("systems: {}", "systems:\n  M2.demography: {e0: 40000.0}");
     let errors = refused(&manifest, &reg);
@@ -202,7 +263,7 @@ fn a_value_that_does_not_fit_q16_16_is_refused_by_name() {
 #[test]
 fn a_parameter_with_no_value_and_no_default_is_refused_by_name() {
     let reg = registry_with(
-        "fidelity_levels = [\"F0\", \"F1\", \"F2\"]\nparams = { e0 = [20.0, 85.0], brass_beta = [0.6, 1.65] }\ndefaults = { brass_beta = 1.0 }",
+        "fidelity_levels = [\"F0\", \"F1\", \"F2\"]\nparams = { e0 = [20.0, 85.0], brass_beta = [0.6, 1.65], tfr = [1.2, 7.5], elite_fertility_mult = [1.0, 1.6] }\ndefaults = { brass_beta = 1.0, tfr = 4.9, elite_fertility_mult = 1.0 }",
     );
     let errors = refused(&solo_text(), &reg);
     assert_eq!(errors.len(), 1, "{errors:?}");
@@ -217,7 +278,7 @@ fn a_registry_default_is_compiled_from_its_literal() {
     // 30.0000076293945312500001 is just above the tie: it rounds up, where its f64 (30.0000076...)
     // would round to even. The literal decides.
     let reg = registry_with(
-        "fidelity_levels = [\"F0\", \"F1\", \"F2\"]\nparams = { e0 = [20.0, 85.0], brass_beta = [0.6, 1.65] }\ndefaults = { e0 = 30.0000076293945312500001, brass_beta = 1 }",
+        "fidelity_levels = [\"F0\", \"F1\", \"F2\"]\nparams = { e0 = [20.0, 85.0], brass_beta = [0.6, 1.65], tfr = [1.2, 7.5], elite_fertility_mult = [1.0, 1.6] }\ndefaults = { e0 = 30.0000076293945312500001, brass_beta = 1, tfr = 4.9, elite_fertility_mult = 1.0 }",
     );
     let spec = text(&solo_text(), &reg).unwrap_or_else(|e| panic!("{e}"));
     let d = spec.demography.unwrap();
@@ -254,7 +315,7 @@ fn an_invalid_manifest_is_never_compiled() {
 #[test]
 fn an_exponent_past_the_bound_is_reported_once() {
     let reg = registry_with(
-        "fidelity_levels = [\"F0\", \"F1\", \"F2\"]\nparams = { e0 = [0.0, 1.0e9], brass_beta = [0.6, 1.65] }\ndefaults = { brass_beta = 1.0 }",
+        "fidelity_levels = [\"F0\", \"F1\", \"F2\"]\nparams = { e0 = [0.0, 1.0e9], brass_beta = [0.6, 1.65], tfr = [1.2, 7.5], elite_fertility_mult = [1.0, 1.6] }\ndefaults = { brass_beta = 1.0, tfr = 4.9, elite_fertility_mult = 1.0 }",
     );
     let manifest = solo_text().replace(
         "systems: {}",

@@ -71,6 +71,8 @@ fn access() -> AccessSpec {
 }
 
 impl SystemModel for Drawer {
+    type Index = ();
+
     fn descriptor(&self) -> SystemDescriptor {
         SystemDescriptor {
             id: SYSTEM,

@@ -49,6 +49,9 @@ fn run_dir(world: &str) -> PathBuf {
             a.journal = dir.join("journal.sqlite");
             a.run_dir = Some(dir.clone());
             run(&a).unwrap();
+            if w == "hamlet" {
+                let _ = rh_golden::sift::sift(&repo(), &dir).unwrap();
+            }
             out.insert(w.to_owned(), dir);
         }
         out
@@ -159,9 +162,6 @@ fn tree(dir: &Path) -> BTreeMap<PathBuf, (Vec<u8>, std::time::SystemTime)> {
 #[test]
 fn tail_never_writes_to_the_run_directory() {
     let dir = run_dir("hamlet");
-    // Sifted first, so the tails below read channel C's annotations too (REV-SPR-013 MIN-10).
-    let (_, sifted) = rh_golden::sift::sift(&repo(), &dir).unwrap();
-    assert!(sifted.matches > 0);
     let before = tree(&dir);
     let modes = [
         args("hamlet"),
@@ -178,6 +178,23 @@ fn tail_never_writes_to_the_run_directory() {
             wait: true,
             ..args("hamlet")
         },
+        TailArgs {
+            place: Some("1".to_owned()),
+            ..args("hamlet")
+        },
+        TailArgs {
+            pattern: Some("life_ends".to_owned()),
+            channel_c: true,
+            ..args("hamlet")
+        },
+        TailArgs {
+            min_tellability: Some(100),
+            ..args("hamlet")
+        },
+        TailArgs {
+            digest: true,
+            ..args("hamlet")
+        },
     ];
     let repo = repo();
     let notes = |d: &Path| rh_golden::sift::annotations(&repo, d);
@@ -186,7 +203,11 @@ fn tail_never_writes_to_the_run_directory() {
         let mut out = Vec::new();
         tail(m, &notes, &mut out).unwrap();
         let text = String::from_utf8(out).unwrap();
-        if m.kinds.is_empty() || m.kinds.iter().any(|k| k == "DEATH") {
+        if (m.kinds.is_empty() || m.kinds.iter().any(|k| k == "DEATH"))
+            && m.place.is_none()
+            && !m.digest
+            && m.pattern.is_none()
+        {
             assert!(
                 text.contains("match solitary_life/life_ends"),
                 "no annotation: {m:?}"
@@ -279,5 +300,252 @@ fn the_display_form_matches_its_snapshots() {
             ..args("hamlet")
         }),
     );
+
+    // SPR-027 T-04 snapshots:
+    let min_tell_text = tail_text(&TailArgs {
+        min_tellability: Some(100),
+        ..args("hamlet")
+    });
+    assert!(min_tell_text.contains("DEATH"));
+    assert!(!min_tell_text.contains("BIRTH"));
+    snapshot("hamlet_min_tellability_100", &min_tell_text);
+
+    let pattern_text = tail_text(&TailArgs {
+        pattern: Some("life_ends".to_owned()),
+        channel_c: true,
+        ..args("hamlet")
+    });
+    assert!(pattern_text.contains("solitary_life/life_ends"));
+    snapshot("hamlet_pattern_life_ends", &pattern_text);
+
+    let digest_text = tail_text(&TailArgs {
+        digest: true,
+        ..args("hamlet")
+    });
+    assert!(digest_text.contains("DIGEST living"));
+    snapshot("hamlet_digests", &digest_text);
+
     println!("T-10: the display form matches its 4 snapshots");
+    println!("SPR-027 T-04: the display form matches its 7 snapshots");
+}
+
+#[test]
+fn refusals_digest_region_and_sig() {
+    let dir = run_dir("solo");
+    let cmd_dir = dir.display().to_string();
+
+    let code_region = rh_golden::cli::tail_cmd(
+        &[cmd_dir.clone(), "--digest".into(), "region".into()],
+        &repo(),
+    );
+    assert_eq!(code_region, 64);
+
+    let code_region_eq =
+        rh_golden::cli::tail_cmd(&[cmd_dir.clone(), "--digest=region".into()], &repo());
+    assert_eq!(code_region_eq, 64);
+
+    let code_sig = rh_golden::cli::tail_cmd(&[cmd_dir, "--sig".into()], &repo());
+    assert_eq!(code_sig, 64);
+}
+
+#[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "test function exhaustively checks filter combinations and live edge parity"
+)]
+fn filters_composition_and_live_parity() {
+    let event1 = rh_stream::record::Record {
+        header: rh_stream::record::Header {
+            timeline_id: 0,
+            seq: 10,
+            tick: 100,
+        },
+        body: rh_stream::record::Body::Event(rh_stream::record::Event {
+            event_id: 1,
+            phase: 0,
+            verb_id: 0,
+            verb: "DEATH".to_owned(),
+            act_classes: 0,
+            place_id: Some(42),
+            magnitude: 0,
+            tellability: 80,
+            secrecy: 0,
+            origin: 0,
+            payload: vec![1],
+            roles: vec![],
+            snapshots: vec![],
+            causes: vec![],
+        }),
+    };
+    let event2 = rh_stream::record::Record {
+        header: rh_stream::record::Header {
+            timeline_id: 0,
+            seq: 11,
+            tick: 200,
+        },
+        body: rh_stream::record::Body::Event(rh_stream::record::Event {
+            event_id: 2,
+            phase: 0,
+            verb_id: 0,
+            verb: "DEATH".to_owned(),
+            act_classes: 0,
+            place_id: Some(42),
+            magnitude: 0,
+            tellability: 120,
+            secrecy: 0,
+            origin: 0,
+            payload: vec![1],
+            roles: vec![],
+            snapshots: vec![],
+            causes: vec![],
+        }),
+    };
+    let event3 = rh_stream::record::Record {
+        header: rh_stream::record::Header {
+            timeline_id: 0,
+            seq: 12,
+            tick: 300,
+        },
+        body: rh_stream::record::Body::Event(rh_stream::record::Event {
+            event_id: 3,
+            phase: 0,
+            verb_id: 0,
+            verb: "DEATH".to_owned(),
+            act_classes: 0,
+            place_id: Some(99),
+            magnitude: 0,
+            tellability: 120,
+            secrecy: 0,
+            origin: 0,
+            payload: vec![1],
+            roles: vec![],
+            snapshots: vec![],
+            causes: vec![],
+        }),
+    };
+    let digest1 = rh_stream::record::Record {
+        header: rh_stream::record::Header {
+            timeline_id: 0,
+            seq: 13,
+            tick: 400,
+        },
+        body: rh_stream::record::Body::StepDigest(rh_stream::record::StepDigest {
+            living: 40,
+            births: 2,
+            deaths: 1,
+            state_hash: 0x1234_5678,
+            observation_hash: 0,
+            narrative_hash: 0,
+        }),
+    };
+    let match1 = rh_stream::record::Record {
+        header: rh_stream::record::Header {
+            timeline_id: 0,
+            seq: 14,
+            tick: 500,
+        },
+        body: rh_stream::record::Body::Match(rh_stream::record::Match {
+            match_id: 0xabcd,
+            pack: "solitary_life".to_owned(),
+            pattern_id: "life_ends".to_owned(),
+            pattern_version: 1,
+            selection: 0,
+            on_complete: 0,
+            status: 1,
+            opened_tick: 100,
+            closed_by_event_id: 2,
+            closed_by_seq: 11,
+            bindings: vec![],
+            events: vec![rh_stream::record::ClauseEvent {
+                clause: "e1".to_owned(),
+                event_id: 2,
+            }],
+        }),
+    };
+
+    let all_records = [&event1, &event2, &event3, &digest1, &match1];
+    let all_lines: Vec<String> = all_records
+        .iter()
+        .map(|r| rh_stream::canonical::render(r).unwrap())
+        .collect();
+
+    // 1. --place 42
+    let f_place = rh_golden::tail::Filters {
+        place: Some(42),
+        ..Default::default()
+    };
+    for (r, l) in all_records.iter().zip(&all_lines) {
+        let expected = r.header.seq == 10 || r.header.seq == 11;
+        assert_eq!(f_place.matches_record(r), expected);
+        assert_eq!(f_place.matches_live_line(l), expected);
+    }
+
+    // 2. --min-tellability 100
+    let f_tell = rh_golden::tail::Filters {
+        min_tellability: Some(100),
+        ..Default::default()
+    };
+    for (r, l) in all_records.iter().zip(&all_lines) {
+        let expected = r.header.seq == 11 || r.header.seq == 12;
+        assert_eq!(f_tell.matches_record(r), expected);
+        assert_eq!(f_tell.matches_live_line(l), expected);
+    }
+
+    // 3. Intersection: --place 42 AND --min-tellability 100 -> exactly event2 (seq 11)
+    let f_inter = rh_golden::tail::Filters {
+        place: Some(42),
+        min_tellability: Some(100),
+        ..Default::default()
+    };
+    for (r, l) in all_records.iter().zip(&all_lines) {
+        let expected = r.header.seq == 11;
+        assert_eq!(f_inter.matches_record(r), expected);
+        assert_eq!(f_inter.matches_live_line(l), expected);
+    }
+
+    // 4. --pattern life_ends -> exactly match1 (seq 14)
+    let f_pat = rh_golden::tail::Filters {
+        pattern: Some("life_ends".to_owned()),
+        ..Default::default()
+    };
+    for (r, l) in all_records.iter().zip(&all_lines) {
+        let expected = r.header.seq == 14;
+        assert_eq!(f_pat.matches_record(r), expected);
+        assert_eq!(f_pat.matches_live_line(l), expected);
+    }
+
+    // 5. --digest -> exactly digest1 (seq 13)
+    let f_dig = rh_golden::tail::Filters {
+        digest: true,
+        ..Default::default()
+    };
+    for (r, l) in all_records.iter().zip(&all_lines) {
+        let expected = r.header.seq == 13;
+        assert_eq!(f_dig.matches_record(r), expected);
+        assert_eq!(f_dig.matches_live_line(l), expected);
+    }
+}
+
+#[test]
+fn live_filter_split_cost_is_sub_microsecond() {
+    let line = "EVENT 0 100 50000 2 0 1 DEATH 0 10 0 120 0 0 [0] [1/1/0] [] []";
+    let filters = rh_golden::tail::Filters {
+        place: Some(10),
+        min_tellability: Some(100),
+        ..rh_golden::tail::Filters::default()
+    };
+    assert!(filters.matches_live_line(line));
+
+    let n = 100_000;
+    let start = std::time::Instant::now();
+    for _ in 0..n {
+        let _ = filters.matches_live_line(line);
+    }
+    let elapsed = start.elapsed();
+    let per_line_ns = elapsed.as_nanos() / n;
+    println!("W36 live filter: {per_line_ns} ns per line (target <= 1000 ns, SPR-026 ref 300 ns)");
+    assert!(
+        per_line_ns <= 1000,
+        "live filter took {per_line_ns} ns/line > 1000 ns"
+    );
 }

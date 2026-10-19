@@ -65,7 +65,7 @@ fn writing_an_unowned_column_is_rejected() {
 #[test]
 fn undeclared_reads_and_unknown_systems_are_rejected() {
     let t = table();
-    let found = t.check(&access("M2.demography", &["person.residence"], &[]));
+    let found = t.check(&access("M2.demography", &["title.holder"], &[]));
     assert_eq!(found[0].rule, "undeclared-read");
     assert_eq!(t.check(&access("M9.ghost", &[], &[]))[0].rule, "registry");
 }

@@ -51,7 +51,14 @@ def test_the_probe_moves_a_frozen_default_and_the_next_lint_rejects_it() -> None
     """M2: e0 has a frozen default, so the probe moves it and lint_next names the change."""
     lint = _lint()
     frozen = _spec(SPECS / "M2.demography.odd.toml")
-    nxt = _spec(NEXT / "M2.demography.odd.toml")
+    if (NEXT / "M2.demography.odd.toml").exists():
+        nxt = _spec(NEXT / "M2.demography.odd.toml")
+    else:
+        # Synthetic draft next version of promoted M2 (SPR-015 T-01 W1(e)):
+        nxt = copy.deepcopy(frozen)
+        nxt["system"]["spec_version"] = "0.3.1"
+        nxt["system"]["status"] = "draft"
+        nxt.pop("amends", None)
     bad = lint.frozen_default_probe(frozen, nxt)
     assert bad is not None
     errs = _next_errors(lint, "M2.demography", frozen, bad)

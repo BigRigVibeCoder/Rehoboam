@@ -73,6 +73,7 @@ impl Estate {
 }
 
 impl SystemModel for Estate {
+    type Index = ();
     from_skeleton!();
 
     fn access(&self) -> AccessSpec {

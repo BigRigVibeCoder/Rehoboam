@@ -32,4 +32,6 @@ pub const MUTANTS: &[&str] = &[
     "mutant-effect",
 ];
 
-pub use world::{DemographyParams, Founder, FounderRole, NamedSystem, Sex, WorldSpec};
+pub use world::{
+    DemographyParams, Founder, FounderRole, HouseholdSpec, NamedSystem, Sex, WorldSpec,
+};

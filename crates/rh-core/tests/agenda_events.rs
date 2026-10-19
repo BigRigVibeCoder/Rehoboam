@@ -1039,6 +1039,8 @@ fn v_det_12_golden_event_log() {
 struct NoFire;
 
 impl rh_core::system::SystemModel for NoFire {
+    type Index = ();
+
     fn descriptor(&self) -> rh_core::system::SystemDescriptor {
         rh_core::system::SystemDescriptor {
             id: "Y9.nofire",
