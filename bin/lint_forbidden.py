@@ -1093,6 +1093,25 @@ def scan_source(
         _scan_includes(file, targets, report, float_fields, scan)
 
 
+def _escape_problem(escape: Escape, finding: Finding, float_fields: frozenset[str]) -> str | None:
+    """Return error message if escape is invalid for finding, or None if valid."""
+    if escape.kind == "hidden-state" and finding.rule != HIDDEN_STATE_RULE:
+        return (
+            f"LINT-ALLOW(hidden-state) covers no hidden-state API on line {escape.covers}; "
+            "remove it"
+        )
+    if escape.kind == "forbidden-api" and finding.rule == HIDDEN_STATE_RULE:
+        return (
+            "hidden-state finding must use `// LINT-ALLOW(hidden-state): <reason>`, "
+            "not LINT-ALLOW(forbidden-api)"
+        )
+    if finding.rule in (FLOAT_RULE, FLOAT_DEP_RULE):
+        return _float_escape_problem(escape, float_fields)
+    if finding.rule == FLOAT_API_RULE:
+        return FLOAT_API_WHY
+    return None
+
+
 def _report_findings(
     findings: list[Finding], escapes: list[Escape], float_fields: frozenset[str], report: Report
 ) -> None:
@@ -1102,22 +1121,7 @@ def _report_findings(
     for finding in findings:
         where = f"{finding.path}:{finding.line}:{finding.column}"
         escape = valid.get(finding.line)
-        problem = None
-        if escape is not None:
-            if escape.kind == "hidden-state" and finding.rule != HIDDEN_STATE_RULE:
-                problem = (
-                    f"LINT-ALLOW(hidden-state) covers no hidden-state API on line {escape.covers}; "
-                    "remove it"
-                )
-            elif escape.kind == "forbidden-api" and finding.rule == HIDDEN_STATE_RULE:
-                problem = (
-                    "hidden-state finding must use `// LINT-ALLOW(hidden-state): <reason>`, "
-                    "not LINT-ALLOW(forbidden-api)"
-                )
-            elif finding.rule in (FLOAT_RULE, FLOAT_DEP_RULE):
-                problem = _float_escape_problem(escape, float_fields)
-            elif finding.rule == FLOAT_API_RULE:
-                problem = FLOAT_API_WHY
+        problem = _escape_problem(escape, finding, float_fields) if escape is not None else None
         if escape is not None and problem is None:
             report.escaped.append(
                 f"ESCAPE [{RULE_ID}/{finding.rule}] `{finding.text}` at {where}; "
@@ -1133,8 +1137,7 @@ def _report_findings(
         tag = f"LINT-ALLOW({escape.kind})"
         if not escape.reason:
             report.violations.append(
-                f"VIOLATION [{RULE_ID}/escape] {where}: {tag} needs a reason "
-                "after the colon"
+                f"VIOLATION [{RULE_ID}/escape] {where}: {tag} needs a reason after the colon"
             )
         elif escape.covers not in covered_lines:
             report.violations.append(

@@ -1343,6 +1343,7 @@ def test_min_2_other_renames_and_raw_identifiers_pass(source: str) -> None:
 
 # --- The hidden-state rule (SPR-027 T-02; W31) ------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "source",
     [
@@ -1385,5 +1386,5 @@ def test_wrong_escape_kind_is_a_violation() -> None:
         "static NEXT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);\n"
     )
     rep = scan(source)
-    assert any("hidden-state finding must use `// LINT-ALLOW(hidden-state): <reason>`" in v for v in rep.violations)
-
+    expected = "hidden-state finding must use `// LINT-ALLOW(hidden-state): <reason>`"
+    assert any(expected in v for v in rep.violations)
