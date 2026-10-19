@@ -122,7 +122,7 @@ fn submit_in_background(
 ) -> std::sync::mpsc::Receiver<serde_json::Value> {
     let (tx, rx) = std::sync::mpsc::channel();
     let g = Arc::clone(gov);
-    let c = conn.clone();
+    let c = *conn;
     std::thread::spawn(move || {
         let rep = g.submit(&c, &id, cmd);
         let _ = tx.send(rep);

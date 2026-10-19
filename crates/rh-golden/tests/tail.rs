@@ -203,13 +203,15 @@ fn tail_never_writes_to_the_run_directory() {
         let mut out = Vec::new();
         tail(m, &notes, &mut out).unwrap();
         let text = String::from_utf8(out).unwrap();
-        if m.kinds.is_empty() || m.kinds.iter().any(|k| k == "DEATH") {
-            if m.place.is_none() && !m.digest && m.pattern.is_none() {
-                assert!(
-                    text.contains("match solitary_life/life_ends"),
-                    "no annotation: {m:?}"
-                );
-            }
+        if (m.kinds.is_empty() || m.kinds.iter().any(|k| k == "DEATH"))
+            && m.place.is_none()
+            && !m.digest
+            && m.pattern.is_none()
+        {
+            assert!(
+                text.contains("match solitary_life/life_ends"),
+                "no annotation: {m:?}"
+            );
         }
     }
     assert_eq!(tree(&dir), before, "tail changed the run directory");
@@ -347,6 +349,10 @@ fn refusals_digest_region_and_sig() {
 }
 
 #[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "test function exhaustively checks filter combinations and live edge parity"
+)]
 fn filters_composition_and_live_parity() {
     let event1 = rh_stream::record::Record {
         header: rh_stream::record::Header {

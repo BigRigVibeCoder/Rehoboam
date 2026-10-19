@@ -775,3 +775,50 @@ fn a_short_or_foreign_ladder_is_refused_by_name_on_resume() {
         "T-12 GAP-9: a run.ladder short of its keyframe and another run's run.ladder are refused by name on resume, the directory unchanged"
     );
 }
+
+/// BCK-002 A-70 (SPR-027): `run.toml` records the builder's commit as an optional field.
+/// Two builds' run directories differ in this field alone, and default ladders stay byte-identical.
+/// It must never enter any hash, keyframe, journal, or ladder.
+#[test]
+fn a_70_engine_build_commit_in_run_toml_preserves_ladder_determinism() {
+    let base = scratch("a70");
+    let dir_a = base.join("run_a");
+    let dir_b = base.join("run_b");
+
+    run_into("solo", 60, &dir_a, None);
+    run_into("solo", 60, &dir_b, None);
+
+    // Both ladders are byte-identical.
+    let ladder_a = std::fs::read(dir_a.join("run.ladder")).unwrap();
+    let ladder_b = std::fs::read(dir_b.join("run.ladder")).unwrap();
+    assert_eq!(ladder_a, ladder_b);
+
+    // Read run_a's run.toml
+    let toml_a = RunToml::read(&dir_a).unwrap();
+    assert!(toml_a.engine_build_commit.is_some());
+
+    // Edit run_b's run.toml to have a different build commit
+    let mut toml_b = RunToml::read(&dir_b).unwrap();
+    toml_b.engine_build_commit = Some("synthetic-different-commit-1234567".to_string());
+    toml_b.write(&dir_b).unwrap();
+
+    // Replay both: both replays succeed and produce byte-identical ladders
+    let rep_a = replay_of(&dir_a, &base.join("into_a"), None, 1);
+    let rep_b = replay_of(&dir_b, &base.join("into_b"), None, 1);
+    assert!(rep_a.equal());
+    assert!(rep_b.equal());
+
+    let ladder_into_a = std::fs::read(base.join("into_a/run.ladder")).unwrap();
+    let ladder_into_b = std::fs::read(base.join("into_b/run.ladder")).unwrap();
+    assert_eq!(ladder_into_a, ladder_into_b);
+    assert_eq!(ladder_into_a, ladder_a);
+
+    // Also test RunToml serde when engine_build_commit is None:
+    let mut toml_none = toml_b.clone();
+    toml_none.engine_build_commit = None;
+    let serialized = toml::to_string(&toml_none).unwrap();
+    assert!(!serialized.contains("engine_build_commit"));
+
+    let deserialized: RunToml = toml::from_str(&serialized).unwrap();
+    assert_eq!(deserialized.engine_build_commit, None);
+}

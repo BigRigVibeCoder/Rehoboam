@@ -423,6 +423,18 @@ pub struct RunToml {
     /// The first keyframe year, if recorded (SPR-027).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub first_keyframe_year: Option<i64>,
+    /// The engine build commit (BCK-002 A-70; SPR-027).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine_build_commit: Option<String>,
+}
+
+/// Returns the engine build commit from build metadata (`RH_BUILD_COMMIT` or `git describe --dirty`),
+/// or `None` if unavailable (BCK-002 A-70; SPR-027).
+#[must_use]
+pub fn engine_build_commit() -> Option<String> {
+    option_env!("RH_BUILD_COMMIT")
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned)
 }
 
 impl RunToml {

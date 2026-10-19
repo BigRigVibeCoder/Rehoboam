@@ -82,6 +82,11 @@ fn tree_hashes(dir: &Path) -> BTreeMap<String, String> {
 }
 
 #[test]
+#[allow(
+    clippy::too_many_lines,
+    clippy::cast_possible_truncation,
+    reason = "test function exhaustively checks multiple ticks and keyframes on solo"
+)]
 fn v_str_02_materializer_solo_200_years() {
     let dir = solo_run_dir();
     let mpy = 518_400; // solo calendar: 360 days * 1440 min

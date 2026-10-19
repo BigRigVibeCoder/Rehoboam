@@ -1276,6 +1276,7 @@ fn stream_host(
             rung: Some(args.rung.name().to_owned()),
             run_log: None,
             first_keyframe_year: None,
+            engine_build_commit: crate::stream::engine_build_commit(),
         }
         .write(&dir.0)?;
         StreamHost::create(cfg, engine.tables(), rows, hook)
