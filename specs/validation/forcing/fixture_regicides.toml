@@ -1,0 +1,28 @@
+# fixture_regicides.toml: historical scripted regicide forcing series (SPR-028, M7)
+# Governed by: specs/systems/M7.dynasty.odd.toml:844, docs/09 V-SF-22
+
+[schema]
+format = "rehoboam/validation/forcing_history/v0"
+id = "fixture_regicides"
+version = "0.1.0"
+
+[[events]]
+year = 50
+tick = 25920000
+target = "title:0"
+cause = "murder"
+note = "first scripted regicide on Lord of Ash"
+
+[[events]]
+year = 100
+tick = 51840000
+target = "title:0"
+cause = "murder"
+note = "consecutive predecessor murder to exercise feud stock"
+
+[[events]]
+year = 150
+tick = 77760000
+target = "title:3"
+cause = "murder"
+note = "scripted murder on Chieftain"
