@@ -31,6 +31,9 @@ toml = "=1.1.8"
 rh-stream = { version = "0.0.0", path = "../rh-stream" }
 # SPR-026: the wire's codec (a tool crate; its planted controls join mutant_features, A-52).
 rh-protocol = { version = "0.0.0", path = "../rh-protocol" }
+# SPR-027 T-03: arc-swap for snapshot publication and serde_json for governor control.
+arc-swap = { version = "=1.7.1", default-features = false }
+serde_json = "=1.0.154"
 # SPR-013 T-11: `rh-cli sift` (a tool may depend on plane C; plane A never does).
 rh-sifter = { version = "0.0.0", path = "../rh-sifter" }
 
@@ -40,3 +43,7 @@ rh-events = { version = "0.0.0", path = "../rh-events" }
 # SPR-013 T-12: the tampered-journal controls edit the journal file below the journal's API (the
 # version and features rh-snapshot already pins: nothing new in the lock).
 rusqlite = { version = "=0.40.2", default-features = false, features = ["bundled"] }
+
+[features]
+mutant-materialize-no-journal = []
+

@@ -68,14 +68,18 @@ fn world(seed: u64, calendar: Calendar, e0: i16, founders: Vec<Founder>) -> Worl
             brass_beta: Q16_16::ONE,
             density_capacity: 10_000_000,
             density_mortality_slope: Q16_16::ONE,
+            tfr: Q16_16::from_bits(321_126), // 4.9 in Q16_16
+            elite_fertility_mult: Q16_16::ONE,
         }),
         founders,
+        households: Vec::new(),
     }
 }
 
 fn engine(spec: &WorldSpec, table: &SpecTable, threads: usize) -> Engine {
     let tables = rh_worldgen::genesis(spec, table).unwrap();
-    let m2: Box<dyn SystemModel> = Box::new(Demography::from_world(spec).unwrap().unwrap());
+    let m2: Box<dyn SystemModel<Index = ()>> =
+        Box::new(Demography::from_world(spec).unwrap().unwrap());
     let registered = register(vec![m2], table).unwrap_or_else(|e| panic!("{e}"));
     let mut e = Engine::new(
         spec.calendar,
@@ -124,7 +128,8 @@ fn years(calendar: Calendar, n: i64) -> SimTime {
 #[test]
 fn registration_against_the_frozen_spec_passes() {
     let spec = world(1, D360, 30, Vec::new());
-    let m2: Box<dyn SystemModel> = Box::new(Demography::from_world(&spec).unwrap().unwrap());
+    let m2: Box<dyn SystemModel<Index = ()>> =
+        Box::new(Demography::from_world(&spec).unwrap().unwrap());
     let registered = register(vec![m2], &specs()).unwrap_or_else(|e| panic!("{e}"));
     let _ = registered;
 }
@@ -132,14 +137,58 @@ fn registration_against_the_frozen_spec_passes() {
 #[test]
 fn alpha_and_beta_other_than_one_are_refused_by_name() {
     let thirty = Q16_16::from_int(30);
-    let e = Demography::new(thirty, Some(Q16_16::ZERO), Q16_16::ONE, 10_000_000, Q16_16::ONE, D360).unwrap_err();
+    let e = Demography::new(
+        thirty,
+        Some(Q16_16::ZERO),
+        Q16_16::ONE,
+        10_000_000,
+        Q16_16::ONE,
+        Q16_16::from_bits(321_126),
+        Q16_16::ONE,
+        D360,
+    )
+    .unwrap_err();
     assert_eq!(e, DemographyError::AlphaRefused { bits: 0 });
     assert!(e.to_string().contains("refuses brass_alpha"), "{e}");
     // beta ≠ 1 is accepted at F1 (SPR-016)
-    assert!(Demography::new(thirty, None, Q16_16::from_bits(65_537), 10_000_000, Q16_16::ONE, D360).is_ok());
-    let e = Demography::new(Q16_16::from_int(19), None, Q16_16::ONE, 10_000_000, Q16_16::ONE, D360).unwrap_err();
+    assert!(
+        Demography::new(
+            thirty,
+            None,
+            Q16_16::from_bits(65_537),
+            10_000_000,
+            Q16_16::ONE,
+            Q16_16::from_bits(321_126),
+            Q16_16::ONE,
+            D360
+        )
+        .is_ok()
+    );
+    let e = Demography::new(
+        Q16_16::from_int(19),
+        None,
+        Q16_16::ONE,
+        10_000_000,
+        Q16_16::ONE,
+        Q16_16::from_bits(321_126),
+        Q16_16::ONE,
+        D360,
+    )
+    .unwrap_err();
     assert!(e.to_string().contains("outside the Registry bounds"), "{e}");
-    assert!(Demography::new(thirty, None, Q16_16::ONE, 10_000_000, Q16_16::ONE, D360).is_ok());
+    assert!(
+        Demography::new(
+            thirty,
+            None,
+            Q16_16::ONE,
+            10_000_000,
+            Q16_16::ONE,
+            Q16_16::from_bits(321_126),
+            Q16_16::ONE,
+            D360
+        )
+        .is_ok()
+    );
 }
 
 /// Runs `e` one instant at a time to `end`, checking V-DET-12, INV-M2-03 and V-INV-01 after each.
@@ -391,7 +440,17 @@ fn q15_of_10000_newborns_is_inside_the_binomial_band_for_32_seeds() {
     const Z: f64 = 3.290_527;
     let table = specs();
     let year = D360.minutes_per_year();
-    let m2 = Demography::new(Q16_16::from_int(30), None, Q16_16::ONE, 10_000_000, Q16_16::ONE, D360).unwrap();
+    let m2 = Demography::new(
+        Q16_16::from_int(30),
+        None,
+        Q16_16::ONE,
+        10_000_000,
+        Q16_16::ONE,
+        Q16_16::from_bits(321_126),
+        Q16_16::ONE,
+        D360,
+    )
+    .unwrap();
     let l15 = m2.schedule().survivors_at(15 * year).unwrap() as f64;
     let results: Vec<(u64, usize, f64, f64)> = std::thread::scope(|s| {
         let handles: Vec<_> = (0..32_u64)

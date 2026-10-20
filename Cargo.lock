@@ -906,6 +906,7 @@ dependencies = [
 name = "rh-golden"
 version = "0.0.0"
 dependencies = [
+ "arc-swap",
  "rh-core",
  "rh-events",
  "rh-ids",
@@ -920,6 +921,7 @@ dependencies = [
  "rh-worldgen",
  "rusqlite",
  "serde",
+ "serde_json",
  "toml",
 ]
 

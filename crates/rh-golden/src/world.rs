@@ -64,7 +64,11 @@ pub struct Setup {
     /// The tables at instant 0.
     pub tables: WorldTables,
     /// The systems, unregistered (called once per registration).
-    pub systems: Box<dyn Fn(bool) -> Vec<Box<dyn SystemModel>>>,
+    #[allow(
+        clippy::type_complexity,
+        reason = "boxed closure constructor of trait objects"
+    )]
+    pub systems: Box<dyn Fn(bool) -> Vec<Box<dyn SystemModel<Index = ()>>>>,
     /// The material inputs of a run of `years`: `(instant, entity)`, in submission order.
     pub inputs: Box<dyn Fn(i64) -> Vec<(SimTime, EntityRef)>>,
     /// The header's history-tuple line, for a manifest world.
@@ -282,7 +286,7 @@ pub fn setup_with(
         tables,
         systems: Box::new(move |_leak| {
             m2.clone()
-                .map(|m| Box::new(m) as Box<dyn SystemModel>)
+                .map(|m| Box::new(m) as Box<dyn SystemModel<Index = ()>>)
                 .into_iter()
                 .collect()
         }),

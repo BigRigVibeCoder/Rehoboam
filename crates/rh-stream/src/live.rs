@@ -42,6 +42,7 @@
 //! REF: `specs/stream/wire_v1.md` §6.1, §6.2; REV-SPR-026 R2–R4, R16–R18, R22; ADR-0030.
 
 use std::sync::Arc;
+// LINT-ALLOW(hidden-state): live stream edge queue counter
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use arc_swap::ArcSwap;
@@ -395,6 +396,7 @@ pub struct LiveEdge {
     state: Arc<ArcSwap<Snapshot>>,
     /// The bytes of the completed years queued for the seal thread and not yet sealed
     /// (`LiveEdge::queued_bytes`; the Architect's GAP-1 ruling).
+    // LINT-ALLOW(hidden-state): live stream edge queue counter
     queued: Arc<AtomicUsize>,
 }
 
@@ -422,6 +424,7 @@ impl LiveEdge {
         };
         Self {
             state: Arc::new(ArcSwap::from_pointee(snap)),
+            // LINT-ALLOW(hidden-state): live stream edge queue counter
             queued: Arc::new(AtomicUsize::new(0)),
         }
     }

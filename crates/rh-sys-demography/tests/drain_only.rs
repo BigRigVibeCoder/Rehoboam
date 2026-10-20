@@ -28,7 +28,17 @@ fn spec_path() -> PathBuf {
 
 /// Every drain-only binding of M2's code must be a spec entry whose only step is the drain.
 fn check(spec: &SystemSpec) -> Result<usize, String> {
-    let m2 = Demography::new(Q16_16::from_int(30), None, Q16_16::ONE, 10_000_000, Q16_16::ONE, CALENDAR).unwrap();
+    let m2 = Demography::new(
+        Q16_16::from_int(30),
+        None,
+        Q16_16::ONE,
+        10_000_000,
+        Q16_16::ONE,
+        Q16_16::from_int(4),
+        Q16_16::ONE,
+        CALENDAR,
+    )
+    .unwrap();
     let declared = m2.access().drain_only;
     for b in &declared {
         let (pulse, phase) = (b.pulse.name(), b.phase.name());
@@ -59,21 +69,10 @@ fn m2s_drain_only_binding_has_the_drain_as_its_only_step() {
     let text = std::fs::read_to_string(&path).unwrap();
     let spec = SystemSpec::from_toml(&path, &text).unwrap();
     let n = check(&spec).unwrap_or_else(|e| panic!("{e}"));
-    assert_eq!(n, 1, "M2 declares Day/Vital drain-only");
-    // The control: the same entry with a second step fails the check.
-    let marker = "  \"lifecycle: the drain of M2's command queue";
-    assert_eq!(text.matches(marker).count(), 1, "the drain step, once");
-    let planted = text.replacen(
-        marker,
-        &format!("  \"census: a planted step\",\n{marker}"),
-        1,
+    assert_eq!(
+        n, 0,
+        "M2 F1 no longer declares Day/Vital drain-only: birth/partnering timers fire there"
     );
-    let refused = check(&SystemSpec::from_toml(&path, &planted).unwrap()).unwrap_err();
-    assert!(
-        refused.starts_with("Day/Vital is declared drain-only, but its [[schedule]] entry has 2"),
-        "{refused}"
-    );
-    println!(
-        "drain-only: M2's Day/Vital entry has the drain as its only step; a planted second step fails"
-    );
+    // F1: no drain-only binding, so the planted second step is irrelevant
+    println!("drain-only: M2's Day/Vital entry is no longer drain-only in F1");
 }

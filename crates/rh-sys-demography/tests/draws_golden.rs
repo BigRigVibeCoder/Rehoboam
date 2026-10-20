@@ -116,6 +116,20 @@ fn tables(persons: &[(u64, i64)]) -> WorldTables {
         ("person.father", vec![0; n]),
         ("person.spouse", vec![0; n]),
         ("person.death_cause", vec![0; n]),
+        ("person.household", vec![0; n]),
+        ("person.parity", vec![0; n]),
+        ("person.last_birth_tick", vec![i64::MAX; n]),
+        ("person.conceived_tick", vec![i64::MAX; n]),
+        ("person.unborn_father", vec![0; n]),
+        ("household.id", Vec::new()),
+        ("household.head", Vec::new()),
+        ("household.formed_tick", Vec::new()),
+        ("household.dissolved_tick", Vec::new()),
+        ("marriage.husband", Vec::new()),
+        ("marriage.wife", Vec::new()),
+        ("marriage.start_tick", Vec::new()),
+        ("marriage.end_tick", Vec::new()),
+        ("marriage.source", Vec::new()),
         ("life_course.person_id", ids),
         ("life_course.origin", vec![1; n]),
         ("life_course.mother", vec![0; n]),
@@ -140,9 +154,19 @@ fn run(w: &World) -> Vec<(i64, u64)> {
         365 => Calendar::new(DaysPerYear::D365, SeasonsPerYear::Four),
         d => panic!("{d} days a year"),
     };
-    let m2 = Demography::new(Q16_16::from_bits(w.e0_bits), None, Q16_16::ONE, 10_000_000, Q16_16::ONE, calendar).unwrap();
+    let m2 = Demography::new(
+        Q16_16::from_bits(w.e0_bits),
+        None,
+        Q16_16::ONE,
+        10_000_000,
+        Q16_16::ONE,
+        Q16_16::from_int(4),
+        Q16_16::ONE,
+        calendar,
+    )
+    .unwrap();
     let registered = register(
-        vec![Box::new(m2) as Box<dyn SystemModel>],
+        vec![Box::new(m2) as Box<dyn SystemModel<Index = ()>>],
         &specs.spec_table(),
     )
     .unwrap_or_else(|e| panic!("{e}"));

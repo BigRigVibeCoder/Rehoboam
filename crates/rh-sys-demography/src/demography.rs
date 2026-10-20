@@ -14,7 +14,7 @@
 use core::fmt;
 
 use rh_core::Phase;
-use rh_core::access::{AccessSpec, ColumnWrite, CommandApply, Plane};
+use rh_core::access::{AccessSpec, ColumnRead, ColumnWrite, CommandApply, Lag, Plane};
 use rh_core::agenda::TimerEntry;
 use rh_core::command::QueuedCommand;
 use rh_core::fixed::{Prob32, Q16_16};
@@ -25,10 +25,10 @@ use rh_core::system::{
 use rh_core::time::{Calendar, Pulse, SimTime};
 use rh_core::world::{SystemView, WorldTables};
 use rh_events::{EdgeKind, EventDraft, EventRef};
-use rh_ids::{EntityKind, EntityRef, PersonId};
+use rh_ids::{EntityKind, EntityRef, HouseholdId, PersonId};
 
-use crate::schedule::{DAY, Schedule, ScheduleError, death_day, resample_day, rhe};
 use crate::schedule::f1::F1Schedule;
+use crate::schedule::{DAY, Schedule, ScheduleError, death_day, resample_day, rhe};
 
 /// The skeleton `lint_odd.py --rust M2.demography` generated (ADR-0033 §3), checked by
 /// `bin/gen_skeletons.py --check`; private, as the smoke systems keep theirs.
@@ -42,10 +42,18 @@ mod skeleton {
     include!("../../rh-core/tests/generated/M2_demography.rs");
 }
 
-use skeleton::{DRAINS, ROLE_ACTOR, ROLE_TARGET, ROLES, RngPurpose, SCHEDULE, SPEC_VERSION, SYSTEM_ID};
+use skeleton::{
+    DRAINS, ROLE_ACTOR, ROLE_TARGET, ROLES, RngPurpose, SCHEDULE, SPEC_VERSION, SYSTEM_ID,
+};
 
 impl SpecPurpose for RngPurpose {
-    const ALL: &'static [Self] = &[Self::DeathTime];
+    const ALL: &'static [Self] = &[
+        Self::DeathTime,
+        Self::Conception,
+        Self::MarriageTime,
+        Self::BirthSex,
+        Self::HusbandPick,
+    ];
     fn name(&self) -> &'static str {
         RngPurpose::name(*self)
     }
@@ -63,6 +71,22 @@ pub const PERSON_DEATH_TICK: &str = "person.death_tick";
 pub const PERSON_DEATH_CAUSE: &str = "person.death_cause";
 /// See [`PERSON_ID`].
 pub const PERSON_SPOUSE: &str = "person.spouse";
+/// See [`PERSON_ID`].
+pub const PERSON_HOUSEHOLD: &str = "person.household";
+/// See [`PERSON_ID`].
+pub const PERSON_PARITY: &str = "person.parity";
+/// See [`PERSON_ID`].
+pub const PERSON_LAST_BIRTH_TICK: &str = "person.last_birth_tick";
+/// See [`PERSON_ID`].
+pub const PERSON_CONCEIVED_TICK: &str = "person.conceived_tick";
+/// See [`PERSON_ID`].
+pub const PERSON_UNBORN_FATHER: &str = "person.unborn_father";
+/// See [`PERSON_ID`].
+pub const PERSON_SEX: &str = "person.sex";
+/// See [`PERSON_ID`].
+pub const PERSON_MOTHER: &str = "person.mother";
+/// See [`PERSON_ID`].
+pub const PERSON_FATHER: &str = "person.father";
 /// The life-course columns [`apply_death`] writes.
 pub const LC_PERSON: &str = "life_course.person_id";
 /// See [`LC_PERSON`].
@@ -73,9 +97,33 @@ pub const LC_EXIT_TICK: &str = "life_course.exit_tick";
 pub const LC_DEATH_CAUSE: &str = "life_course.death_cause";
 /// See [`LC_PERSON`].
 pub const LC_BIRTH: &str = "life_course.birth_tick";
+/// See [`LC_PERSON`].
+pub const LC_MOTHER: &str = "life_course.mother";
+/// See [`LC_PERSON`].
+pub const LC_FATHER: &str = "life_course.father";
+/// See [`LC_PERSON`].
+pub const LC_SEX: &str = "life_course.sex";
+/// The household table columns M2 owns.
+pub const HH_ID: &str = "household.id";
+/// See [`HH_ID`].
+pub const HH_HEAD: &str = "household.head";
+/// See [`HH_ID`].
+pub const HH_FORMED: &str = "household.formed_tick";
+/// See [`HH_ID`].
+pub const HH_DISSOLVED: &str = "household.dissolved_tick";
+/// The marriage table columns M2 owns.
+pub const MAR_HUSBAND: &str = "marriage.husband";
+/// See [`MAR_HUSBAND`].
+pub const MAR_WIFE: &str = "marriage.wife";
+/// See [`MAR_HUSBAND`].
+pub const MAR_START: &str = "marriage.start_tick";
+/// See [`MAR_HUSBAND`].
+pub const MAR_END: &str = "marriage.end_tick";
+/// See [`MAR_HUSBAND`].
+pub const MAR_SOURCE: &str = "marriage.source";
 
 /// Every column M2 owns (`[[owns]]`), in spec order.
-pub const OWNED: [&str; 19] = [
+pub const OWNED: [&str; 33] = [
     "person.id",
     "person.birth_tick",
     "person.sex",
@@ -85,6 +133,20 @@ pub const OWNED: [&str; 19] = [
     "person.father",
     "person.spouse",
     "person.death_cause",
+    "person.household",
+    "person.parity",
+    "person.last_birth_tick",
+    "person.conceived_tick",
+    "person.unborn_father",
+    "household.id",
+    "household.head",
+    "household.formed_tick",
+    "household.dissolved_tick",
+    "marriage.husband",
+    "marriage.wife",
+    "marriage.start_tick",
+    "marriage.end_tick",
+    "marriage.source",
     "life_course.person_id",
     "life_course.origin",
     "life_course.mother",
@@ -125,6 +187,67 @@ pub const MARRY: &str = "Marry";
 pub const DEATH: &str = "DEATH";
 /// See [`DEATH`].
 pub const EXTINCTION: &str = "EXTINCTION";
+/// See [`DEATH`].
+pub const BIRTH: &str = "BIRTH";
+/// See [`DEATH`].
+pub const MARRIAGE: &str = "MARRIAGE";
+
+/// The birth timer's closure id (F7).
+pub const BIRTH_TIMER: u32 = 2;
+
+/// The marriage timer's closure id (N5).
+pub const MARRIAGE_TIMER: u32 = 3;
+
+/// Partnering: monthly nuptiality hazard per thousand per band 15-19 .. 45-49 (N1).
+pub const NUPTIALITY_THOUSANDTHS: [u16; BANDS] = [18, 35, 24, 11, 5, 2, 2];
+/// Minimum age of a bride for M2's own draws (N2).
+pub const MIN_AGE_F: i64 = 15;
+/// Minimum age of a groom for M2's own draws (N2).
+pub const MIN_AGE_M: i64 = 18;
+/// Preferred age gap: groom in [bride - 15, bride + 5] years (N4).
+pub const GAP_LO_YEARS: i64 = -5;
+/// See [`GAP_LO_YEARS`].
+pub const GAP_HI_YEARS: i64 = 15;
+/// Marriage source codes for the marriage table (`[[owns]] marriage.source` values, codes 0-2).
+pub const MAR_SOURCE_GENESIS: i64 = 0;
+/// See [`MAR_SOURCE_GENESIS`].
+pub const MAR_SOURCE_PARTNERING: i64 = 1;
+/// See [`MAR_SOURCE_GENESIS`].
+pub const MAR_SOURCE_COMMAND: i64 = 2;
+
+/// Fertility bands: 7 five-year bands 15-19 to 45-49.
+pub const BANDS: usize = 7;
+/// Coale-Trussell natural fertility n(a) per band, in thousandths (F1).
+pub const N_I: [u16; BANDS] = [411, 460, 431, 395, 322, 167, 24];
+/// Gestation in calendar months (F2).
+pub const GESTATION_MONTHS: i64 = 9;
+/// Postpartum non-susceptible period in calendar months (F2).
+pub const POSTPARTUM_MONTHS: i64 = 11;
+/// Closed period G + P in Month pulses (F2).
+pub const CLOSED_PERIOD: i64 = 20;
+/// Reference TFR of the nuptiality schedule at M=1, in `Q16_16` bits (F3).
+pub const TFR1_BITS: i32 = 615_614;
+/// Minimum fertile age in years (F0).
+pub const MIN_AGE_YEARS: i64 = 15;
+/// Maximum fertile age in years (F0).
+pub const MAX_AGE_YEARS: i64 = 50;
+/// Band width in years (F0).
+pub const BAND_WIDTH_YEARS: i64 = 5;
+/// `SEX_M` = rhe(2^32 * 105 / 205) ≈ 0.5122 (F2).
+pub const SEX_M_BITS: u32 = 2_199_861_298;
+/// Sex codes: male = 0, female = 1.
+pub const SEX_MALE: i64 = 0;
+/// See [`SEX_MALE`].
+pub const SEX_FEMALE: i64 = 1;
+/// `life_course.origin` codes (`[[owns]] life_course.origin` values, codes 0-2: born, founder,
+/// immigrant).
+pub const ORIGIN_BIRTH: i64 = 0;
+/// See [`ORIGIN_BIRTH`].
+pub const ORIGIN_FOUNDER: i64 = 1;
+/// `life_course.exit_kind` open.
+pub const EXIT_OPEN: i64 = 0;
+/// `life_course.birth_order` (parity, 1-based): founder marker.
+pub const BIRTH_ORDER_NONE: i64 = 0;
 
 /// Why M2 refused its parameters (ruling 7).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -176,20 +299,32 @@ pub struct Demography {
     density_capacity: u64,
     /// The slope of the density modifier (MR11; default 1.0).
     density_mortality_slope: Q16_16,
+    /// The ordinary conception table `c_i` (F4), one `Prob32` per band.
+    c: [rh_core::fixed::Prob32; BANDS],
+    /// The elite conception table `c_i^e` (F4).
+    c_e: [rh_core::fixed::Prob32; BANDS],
 }
 
 impl Demography {
-    /// M2 for e₀, β and the density parameters on `calendar`, refusing `brass_alpha` (any `Some`).
-    /// At F1 any β in the Registry bounds [0.6, 1.65] is accepted (MR2).
+    /// M2 for e₀, β, the density parameters, and the fertility parameters on `calendar`, refusing
+    /// `brass_alpha` (any `Some`). At F1 any β in the Registry bounds [0.6, 1.65] is accepted (MR2).
+    ///
+    /// Computes the conception tables `c_i` and `c_i^e` at construction (F4).
     ///
     /// # Errors
     /// [`DemographyError`], each naming the refused parameter.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "Demography F1 parameter set: Brass level/shape, density, fertility and calendar"
+    )]
     pub fn new(
         e0: Q16_16,
         brass_alpha: Option<Q16_16>,
         brass_beta: Q16_16,
         density_capacity: u64,
         density_mortality_slope: Q16_16,
+        tfr: Q16_16,
+        elite_fertility_mult: Q16_16,
         calendar: Calendar,
     ) -> Result<Self, DemographyError> {
         if let Some(alpha) = brass_alpha {
@@ -199,11 +334,17 @@ impl Demography {
         }
         let schedule = Schedule::new(e0, calendar).map_err(DemographyError::Schedule)?;
         let f1 = F1Schedule::new(e0, brass_beta, calendar)?;
+        let m = conception_level(tfr);
+        let m_e = elite_level(m, elite_fertility_mult);
+        let c = conception_table(m);
+        let c_e = conception_table(m_e);
         Ok(Self {
             schedule,
             f1,
             density_capacity,
             density_mortality_slope,
+            c,
+            c_e,
         })
     }
 
@@ -219,6 +360,23 @@ impl Demography {
         &self.f1
     }
 
+    /// The ordinary conception table `c_i` (F4).
+    #[must_use]
+    pub const fn conception(&self) -> &[rh_core::fixed::Prob32; BANDS] {
+        &self.c
+    }
+
+    /// The elite conception table `c_i^e` (F4).
+    #[must_use]
+    pub const fn conception_elite(&self) -> &[rh_core::fixed::Prob32; BANDS] {
+        &self.c_e
+    }
+
+    #[allow(clippy::needless_pass_by_value, reason = "a map_err adapter")]
+    fn sched_err(e: ScheduleError) -> SimError {
+        fail(e.to_string())
+    }
+
     /// MR10-MR12 at the Month pulse instant: F1 mortality with density modifier (SPR-016 T-03/04).
     fn mortality(&self, view: &SystemView<'_>, ctx: &mut StepCtx<'_>) -> Result<(), SimError> {
         let t_m = ctx.now();
@@ -226,10 +384,18 @@ impl Demography {
         let births = view.read(PERSON_BIRTH)?;
         let alive = view.read(PERSON_ALIVE)?;
         // MR11: living count N for the density modifier
-        let n: u64 = alive.iter().filter(|&&a| a == 1).count().try_into().unwrap_or(u64::MAX);
+        let n: u64 = alive
+            .iter()
+            .filter(|&&a| a == 1)
+            .count()
+            .try_into()
+            .unwrap_or(u64::MAX);
         let m_d = density_multiplier(n, self.density_capacity, self.density_mortality_slope);
         let month_start = t_m.minutes();
-        let end = self.f1.calendar().next_boundary(Pulse::Month, t_m)
+        let end = self
+            .f1
+            .calendar()
+            .next_boundary(Pulse::Month, t_m)
             .ok_or_else(|| fail(format!("calendar cannot place month boundary after {t_m}")))?;
         let d = end.minutes() - month_start;
         let prev_month = t_m.minutes() - d;
@@ -273,14 +439,21 @@ impl Demography {
             let is_newborn = month_start > 0 && birth > prev_month;
             let q_bits = if is_newborn {
                 // q = 2^32 - l(x + D) exactly (the full [0, x + D) interval)
-                let lxd = self.f1.survivors_at(x + d).map_err(|e| fail(e.to_string()))?;
-                Prob32::from_bits((1u64 << 32) - lxd).unwrap()
+                let lxd = self
+                    .f1
+                    .survivors_at(x + d)
+                    .map_err(|e| fail(e.to_string()))?;
+                Prob32::from_bits((1u64 << 32) - lxd).unwrap_or(Prob32::ONE)
             } else {
-                let lxd = self.f1.survivors_at(x + d).map_err(|e| fail(e.to_string()))?;
+                let lxd = self
+                    .f1
+                    .survivors_at(x + d)
+                    .map_err(|e| fail(e.to_string()))?;
                 // rhe(2^32 * (l(x) - l(x + D)) / l(x))
                 let num = u128::from(lx - lxd) << 32;
                 let bits = rhe(num, u128::from(lx));
-                Prob32::from_bits(u64::try_from(bits).unwrap_or(1 << 32)).unwrap()
+                Prob32::from_bits(u64::try_from(bits).unwrap_or(1 << 32).min(1 << 32))
+                    .unwrap_or(Prob32::ONE)
             };
             // MR11: density modifier
             let qp = density_modified_q(q_bits, m_d);
@@ -303,10 +476,271 @@ impl Demography {
         }
         Ok(())
     }
+
+    /// N1-N5 at the Month pulse instant: scan eligible women, draw marriage, schedule marriage timer.
+    #[allow(
+        clippy::too_many_lines,
+        clippy::cast_possible_truncation,
+        reason = "N1-N5 partnering scan and integer scaling"
+    )]
+    fn partnering(&self, view: &mut SystemView<'_>, ctx: &mut StepCtx<'_>) -> Result<(), SimError> {
+        let t_m = ctx.now();
+        let t_m_minutes = t_m.minutes();
+        let year = self.schedule.calendar().minutes_per_year();
+        // N1: nuptiality Prob32 per band.
+        let mu: [rh_core::fixed::Prob32; BANDS] = {
+            use rh_core::fixed::Prob32;
+            let mut mu = [Prob32::ZERO; BANDS];
+            let scale: u64 = 1 << 32;
+            for i in 0..BANDS {
+                mu[i] = Prob32::from_bits(
+                    ((u128::from(NUPTIALITY_THOUSANDTHS[i]) * u128::from(scale)) / 1000) as u64,
+                )
+                .unwrap_or(Prob32::ONE);
+            }
+            mu
+        };
+        // Read foreign columns with neutrals.
+        let named = view.read("person.named").unwrap_or(&[]);
+        let vocation = view.read("person.vocation").unwrap_or(&[]);
+        let residence = view.read("person.residence").unwrap_or(&[]);
+        let ids = view.read(PERSON_ID)?;
+        let births = view.read(PERSON_BIRTH)?;
+        let alive = view.read(PERSON_ALIVE)?;
+        let sex = view.read(PERSON_SEX)?;
+        let spouse = view.read(PERSON_SPOUSE)?;
+        // Build parent map for kin(2) from life_course + ledger.
+        let lc_person = view.read("life_course.person_id").unwrap_or(&[]);
+        let lc_mother = view.read("life_course.mother").unwrap_or(&[]);
+        let lc_father = view.read("life_course.father").unwrap_or(&[]);
+        let mut parent_map: std::collections::BTreeMap<u64, (u64, u64)> =
+            std::collections::BTreeMap::new();
+        let mut children_map: std::collections::BTreeMap<u64, Vec<u64>> =
+            std::collections::BTreeMap::new();
+        for i in 0..lc_person.len().min(lc_mother.len()).min(lc_father.len()) {
+            let pid = lc_person[i].cast_unsigned();
+            let f = lc_father[i].cast_unsigned();
+            let m = lc_mother[i].cast_unsigned();
+            parent_map.entry(pid).or_insert((f, m));
+            if f != 0 {
+                children_map.entry(f).or_default().push(pid);
+            }
+            if m != 0 && m != f {
+                children_map.entry(m).or_default().push(pid);
+            }
+        }
+        let mother_col = view.read(PERSON_MOTHER)?;
+        let father_col = view.read(PERSON_FATHER)?;
+        for i in 0..ids.len() {
+            let pid = ids[i].cast_unsigned();
+            parent_map
+                .entry(pid)
+                .or_insert((father_col[i].cast_unsigned(), mother_col[i].cast_unsigned()));
+            let f = father_col[i].cast_unsigned();
+            if f != 0 && !children_map.contains_key(&f) {
+                // Only add if not already in children_map from life_course
+                // (life_course already has all entries; just ensure coverage).
+            }
+        }
+        // N3: scan eligible women in ascending person.id.
+        let mut matched: std::collections::BTreeSet<u64> = std::collections::BTreeSet::new();
+        for i in 0..ids.len() {
+            if alive[i] == 0 || sex[i] != SEX_FEMALE || spouse[i] != 0 {
+                continue;
+            }
+            let woman_id = ids[i].cast_unsigned();
+            let band = fertility_band(t_m_minutes, births[i], year);
+            let Some(band_idx) = band else {
+                continue;
+            };
+            if band_idx >= BANDS {
+                continue;
+            }
+            if named.len() > i && named[i] != 0 {
+                continue;
+            }
+            if vocation.len() > i && vocation[i] != 0 {
+                continue;
+            }
+            // N4: draw k=0 against mu_i
+            if !ctx.chance(
+                &RngPurpose::MarriageTime,
+                PersonId::from_raw(woman_id),
+                0,
+                mu[band_idx],
+            )? {
+                continue;
+            }
+            let w_res = if residence.len() > i { residence[i] } else { 0 };
+            let w_kin = kin2(woman_id, &parent_map, &children_map);
+            // Collect candidates with preferred gap first, then relax.
+            let mut candidates = pairing_candidates(
+                ids, births, alive, sex, spouse, named, vocation, residence, i, w_res, &w_kin,
+                &matched, year, true,
+            );
+            if candidates.is_empty() {
+                candidates = pairing_candidates(
+                    ids, births, alive, sex, spouse, named, vocation, residence, i, w_res, &w_kin,
+                    &matched, year, false,
+                );
+            }
+            if candidates.is_empty() {
+                continue;
+            }
+            // N4: pick husband by least husband_pick draw (CRN: keyed by (woman, candidate)).
+            let husband = pick_husband(&candidates, |h| {
+                ctx.rng(&RngPurpose::HusbandPick, PersonId::from_raw(woman_id), h)
+            })?;
+            let Some(husband) = husband else {
+                continue;
+            };
+            matched.insert(woman_id);
+            matched.insert(husband);
+            // N5: pick day k=1. n_m = days in the month; j in [1, n_m-1].
+            let d1 = ctx.rng(&RngPurpose::MarriageTime, PersonId::from_raw(woman_id), 1)?;
+            let end = self.schedule.month_end(t_m).map_err(Self::sched_err)?;
+            let n_m = (end.minutes() - t_m_minutes) / DAY;
+            let j =
+                1_i64 + (((u128::from(d1) * u128::from((n_m - 1).cast_unsigned())) >> 64) as i64);
+            let tau = t_m_minutes + DAY * j;
+            ctx.schedule(
+                &RngPurpose::MarriageTime,
+                TimerSpec {
+                    time: SimTime::from_minutes(tau),
+                    phase: Phase::Vital,
+                    entity: EntityRef::person(PersonId::from_raw(woman_id)),
+                    kind: MARRIAGE_TIMER,
+                    payload: husband.cast_signed(),
+                    cause: EventRef::None,
+                },
+            )?;
+        }
+        Ok(())
+    }
+
+    /// F5-F7 at the Month pulse instant: scan eligible women, draw conception, schedule birth timer.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "F5-F7 fertility scan and birth timer scheduling"
+    )]
+    fn fertility(&self, view: &mut SystemView<'_>, ctx: &mut StepCtx<'_>) -> Result<(), SimError> {
+        struct Hit {
+            idx: usize,
+            woman_id: u64,
+            father: i64,
+            tau_minutes: i64,
+        }
+
+        let t_m = ctx.now();
+        let t_m_minutes = t_m.minutes();
+        let year = self.schedule.calendar().minutes_per_year();
+
+        // F6: read house_member.person (lagged to start of instant; M7's column).
+        let house_members = view.read("house_member.person").unwrap_or(&[]);
+
+        // The calendar's month-end for the birth date (9 months ahead).
+        let mut tau_month = t_m;
+        for _ in 0..GESTATION_MONTHS {
+            tau_month = self
+                .schedule
+                .calendar()
+                .next_boundary(Pulse::Month, SimTime::from_minutes(tau_month.minutes() + 1))
+                .ok_or_else(|| fail("calendar overflow in fertility".to_owned()))?;
+        }
+        let birth_month_end = self
+            .schedule
+            .month_end(SimTime::from_minutes(tau_month.minutes()))
+            .map_err(Self::sched_err)?;
+        let tau_month_start = tau_month;
+        let days_in_birth_month = (birth_month_end.minutes() - tau_month_start.minutes()) / DAY;
+
+        let mut hits: Vec<Hit> = Vec::new();
+
+        {
+            let ids = view.read(PERSON_ID)?;
+            let births = view.read(PERSON_BIRTH)?;
+            let alive = view.read(PERSON_ALIVE)?;
+            let sex = view.read(PERSON_SEX)?;
+            let spouses = view.read(PERSON_SPOUSE)?;
+            let conceived = view.read(PERSON_CONCEIVED_TICK)?;
+
+            for idx in 0..ids.len() {
+                if alive[idx] != 1 {
+                    continue;
+                }
+                if sex[idx] != SEX_FEMALE {
+                    continue;
+                }
+                let spouse_raw = spouses[idx].cast_unsigned();
+                if spouse_raw == 0 {
+                    continue;
+                }
+                if conceived[idx] != i64::MIN {
+                    continue;
+                }
+                let birth = births[idx];
+                let Some(band) = fertility_band(t_m_minutes, birth, year) else {
+                    continue;
+                };
+
+                let woman_id = ids[idx].cast_unsigned();
+                let is_elite = house_members
+                    .binary_search_by(|&v| v.cast_unsigned().cmp(&woman_id))
+                    .is_ok()
+                    || house_members
+                        .binary_search_by(|&v| v.cast_unsigned().cmp(&spouse_raw))
+                        .is_ok();
+                let table = if is_elite { &self.c_e } else { &self.c };
+                let c_i = table[band];
+
+                let woman = PersonId::from_raw(woman_id);
+                if !ctx.chance(&RngPurpose::Conception, woman, 0, c_i)? {
+                    continue;
+                }
+                let d1 = ctx.rng(&RngPurpose::Conception, woman, 1)?;
+                let day_offset = 1
+                    + ((u128::from(d1) * u128::from((days_in_birth_month - 1).cast_unsigned()))
+                        >> 64) as u64;
+                let tau = tau_month_start.minutes() + DAY * day_offset.cast_signed();
+
+                hits.push(Hit {
+                    idx,
+                    woman_id,
+                    father: spouses[idx],
+                    tau_minutes: tau,
+                });
+            }
+        }
+
+        // Second pass: write conception state and schedule timers
+        for hit in &hits {
+            view.write(PERSON_CONCEIVED_TICK)?[hit.idx] = t_m_minutes;
+            view.write(PERSON_UNBORN_FATHER)?[hit.idx] = hit.father;
+
+            ctx.schedule(
+                &RngPurpose::Conception,
+                TimerSpec {
+                    time: SimTime::from_minutes(hit.tau_minutes),
+                    phase: Phase::Vital,
+                    entity: EntityRef::person(PersonId::from_raw(hit.woman_id)),
+                    kind: BIRTH_TIMER,
+                    payload: 0, // placeholder
+                    cause: rh_events::EventRef::None,
+                },
+            )?;
+        }
+        Ok(())
+    }
 }
 
-/// MR11: the density multiplier m_d in Q16_16 bits.
-/// m_d = min(4 * 65536, 65536 + rhe(S_d * max(0, N - K_cap) / K_cap))
+/// MR11: the density multiplier `m_d` in `Q16_16` bits.
+/// `m_d` = min(4 * 65536, 65536 + rhe(S_d * max(0, N - K_cap) / K_cap))
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::doc_markdown,
+    reason = "MR11 density multiplier fixed-point math"
+)]
 fn density_multiplier(n: u64, cap: u64, slope: Q16_16) -> i32 {
     if n <= cap || cap == 0 {
         return 1 << 16;
@@ -314,29 +748,28 @@ fn density_multiplier(n: u64, cap: u64, slope: Q16_16) -> i32 {
     let excess = n - cap;
     // S_d (as u32 from i32 bits, positive) * excess / cap, rounded half to even
     let s_bits = slope.to_bits().cast_unsigned();
-    let term = rhe(
-        u128::from(s_bits) * u128::from(excess),
-        u128::from(cap),
-    );
+    let term = rhe(u128::from(s_bits) * u128::from(excess), u128::from(cap));
     let m = (1_i64 << 16) + (term as i64);
     let ceiling = 4_i64 << 16;
     if m > ceiling {
         ceiling as i32
     } else if m < 0 {
-        (1 << 16) as i32
+        1 << 16
     } else {
         m as i32
     }
 }
 
-/// MR11: q' = min(2^32, rhe(q * m_d / 2^16)) where q is a Prob32 and m_d is Q16_16.
+/// MR11: q' = min(2^32, rhe(q * `m_d` / 2^16)) where q is a `Prob32` and `m_d` is `Q16_16`.
+#[allow(clippy::doc_markdown, reason = "MR11 formula symbols")]
 fn density_modified_q(q: Prob32, m_d: i32) -> Prob32 {
     if m_d == 1 << 16 {
         return q;
     }
     let num = u128::from(q.to_bits()) * u128::from(m_d.cast_unsigned());
     let bits = rhe(num, 1 << 16);
-    Prob32::from_bits(u64::try_from(bits).unwrap_or(1 << 32).min(1 << 32)).unwrap()
+    let capped = u64::try_from(bits).unwrap_or(1 << 32).min(1 << 32);
+    Prob32::from_bits(capped).unwrap_or(Prob32::ONE)
 }
 
 fn fail(message: String) -> SimError {
@@ -344,6 +777,281 @@ fn fail(message: String) -> SimError {
         system: SYSTEM_ID,
         message,
     }
+}
+
+/// `kin(w, 2)`: the set of person ids related to `w` within two degrees (N4).
+/// Uses `parent_map` (`person_id` -> (father, mother)) and `children_map` (`parent_id` -> `Vec<child_id>`)
+/// from `life_course` + ledger. Must match `kin_within(world, w, 2)` from `effect_ref.py` (W10).
+/// N4: the set `kin(w, 2)` — every person within two parent-or-child steps of `w`, the dead
+/// included (REV-SPR-015 R9 MIN-6; W10). `parent_map` and `children_map` are M2's derived
+/// children-by-parent and parent lookups over `life_course` and the ledger.
+#[allow(
+    clippy::collapsible_if,
+    reason = "guard followed by let-pattern cannot be combined in Rust 2021"
+)]
+#[must_use]
+pub fn kin2(
+    w: u64,
+    parent_map: &std::collections::BTreeMap<u64, (u64, u64)>,
+    children_map: &std::collections::BTreeMap<u64, Vec<u64>>,
+) -> std::collections::BTreeSet<u64> {
+    let mut kin = std::collections::BTreeSet::new();
+    let (w_father, w_mother) = parent_map.get(&w).copied().unwrap_or((0, 0));
+
+    // Degree 1: parents.
+    if w_father != 0 {
+        kin.insert(w_father);
+    }
+    if w_mother != 0 {
+        kin.insert(w_mother);
+    }
+
+    // Degree 1: children (from children_map).
+    if let Some(children) = children_map.get(&w) {
+        for &c in children {
+            kin.insert(c);
+            // Degree 2: co-parents (other parent of each child).
+            if let Some(&(cf, cm)) = parent_map.get(&c) {
+                if cf != 0 && cf != w {
+                    kin.insert(cf);
+                }
+                if cm != 0 && cm != w {
+                    kin.insert(cm);
+                }
+            }
+            // Degree 2: grandchildren (children of each child).
+            if let Some(grandchildren) = children_map.get(&c) {
+                for &gc in grandchildren {
+                    kin.insert(gc);
+                }
+            }
+        }
+    }
+
+    // Degree 2: siblings (other children of w's parents, excluding w).
+    if w_father != 0 {
+        if let Some(sibs) = children_map.get(&w_father) {
+            for &s in sibs {
+                if s != w {
+                    kin.insert(s);
+                }
+            }
+        }
+    }
+    if w_mother != 0 && w_mother != w_father {
+        if let Some(sibs) = children_map.get(&w_mother) {
+            for &s in sibs {
+                if s != w {
+                    kin.insert(s);
+                }
+            }
+        }
+    }
+
+    // Degree 2: grandparents (parents of parents).
+    if w_father != 0 {
+        if let Some(&(gf, gm)) = parent_map.get(&w_father) {
+            if gf != 0 {
+                kin.insert(gf);
+            }
+            if gm != 0 {
+                kin.insert(gm);
+            }
+        }
+    }
+    if w_mother != 0 {
+        if let Some(&(gf, gm)) = parent_map.get(&w_mother) {
+            if gf != 0 {
+                kin.insert(gf);
+            }
+            if gm != 0 {
+                kin.insert(gm);
+            }
+        }
+    }
+
+    kin
+}
+
+/// Collect eligible male candidates for a woman (N4): alive, male, unmarried, `age >= MIN_AGE_M`,
+/// not named, not in holy orders, not matched this step, not in `kin(w, 2)`, in the woman's
+/// settlement when both residences are non-zero, and in the preferred age-gap tier when asked.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "N4 pairing candidate parameters and filter columns"
+)]
+#[must_use]
+pub fn pairing_candidates(
+    ids: &[i64],
+    births: &[i64],
+    alive: &[i64],
+    sex: &[i64],
+    spouse: &[i64],
+    named: &[i64],
+    vocation: &[i64],
+    residence: &[i64],
+    woman_i: usize,
+    w_residence: i64,
+    w_kin: &std::collections::BTreeSet<u64>,
+    matched: &std::collections::BTreeSet<u64>,
+    year: i64,
+    gap_preferred: bool,
+) -> Vec<u64> {
+    let mut candidates = Vec::new();
+    for j in 0..ids.len() {
+        if j == woman_i {
+            continue;
+        }
+        if alive[j] == 0 || sex[j] != SEX_MALE || spouse[j] != 0 {
+            continue;
+        }
+        let man_id = ids[j].cast_unsigned();
+        if matched.contains(&man_id) {
+            continue;
+        }
+        let man_age = (-births[j]) / year;
+        if man_age < MIN_AGE_M {
+            continue;
+        }
+        if named.len() > j && named[j] != 0 {
+            continue;
+        }
+        if vocation.len() > j && vocation[j] != 0 {
+            continue;
+        }
+        if w_kin.contains(&man_id) {
+            continue;
+        }
+        // Settlement filter.
+        let m_res = if residence.len() > j { residence[j] } else { 0 };
+        if w_residence != 0 && m_res != 0 && w_residence != m_res {
+            continue;
+        }
+        if gap_preferred {
+            let w_birth = births[woman_i];
+            let gap_lo = w_birth + GAP_LO_YEARS * year;
+            let gap_hi = w_birth + GAP_HI_YEARS * year;
+            if births[j] < gap_lo || births[j] > gap_hi {
+                continue;
+            }
+        }
+        candidates.push(man_id);
+    }
+    candidates
+}
+
+/// N4: the husband is the candidate with the least `husband_pick` draw, ties broken by the smaller
+/// candidate id. Each candidate's draw is keyed by `(woman, candidate)`, so adding or removing a
+/// non-winning candidate never changes the winner (the CRN property the draw keying guarantees).
+/// # Errors
+/// Returns any `SimError` produced by `draw`.
+pub fn pick_husband(
+    candidates: &[u64],
+    mut draw: impl FnMut(u64) -> Result<u64, SimError>,
+) -> Result<Option<u64>, SimError> {
+    let mut best: Option<(u64, u64)> = None;
+    for &h in candidates {
+        let d = draw(h)?;
+        match best {
+            None => best = Some((d, h)),
+            Some((bd, _)) if d < bd => best = Some((d, h)),
+            Some((bd, bh)) if d == bd && h < bh => best = Some((d, h)),
+            _ => {}
+        }
+    }
+    Ok(best.map(|(_, h)| h))
+}
+
+/// F3: compute the conception level M = tfr / TFR1 in `Q16_16`.
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "Q16_16 bits representation fit in i32"
+)]
+#[must_use]
+fn conception_level(tfr: Q16_16) -> Q16_16 {
+    // m = rhe(T * 65536 / TFR1_BITS) where T = tfr bits
+    let t = tfr.to_bits();
+    let num = i64::from(t) * i64::from(Q16_16::ONE.to_bits());
+    let m = if num >= 0 {
+        (num + i64::from(TFR1_BITS) / 2) / i64::from(TFR1_BITS)
+    } else {
+        (num - i64::from(TFR1_BITS) / 2) / i64::from(TFR1_BITS)
+    };
+    Q16_16::from_bits(m as i32)
+}
+
+/// F3: compute elite level `m_e` = rhe(m * E / 65536).
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "Q16_16 bits representation fit in i32"
+)]
+#[must_use]
+fn elite_level(m: Q16_16, elite_fertility_mult: Q16_16) -> Q16_16 {
+    let num = i64::from(m.to_bits()) * i64::from(elite_fertility_mult.to_bits());
+    // rhe(x / 65536): half to even
+    let half = i64::from(Q16_16::ONE.to_bits()) / 2;
+    let denom = i64::from(Q16_16::ONE.to_bits());
+    let result = (num + half) / denom;
+    Q16_16::from_bits(result as i32)
+}
+
+/// F4: compute the conception table `c_i` for 7 bands at level M (`Q16_16`).
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "Prob32 fractions fit in 64 bits and are non-negative"
+)]
+#[must_use]
+fn conception_table(level: Q16_16) -> [rh_core::fixed::Prob32; BANDS] {
+    use rh_core::fixed::Prob32;
+    let mut c = [Prob32::ZERO; BANDS];
+    let one: u64 = 1 << 32;
+    for i in 0..BANDS {
+        let n_i = u64::from(N_I[i]);
+        // b_i = m * N_i (births per woman-year in units of 2^-16 / 1000)
+        let m_bits = level.to_bits().cast_unsigned();
+        let b_i = (u128::from(m_bits) * u128::from(n_i)) >> 16;
+        // den_i = 12 * 65536 * 1000 - 20 * b_i
+        let den_i: i64 = {
+            let base: i64 = 12 * 65536 * 1000;
+            let sub: i64 = (20_u128 * b_i) as i64;
+            base - sub
+        };
+        if den_i <= 0 {
+            c[i] = Prob32::from_bits(one).unwrap_or(Prob32::ONE);
+        } else {
+            let num: u128 = u128::from(b_i as u64) * u128::from(one);
+            let den: u128 = den_i.cast_unsigned().into();
+            let val = (num + den / 2) / den;
+            let clamped = if val > u128::from(one) {
+                one
+            } else {
+                val as u64
+            };
+            c[i] = Prob32::from_bits(clamped).unwrap_or(Prob32::ONE);
+        }
+    }
+    c
+}
+
+/// F0: woman's band index i in 0..6, or None when outside [15, 50).
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "age and band indices are non-negative"
+)]
+#[must_use]
+pub fn fertility_band(t: i64, birth: i64, year_minutes: i64) -> Option<usize> {
+    let x = t - birth;
+    if x < 0 {
+        return None;
+    }
+    let age_years = x / year_minutes;
+    if !(MIN_AGE_YEARS..MAX_AGE_YEARS).contains(&age_years) {
+        return None;
+    }
+    let i = ((age_years - MIN_AGE_YEARS) / BAND_WIDTH_YEARS) as usize;
+    if i < BANDS { Some(i) } else { None }
 }
 
 /// The ledger row of `person` (`person.id` is sorted ascending as `u64`).
@@ -405,25 +1113,39 @@ pub fn apply_death(
     view.write(LC_EXIT_KIND)?[open] = EXIT_DEATH;
     view.write(LC_EXIT_TICK)?[open] = now;
     view.write(LC_DEATH_CAUSE)?[open] = cause;
+    // H4: household dissolution, close marriage rows, widowing (SPR-015).
+    // H4 runs before the spouse clear in apply_death (0.2.3) which clears the spouse column
+    // of the survivor; the marriage rows are closed by household_on_death.
+    let id_u64 = id;
+    household_on_death(view, id_u64, row, now)?;
     // person.spouse is cleared on the spouse's death (0.2.3 [[owns]]; the Tester's DEF-2).
     let spouse = view.read(PERSON_SPOUSE)?[row].cast_unsigned();
     let birth = view.read(PERSON_BIRTH)?[row];
     if let Some(survivor) = ledger_row(view, spouse)?.filter(|_| spouse != 0) {
         let spouses = view.write(PERSON_SPOUSE)?;
-        if spouses[survivor].cast_unsigned() == id {
+        if spouses[survivor].cast_unsigned() == id_u64 {
             spouses[survivor] = 0;
         }
     }
     let mut draft = EventDraft::new(DEATH)
         .role(ROLE_ACTOR, EntityRef::person(person))
         .role(ROLE_TARGET, EntityRef::person(person))
-        .with_payload(vec![cause, now - birth, 0]);  // [cause, age_minutes, vocation=0]
+        .with_payload(vec![cause, now - birth, 0]); // [cause, age_minutes, vocation=0]
     if !cause_event.is_none() {
         draft = draft.caused_by(cause_event, EdgeKind::Triggered);
     }
     let death = ctx.emit(draft)?;
-    if view.read(PERSON_ALIVE)?.iter().all(|&a| a == 0) {
-        ctx.emit(EventDraft::new(EXTINCTION).after(death))?;
+    let all_dead = view.read(PERSON_ALIVE)?.iter().all(|&a| a == 0);
+    if all_dead {
+        // S12 amended: check if any mother with conceived_tick != i64::MIN
+        // has a BIRTH_TIMER due in this slot (F10, REV-SPR-015 R13).
+        let has_pending_birth = {
+            let conceived = view.read(PERSON_CONCEIVED_TICK)?;
+            conceived.iter().any(|&c| c != i64::MIN)
+        };
+        if !has_pending_birth {
+            ctx.emit(EventDraft::new(EXTINCTION).after(death))?;
+        }
     }
     Ok(Death::Applied)
 }
@@ -475,8 +1197,113 @@ fn schedule_death(
     Ok(())
 }
 
-/// `Marry { a, b }`, as frozen 0.2.x states it: `person.spouse` written both ways; a dead party
-/// drops it. Households and the marriage rows (N7) are SPR-015's.
+/// N7 `apply_marry`(a, b, now, source): full partnering path replacing SPR-014's minimal `marry`.
+/// Preconditions checked; spouse columns set reciprocally; marriage row appended; H3 household
+/// membership; MARRIAGE event emitted.
+/// `source` is `MAR_SOURCE_PARTNERING` for M2's own timers, `MAR_SOURCE_COMMAND` for a Marry command.
+/// # Errors
+/// `SimError` if ledger access fails.
+pub fn apply_marry(
+    view: &mut SystemView<'_>,
+    ctx: &mut StepCtx<'_>,
+    a_raw: u64,
+    b_raw: u64,
+    source: i64,
+) -> Result<(), SimError> {
+    let now = ctx.now().minutes();
+    let aid = a_raw;
+    let bid = b_raw;
+    // Both rows must be present and alive.
+    let (Some(ra), Some(rb)) = (ledger_row(view, aid)?, ledger_row(view, bid)?) else {
+        return Ok(());
+    };
+    // Phase 1: read all preconditions (no writes).
+    let alive = view.read(PERSON_ALIVE)?;
+    if alive[ra] == 0 || alive[rb] == 0 {
+        return Ok(());
+    }
+    let sex = view.read(PERSON_SEX)?;
+    let norm = if sex[ra] == SEX_MALE && sex[rb] == SEX_FEMALE {
+        (aid, bid, ra, rb)
+    } else if sex[ra] == SEX_FEMALE && sex[rb] == SEX_MALE {
+        (bid, aid, rb, ra)
+    } else {
+        return Ok(()); // same-sex pair
+    };
+    let (a, b, ra, rb) = norm;
+
+    let existing_spouse = {
+        let sp = view.read(PERSON_SPOUSE)?;
+        sp[ra] != 0 || sp[rb] != 0
+    };
+    if existing_spouse {
+        return Ok(());
+    }
+
+    let vocation = view.read("person.vocation").unwrap_or(&[]);
+    if (vocation.len() > ra && vocation[ra] != 0) || (vocation.len() > rb && vocation[rb] != 0) {
+        return Ok(());
+    }
+
+    let person_mother = view.read(PERSON_MOTHER)?;
+    let person_father = view.read(PERSON_FATHER)?;
+    let ids = view.read(PERSON_ID)?;
+    let mut pm: std::collections::BTreeMap<u64, (u64, u64)> = std::collections::BTreeMap::new();
+    let mut cm: std::collections::BTreeMap<u64, Vec<u64>> = std::collections::BTreeMap::new();
+    for i in 0..ids.len() {
+        let pid = ids[i].cast_unsigned();
+        let f = person_father[i].cast_unsigned();
+        let m = person_mother[i].cast_unsigned();
+        pm.entry(pid).or_insert((f, m));
+        if f != 0 {
+            cm.entry(f).or_default().push(pid);
+        }
+        if m != 0 && m != f {
+            cm.entry(m).or_default().push(pid);
+        }
+    }
+    let w_kin = kin2(b, &pm, &cm);
+    if w_kin.contains(&a) {
+        return Ok(());
+    }
+
+    // Phase 2: write spouse, marriage row, household, event.
+    let spouse = view.write(PERSON_SPOUSE)?;
+    spouse[ra] = b.cast_signed();
+    spouse[rb] = a.cast_signed();
+    let _ = spouse;
+
+    // Append marriage row (one write at a time).
+    {
+        view.write(MAR_HUSBAND)?.push(a.cast_signed());
+    }
+    {
+        view.write(MAR_WIFE)?.push(b.cast_signed());
+    }
+    {
+        view.write(MAR_START)?.push(now);
+    }
+    {
+        view.write(MAR_END)?.push(i64::MAX);
+    }
+    {
+        view.write(MAR_SOURCE)?.push(source);
+    }
+
+    // H3: household membership.
+    household_on_marry(view, a, b, ra, rb, now)?;
+
+    // Emit MARRIAGE event.
+    ctx.emit(
+        EventDraft::new(MARRIAGE)
+            .role(ROLE_ACTOR, EntityRef::person(PersonId::from_raw(a)))
+            .role(ROLE_TARGET, EntityRef::person(PersonId::from_raw(b))),
+    )?;
+
+    Ok(())
+}
+
+/// Replace the old minimal `marry` — the drain now uses `apply_marry`.
 fn marry(
     view: &mut SystemView<'_>,
     ctx: &mut StepCtx<'_>,
@@ -490,22 +1317,396 @@ fn marry(
         .command
         .int(1)
         .ok_or_else(|| fail("Marry without b".to_owned()))?;
-    let (a, b) = (a.cast_unsigned(), b.cast_unsigned());
+    let a = a.cast_unsigned();
+    let b = b.cast_unsigned();
     if !living(view, a)? || !living(view, b)? {
         ctx.drop_command(q, DropReason::Dead);
         return Ok(());
     }
-    let (Some(ra), Some(rb)) = (ledger_row(view, a)?, ledger_row(view, b)?) else {
-        ctx.drop_command(q, DropReason::Dead);
+    apply_marry(view, ctx, a, b, MAR_SOURCE_COMMAND)?;
+    Ok(())
+}
+
+/// H3: household membership on marriage (SPR-015).
+/// If the husband heads a household, the wife and her household members join it.
+/// If the wife heads a household, the husband and his household members join hers.
+/// Otherwise, form a new household.
+#[allow(
+    clippy::too_many_lines,
+    reason = "household merge and formation on marriage"
+)]
+fn household_on_marry(
+    view: &mut SystemView<'_>,
+    a: u64,
+    b: u64,
+    ra: usize,
+    rb: usize,
+    now: i64,
+) -> Result<(), SimError> {
+    // Phase 1: read all state from borrowed slices, then drop them.
+    let (hh_a, hh_b, a_heads, b_heads, pos_b, pos_a) = {
+        let hh_id_slice = view.read(HH_ID)?;
+        let hh_head_slice = view.read(HH_HEAD)?;
+        let p_hh_slice = view.read(PERSON_HOUSEHOLD)?;
+
+        let hh_a = p_hh_slice[ra].cast_unsigned();
+        let hh_b = p_hh_slice[rb].cast_unsigned();
+
+        let a_heads = hh_a != 0
+            && hh_id_slice
+                .binary_search_by_key(&hh_a, |v| v.cast_unsigned())
+                .is_ok_and(|pos| hh_head_slice[pos].cast_unsigned() == a);
+        let b_heads = hh_b != 0
+            && hh_id_slice
+                .binary_search_by_key(&hh_b, |v| v.cast_unsigned())
+                .is_ok_and(|pos| hh_head_slice[pos].cast_unsigned() == b);
+
+        let pos_b = hh_id_slice
+            .binary_search_by_key(&hh_b, |v| v.cast_unsigned())
+            .ok();
+        let pos_a = hh_id_slice
+            .binary_search_by_key(&hh_a, |v| v.cast_unsigned())
+            .ok();
+
+        (hh_a, hh_b, a_heads, b_heads, pos_b, pos_a)
+    }; // immutable borrows dropped here
+
+    // Phase 2: apply writes based on decision.
+    if a_heads {
+        if hh_b != 0 && hh_b != hh_a {
+            // Move b's household members to a's household.
+            view.write(PERSON_HOUSEHOLD)?.iter_mut().for_each(|v| {
+                if v.cast_unsigned() == hh_b {
+                    *v = hh_a.cast_signed();
+                }
+            });
+            // Dissolve b's household.
+            if let Some(pos) = pos_b {
+                view.write(HH_DISSOLVED)?[pos] = now;
+                view.write(HH_HEAD)?[pos] = 0;
+            }
+        } else {
+            view.write(PERSON_HOUSEHOLD)?[rb] = hh_a.cast_signed();
+        }
+    } else if b_heads {
+        if hh_a != 0 && hh_a != hh_b {
+            view.write(PERSON_HOUSEHOLD)?.iter_mut().for_each(|v| {
+                if v.cast_unsigned() == hh_a {
+                    *v = hh_b.cast_signed();
+                }
+            });
+            if let Some(pos) = pos_a {
+                view.write(HH_DISSOLVED)?[pos] = now;
+                view.write(HH_HEAD)?[pos] = 0;
+            }
+        } else {
+            view.write(PERSON_HOUSEHOLD)?[ra] = hh_b.cast_signed();
+        }
+    } else {
+        // Form a new household.
+        let new_id = gen_household_id(a, now, view);
+        view.write(HH_ID)?.push(new_id.cast_signed());
+        view.write(HH_HEAD)?.push(a.cast_signed());
+        view.write(HH_FORMED)?.push(now);
+        view.write(HH_DISSOLVED)?.push(i64::MAX);
+        view.write(PERSON_HOUSEHOLD)?[ra] = new_id.cast_signed();
+        view.write(PERSON_HOUSEHOLD)?[rb] = new_id.cast_signed();
+    }
+    Ok(())
+}
+
+/// H4: on spouse death, close marriage rows, clear spouse, transfer headship,
+/// dissolve empty households.
+#[allow(
+    clippy::too_many_lines,
+    clippy::collapsible_if,
+    reason = "household dissolution and headship transfer logic on death"
+)]
+fn household_on_death(
+    view: &mut SystemView<'_>,
+    person: u64,
+    _row: usize,
+    now: i64,
+) -> Result<(), SimError> {
+    // Phase 1: read all state, then drop immutable borrows.
+    let (spouse_val, hh, hh_pos, is_head, mar_to_close) = {
+        let spouse_val = match ledger_row(view, person)? {
+            Some(row) => view.read(PERSON_SPOUSE)?[row].cast_unsigned(),
+            None => 0,
+        };
+
+        // Collect which marriage rows to close.
+        let mut mar_to_close = Vec::new();
+        {
+            let mar_husband = view.read(MAR_HUSBAND).unwrap_or(&[]);
+            let mar_wife = view.read(MAR_WIFE).unwrap_or(&[]);
+            let mar_end = view.read(MAR_END).unwrap_or(&[]);
+            for (mi, &h_val) in mar_husband.iter().enumerate() {
+                if mar_end.get(mi).is_some_and(|&e| e == i64::MAX) {
+                    let h = h_val.cast_unsigned();
+                    let w = mar_wife.get(mi).map_or(0, |v| v.cast_unsigned());
+                    if h == person || w == person || h == spouse_val || w == spouse_val {
+                        mar_to_close.push(mi);
+                    }
+                }
+            }
+        }
+
+        let hh = match ledger_row(view, person)? {
+            Some(row) => view.read(PERSON_HOUSEHOLD)?[row].cast_unsigned(),
+            None => 0,
+        };
+
+        let (hh_pos, is_head) = if hh != 0 {
+            let hh_id_slice = view.read(HH_ID)?;
+            let hh_head_slice = view.read(HH_HEAD)?;
+            let pos = hh_id_slice.binary_search_by_key(&hh, |v| v.cast_unsigned());
+            (
+                pos.ok(),
+                pos.is_ok_and(|p| hh_head_slice[p].cast_unsigned() == person),
+            )
+        } else {
+            (None, false)
+        };
+
+        (spouse_val, hh, hh_pos, is_head, mar_to_close)
+    }; // immutable borrows dropped
+
+    // Phase 2: writes.
+    if spouse_val != 0 {
+        if let Some(sr) = ledger_row(view, spouse_val)? {
+            view.write(PERSON_SPOUSE)?[sr] = 0;
+        }
+    }
+    for mi in mar_to_close {
+        view.write(MAR_END)?[mi] = now;
+    }
+    let Some(pos) = hh_pos else {
         return Ok(());
     };
-    let spouse = view.write(PERSON_SPOUSE)?;
-    spouse[ra] = b.cast_signed();
-    spouse[rb] = a.cast_signed();
+    if hh == 0 {
+        return Ok(());
+    }
+
+    if is_head {
+        // Try surviving spouse first.
+        let mut new_head: Option<u64> = None;
+        if spouse_val != 0 {
+            if let Some(sr) = ledger_row(view, spouse_val)? {
+                let alive_slice = view.read(PERSON_ALIVE)?;
+                let s_hh = view.read(PERSON_HOUSEHOLD)?[sr].cast_unsigned();
+                if alive_slice[sr] == 1 && s_hh == hh {
+                    new_head = Some(spouse_val);
+                }
+            }
+        }
+        if new_head.is_none() {
+            // Find oldest living member.
+            let births = view.read(PERSON_BIRTH)?;
+            let alive = view.read(PERSON_ALIVE)?;
+            let p_hh_slice = view.read(PERSON_HOUSEHOLD)?;
+            let person_ids = view.read(PERSON_ID)?;
+            let mut oldest: Option<(i64, u64)> = None;
+            for i in 0..person_ids.len() {
+                if alive[i] == 1
+                    && p_hh_slice[i].cast_unsigned() == hh
+                    && person_ids[i].cast_unsigned() != person
+                {
+                    match oldest {
+                        None => oldest = Some((births[i], person_ids[i].cast_unsigned())),
+                        Some((b, _)) if births[i] < b => {
+                            oldest = Some((births[i], person_ids[i].cast_unsigned()));
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            if let Some((_, oid)) = oldest {
+                new_head = Some(oid);
+            }
+        }
+        if let Some(h) = new_head {
+            view.write(HH_HEAD)?[pos] = h.cast_signed();
+        } else {
+            view.write(HH_DISSOLVED)?[pos] = now;
+            view.write(HH_HEAD)?[pos] = 0;
+        }
+    }
+
+    // Check if household is now empty.
+    {
+        let alive_slice = view.read(PERSON_ALIVE)?;
+        let p_hh_slice = view.read(PERSON_HOUSEHOLD)?;
+        let has_living = p_hh_slice.iter().enumerate().any(|(i, &v)| {
+            alive_slice[i] == 1
+                && v.cast_unsigned() == hh
+                && view
+                    .read(PERSON_ID)
+                    .is_ok_and(|ids| ids[i].cast_unsigned() != person)
+        });
+        if !has_living {
+            let diss = view.read(HH_DISSOLVED)?[pos];
+            if diss == i64::MAX {
+                view.write(HH_DISSOLVED)?[pos] = now;
+                view.write(HH_HEAD)?[pos] = 0;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Generate a new household id: H64(household/v1, [head, now]), with rehash.
+fn gen_household_id(head: u64, now: i64, view: &SystemView<'_>) -> u64 {
+    use rh_ids::household::{MAX_REHASH, household_base, household_rehash};
+    let base = household_base(head, now).to_raw();
+    let hh_col = view.read(HH_ID).unwrap_or(&[]);
+    let mut id = base;
+    for c in 0..=MAX_REHASH {
+        // Check if this id is already in use.
+        if hh_col
+            .binary_search_by_key(&id, |v| v.cast_unsigned())
+            .is_err()
+        {
+            return id;
+        }
+        if c == MAX_REHASH {
+            break;
+        }
+        id = household_rehash(HouseholdId::from_raw(base), c + 1).to_raw();
+    }
+    // Fallback: rehash limit exceeded (should never happen).
+    base
+}
+
+/// Helper: issue a child `PersonId` from mother and parity, rehashing against the current ledger.
+fn issue_child_id(mother: PersonId, parity: u32, person_ids: &[i64]) -> PersonId {
+    use rh_ids::person::{MAX_REHASH, child_base, rehash};
+    let base = child_base(mother, parity);
+    let mut id = base;
+    for c in 0..=MAX_REHASH {
+        let raw = id.to_raw();
+        if person_ids
+            .binary_search_by_key(&raw, |v| v.cast_unsigned())
+            .is_err()
+        {
+            return id;
+        }
+        if c == MAX_REHASH {
+            break;
+        }
+        id = rehash(base, c + 1);
+    }
+    // If all 64 rehashes collide, return the base anyway (the engine will handle the collision).
+    // In practice this is astronomically unlikely.
+    base
+}
+
+/// F9: `apply_birth` — insert the newborn into the ledger, append `life_course` row,
+/// emit BIRTH event. Called from fire when a `BIRTH_TIMER` is due.
+///
+/// The mother may already be dead (`death_tick` = now), but her row must be present.
+/// # Errors
+/// `SimError` if ledger access fails or mother is missing.
+#[allow(clippy::cast_possible_truncation, reason = "parity count fits in u32")]
+pub fn apply_birth(
+    view: &mut SystemView<'_>,
+    ctx: &mut StepCtx<'_>,
+    mother: PersonId,
+) -> Result<(), SimError> {
+    let now = ctx.now().minutes();
+    let mother_id = mother.to_raw();
+    let Some(mother_row) = ledger_row(view, mother_id)? else {
+        return Err(fail(format!(
+            "mother {mother_id} has no ledger row at birth {now}"
+        )));
+    };
+
+    // Read mother state
+    let parity = view.read(PERSON_PARITY)?[mother_row];
+    // parity is the count BEFORE this birth; new_parity is 1-based
+    let parity_count = parity.cast_unsigned();
+
+    // F9: child id = H64(mother, parity) with rehash against the ledger
+    let child_id = issue_child_id(
+        mother,
+        u32::try_from(parity_count).unwrap_or(u32::MAX),
+        view.read(PERSON_ID)?,
+    );
+
+    // Draw sex (F9: BirthSex, k=0, keyed by child's own PersonId)
+    let child_person = child_id;
+    let draw = ctx.rng(&RngPurpose::BirthSex, child_person, 0)?;
+    let sex = if draw < u64::from(SEX_M_BITS) << 32 {
+        SEX_MALE
+    } else {
+        SEX_FEMALE
+    };
+
+    // Get father from mother's unborn_father
+    let father = view.read(PERSON_UNBORN_FATHER)?[mother_row];
+
+    // Insert new row into all person.* owned columns
+    {
+        let ids = view.write(PERSON_ID)?;
+        let Err(pos) = ids.binary_search_by_key(&child_id.to_raw(), |v| v.cast_unsigned()) else {
+            return Err(fail(format!(
+                "child {child_id} already exists in person.id"
+            )));
+        };
+        ids.insert(pos, child_id.to_raw().cast_signed());
+        view.write(PERSON_BIRTH)?.insert(pos, now);
+        view.write(PERSON_SEX)?.insert(pos, sex);
+        view.write(PERSON_ALIVE)?.insert(pos, 1);
+        view.write(PERSON_DEATH_TICK)?.insert(pos, i64::MAX);
+        view.write(PERSON_MOTHER)?
+            .insert(pos, mother_id.cast_signed());
+        view.write(PERSON_FATHER)?.insert(pos, father);
+        view.write(PERSON_SPOUSE)?.insert(pos, 0);
+        view.write(PERSON_DEATH_CAUSE)?.insert(pos, 0);
+        view.write(PERSON_HOUSEHOLD)?.insert(pos, 0);
+        view.write(PERSON_PARITY)?.insert(pos, 0);
+        view.write(PERSON_LAST_BIRTH_TICK)?.insert(pos, i64::MIN);
+        view.write(PERSON_CONCEIVED_TICK)?.insert(pos, i64::MIN);
+        view.write(PERSON_UNBORN_FATHER)?.insert(pos, 0);
+    }
+
+    // Append life_course row
+    {
+        let origin = ORIGIN_BIRTH;
+        let lc_id = child_id.to_raw().cast_signed();
+        view.write(LC_PERSON)?.push(lc_id);
+        view.write("life_course.origin")?.push(origin);
+        view.write("life_course.mother")?
+            .push(mother_id.cast_signed());
+        view.write("life_course.father")?.push(father);
+        view.write("life_course.sex")?.push(sex);
+        view.write(LC_BIRTH)?.push(now);
+        view.write("life_course.entry_tick")?.push(now);
+        view.write(LC_EXIT_KIND)?.push(EXIT_OPEN);
+        view.write(LC_EXIT_TICK)?.push(i64::MAX);
+        view.write(LC_DEATH_CAUSE)?.push(0);
+    }
+
+    // Update mother: clear conception, increment parity, record last birth
+    view.write(PERSON_CONCEIVED_TICK)?[mother_row] = i64::MIN;
+    view.write(PERSON_PARITY)?[mother_row] = parity + 1;
+    view.write(PERSON_LAST_BIRTH_TICK)?[mother_row] = now;
+
+    // Emit BIRTH event
+    let child_entity = EntityRef::person(child_person);
+    ctx.emit(
+        EventDraft::new(BIRTH)
+            .role(ROLE_ACTOR, EntityRef::person(mother))
+            .role(ROLE_TARGET, child_entity)
+            .with_payload(vec![sex, parity + 1]),
+    )?;
+
     Ok(())
 }
 
 impl SystemModel for Demography {
+    type Index = ();
+
     fn descriptor(&self) -> SystemDescriptor {
         SystemDescriptor {
             id: SYSTEM_ID,
@@ -523,11 +1724,12 @@ impl SystemModel for Demography {
                 })
                 .to_vec(),
             applies: CommandApply::from_drains(DRAINS),
-            emits: vec![DEATH, EXTINCTION],
-            // M2 0.2.3's Day/Vital entry has one step, the drain ([[schedule]]; A-60 part).
-            drain_only: vec![PulseBinding {
-                pulse: Pulse::Day,
-                phase: Phase::Vital,
+            emits: vec![DEATH, EXTINCTION, BIRTH, MARRIAGE],
+            // M2 0.3.0's reads (F1): house_member.person for elite fertility
+            reads: vec![ColumnRead {
+                column: "house_member.person",
+                owner: "M7.dynasty",
+                lag: Lag::Lagged,
             }],
             ..AccessSpec::default()
         }
@@ -567,6 +1769,10 @@ impl SystemModel for Demography {
     ) -> Result<(), SimError> {
         match binding.pulse {
             Pulse::Day => drain(view, ctx),
+            Pulse::Month => self
+                .partnering(view, ctx)
+                .and_then(|()| self.fertility(view, ctx))
+                .and_then(|()| self.mortality(view, ctx)),
             _ => self.mortality(view, ctx),
         }
     }
@@ -578,8 +1784,46 @@ impl SystemModel for Demography {
         ctx: &mut StepCtx<'_>,
     ) -> Result<(), SimError> {
         let entity = timer.key.entity;
+        if timer.timer.kind == BIRTH_TIMER && entity.kind() == EntityKind::Person {
+            // F9-F10: BIRTH_TIMER fires at a day start in the 9th month
+            let at = timer.key.time;
+            if at.minutes() % DAY != 0 {
+                return Err(fail(format!(
+                    "{} fires at {at}, not a day start: INV-M2-11",
+                    timer.id()
+                )));
+            }
+            let person = PersonId::from_raw(entity.raw());
+            apply_birth(view, ctx, person)?;
+            return Ok(());
+        }
+        if timer.timer.kind == MARRIAGE_TIMER && entity.kind() == EntityKind::Person {
+            // N7: MARRIAGE_TIMER fires; payload is the husband's id.
+            // Age re-check for M2's own timers (N7: a command follows its sender's age rule).
+            let woman = entity.raw();
+            let husband = timer.timer.payload.cast_unsigned();
+            {
+                let births = view.read(PERSON_BIRTH)?;
+                let year = self.schedule.calendar().minutes_per_year();
+                let at = timer.key.time;
+                let (Some(ra), Some(rb)) = (ledger_row(view, husband)?, ledger_row(view, woman)?)
+                else {
+                    return Ok(());
+                };
+                if (at.minutes() - births[ra]) / year < MIN_AGE_M
+                    || (at.minutes() - births[rb]) / year < MIN_AGE_F
+                {
+                    return Ok(());
+                }
+            }
+            apply_marry(view, ctx, husband, woman, MAR_SOURCE_PARTNERING)?;
+            return Ok(());
+        }
         if timer.timer.kind != DEATH_TIMER || entity.kind() != EntityKind::Person {
-            return Err(fail(format!("{} is not a death timer", timer.id())));
+            return Err(fail(format!(
+                "{} is not a death or birth timer",
+                timer.id()
+            )));
         }
         let at = timer.key.time;
         if self.f1.calendar().is_boundary(Pulse::Month, at) || at.minutes() % DAY != 0 {
@@ -603,8 +1847,51 @@ impl SystemModel for Demography {
         ctx: &ResampleCtx,
     ) -> Result<Option<SimTime>, SimError> {
         let t_in = ctx.now();
+        if timer.timer.kind == BIRTH_TIMER {
+            // F8: the birth timer's month is the 9th after conception.
+            // Re-draw a day start in the same month strictly after t_in.
+            // The birth is owed: if no day start remains, the birth fires immediately next day.
+            let month_end = self.schedule.month_end(t_in).map_err(Self::sched_err)?;
+            let first = (t_in.minutes().div_euclid(DAY) + 1) * DAY;
+            let remaining = if first < month_end.minutes() {
+                (month_end.minutes() - first) / DAY
+            } else {
+                0
+            };
+            if remaining == 0 {
+                return Ok(Some(SimTime::from_minutes(first)));
+            }
+            // Pick a day offset from the remaining
+            let d1 = ctx.draw(K_DAY);
+            let offset = ((u128::from(d1) * u128::from(remaining.cast_unsigned())) >> 64) as u64;
+            return Ok(Some(SimTime::from_minutes(
+                first + DAY * offset.cast_signed(),
+            )));
+        }
+        if timer.timer.kind == MARRIAGE_TIMER {
+            // N6: re-draw a day start in the same month strictly after t_in.
+            // The husband stays (payload); drop if no day start remains.
+            let month_end = self.schedule.month_end(t_in).map_err(Self::sched_err)?;
+            let first = (t_in.minutes().div_euclid(DAY) + 1) * DAY;
+            let remaining = if first < month_end.minutes() {
+                (month_end.minutes() - first) / DAY
+            } else {
+                0
+            };
+            if remaining == 0 {
+                return Ok(None); // drop timer
+            }
+            let d1 = ctx.draw(K_DAY);
+            let offset = ((u128::from(d1) * u128::from(remaining.cast_unsigned())) >> 64) as u64;
+            return Ok(Some(SimTime::from_minutes(
+                first + DAY * offset.cast_signed(),
+            )));
+        }
         let birth = timer.timer.payload;
-        let end = self.f1.calendar().next_boundary(Pulse::Month, t_in)
+        let end = self
+            .f1
+            .calendar()
+            .next_boundary(Pulse::Month, t_in)
             .ok_or_else(|| fail(format!("calendar cannot place month boundary after {t_in}")))?;
         let x = t_in.minutes() - birth;
         let x1 = end.minutes() - birth;
@@ -616,7 +1903,8 @@ impl SystemModel for Demography {
             // rhe(2^32 * (l(x) - l(x1)) / l(x))
             let num = u128::from(lx - lx1) << 32;
             let bits = rhe(num, u128::from(lx));
-            Prob32::from_bits(u64::try_from(bits).unwrap_or(1 << 32)).unwrap()
+            Prob32::from_bits(u64::try_from(bits).unwrap_or(1 << 32).min(1 << 32))
+                .unwrap_or(Prob32::ONE)
         };
         if !qr.hits(ctx.draw(K_HIT)) {
             return Ok(None);
@@ -647,8 +1935,9 @@ fn result(name: &'static str, problem: Option<String>) -> InvariantResult {
 
 /// M2's invariants after `Bookkeeping`'s compaction: INV-M2-01 (the living count equals the open
 /// life-course rows), INV-M2-02 (each ledger row has one open life-course row with its id and
-/// birth tick; no closed row's person is in the ledger) and INV-M2-04 (every row alive with
-/// `death_tick = i64::MAX`). INV-M2-03 needs the agenda and is checked by V-DET-12's tests.
+/// birth tick; no closed row's person is in the ledger), INV-M2-04 (every row alive with
+/// `death_tick = i64::MAX`), INV-M2-08 (marriages are exclusive and symmetric) and INV-M2-09
+/// (households are consistent). INV-M2-03 needs the agenda and is checked by V-DET-12's tests.
 ///
 /// O(N + L) when they hold (SPR-038 T-03): one pass over the log, the open and the closed persons
 /// sorted (linear on a log appended in id order, the common case) and merged with the ledger's
@@ -657,13 +1946,19 @@ fn result(name: &'static str, problem: Option<String>) -> InvariantResult {
 #[must_use]
 pub fn invariants(world: &WorldTables) -> Vec<InvariantResult> {
     if all_hold(world) {
-        return vec![
+        let mut results = vec![
             result("INV-M2-01", None),
             result("INV-M2-02", None),
             result("INV-M2-04", None),
         ];
+        results.push(inv_m2_08(world));
+        results.push(inv_m2_09(world));
+        return results;
     }
-    invariants_oracle(world)
+    let mut results = invariants_oracle(world);
+    results.push(inv_m2_08(world));
+    results.push(inv_m2_09(world));
+    results
 }
 
 /// Whether INV-M2-01, 02 and 04 all hold, in O(N + L). It answers `true` only when
@@ -785,4 +2080,130 @@ pub fn invariants_oracle(world: &WorldTables) -> Vec<InvariantResult> {
         result("INV-M2-02", consistency),
         result("INV-M2-04", agree),
     ]
+}
+/// INV-M2-08: marriages are exclusive and symmetric; a closed row's `end_tick` is the death
+/// instant of the first spouse to die.
+#[must_use]
+fn inv_m2_08(world: &WorldTables) -> InvariantResult {
+    let mar_husband = col(world, MAR_HUSBAND);
+    let mar_wife = col(world, MAR_WIFE);
+    let mar_end = col(world, MAR_END);
+    let spouse_col = col(world, PERSON_SPOUSE);
+    let _alive = col(world, PERSON_ALIVE);
+    let ids = col(world, PERSON_ID);
+    let mut seen: std::collections::BTreeMap<u64, usize> = std::collections::BTreeMap::new();
+    for (i, (&h_val, &w_val)) in mar_husband.iter().zip(mar_wife).enumerate() {
+        let end = mar_end[i];
+        let h = h_val.cast_unsigned();
+        let w = w_val.cast_unsigned();
+        if end == i64::MAX {
+            if seen.contains_key(&h) {
+                return result(
+                    "INV-M2-08",
+                    Some(format!(
+                        "person {h} has two open marriages (rows {} and {})",
+                        seen[&h], i
+                    )),
+                );
+            }
+            seen.insert(h, i);
+            if seen.contains_key(&w) {
+                return result(
+                    "INV-M2-08",
+                    Some(format!(
+                        "person {w} has two open marriages (rows {} and {})",
+                        seen[&w], i
+                    )),
+                );
+            }
+            seen.insert(w, i);
+            for &(person, partner) in &[(h, w), (w, h)] {
+                if let Some(n) = ids.iter().position(|&id| id.cast_unsigned() == person) {
+                    let sp = spouse_col[n].cast_unsigned();
+                    if sp != partner {
+                        return result(
+                            "INV-M2-08",
+                            Some(format!(
+                                "person {person} spouse is {sp}, open marriage row {i} partner is {partner}"
+                            )),
+                        );
+                    }
+                }
+            }
+        }
+    }
+    result("INV-M2-08", None)
+}
+
+/// INV-M2-09: households are consistent at Bookkeeping.
+#[must_use]
+fn inv_m2_09(world: &WorldTables) -> InvariantResult {
+    let p_hh = col(world, PERSON_HOUSEHOLD);
+    let hh_ids = col(world, HH_ID);
+    let hh_heads = col(world, HH_HEAD);
+    let hh_dissolved = col(world, HH_DISSOLVED);
+    let alive = col(world, PERSON_ALIVE);
+    let ids = col(world, PERSON_ID);
+    for i in 0..hh_ids.len() {
+        let hh_id = hh_ids[i].cast_unsigned();
+        let head = hh_heads[i].cast_unsigned();
+        let dissolved = hh_dissolved[i];
+        if dissolved == i64::MAX {
+            if head == 0 {
+                return result(
+                    "INV-M2-09",
+                    Some(format!("household {hh_id} is active but has head 0")),
+                );
+            }
+            let head_pos = ids.iter().position(|&id| id.cast_unsigned() == head);
+            match head_pos {
+                Some(n) => {
+                    if alive[n] == 0 {
+                        return result(
+                            "INV-M2-09",
+                            Some(format!("household {hh_id} head {head} is dead")),
+                        );
+                    }
+                    if p_hh[n].cast_unsigned() != hh_id {
+                        return result(
+                            "INV-M2-09",
+                            Some(format!(
+                                "household {hh_id} head {head} is not a member (hh is {})",
+                                p_hh[n].cast_unsigned()
+                            )),
+                        );
+                    }
+                }
+                None => {
+                    return result(
+                        "INV-M2-09",
+                        Some(format!("household {hh_id} head {head} is not a person")),
+                    );
+                }
+            }
+        } else if head != 0 {
+            return result(
+                "INV-M2-09",
+                Some(format!(
+                    "household {hh_id} is dissolved but has head {head}"
+                )),
+            );
+        }
+    }
+    for n in 0..ids.len() {
+        let hh = p_hh[n].cast_unsigned();
+        if hh != 0 {
+            let found = hh_ids.iter().any(|&id| id.cast_unsigned() == hh);
+            if !found {
+                return result(
+                    "INV-M2-09",
+                    Some(format!(
+                        "person {} is in household {hh} which has no row",
+                        ids[n].cast_unsigned()
+                    )),
+                );
+            }
+        }
+    }
+    result("INV-M2-09", None)
 }

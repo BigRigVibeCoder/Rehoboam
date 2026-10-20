@@ -82,7 +82,7 @@ mod s5 {
 mod m2 {
     use rh_core::{Fixed, Phase, Pulse};
     include!("../../rh-core/tests/generated/M2_demography.rs");
-    purposes!(DeathTime);
+    purposes!(DeathTime, Conception, MarriageTime, BirthSex, HusbandPick);
 }
 
 #[allow(dead_code, reason = "generated items a stub does not use")]
@@ -164,6 +164,8 @@ struct OnSkeleton {
 }
 
 impl SystemModel for OnSkeleton {
+    type Index = ();
+
     fn descriptor(&self) -> SystemDescriptor {
         SystemDescriptor {
             id: self.id,
@@ -299,6 +301,8 @@ fn the_generated_params_are_q16_16() {
         eps_f: Fixed::from_ratio(1, 10).unwrap(),
         eps_m: Fixed::from_int(3),
         elite_fertility_mult: Fixed::from_ratio(16, 10).unwrap(),
+        density_capacity: 10_000_000,
+        density_mortality_slope: Fixed::ONE,
     };
     assert_eq!(p.e0.to_bits(), 85 << 16);
     let _ = s5::Params {
@@ -365,19 +369,20 @@ fn m2_registers_on_its_skeleton_and_s5_is_refused_without_its_owners() {
 fn commands_and_event_kinds_are_checked_against_the_real_specs() {
     use rh_core::access::CommandSend;
     let t = real_ownership();
-    let with =
-        |emits: Vec<&'static str>, target: Option<&'static str>| -> Vec<Box<dyn SystemModel>> {
-            let mut s5 = s5_system(s5::RngPurpose::names());
-            if let Some(target) = target {
-                s5.access.sends.push(CommandSend {
-                    command: "TieDelta",
-                    target,
-                });
-            }
-            let mut m2 = m2_system();
-            m2.access.emits = emits;
-            vec![Box::new(s5), Box::new(m2)]
-        };
+    let with = |emits: Vec<&'static str>,
+                target: Option<&'static str>|
+     -> Vec<Box<dyn SystemModel<Index = ()>>> {
+        let mut s5 = s5_system(s5::RngPurpose::names());
+        if let Some(target) = target {
+            s5.access.sends.push(CommandSend {
+                command: "TieDelta",
+                target,
+            });
+        }
+        let mut m2 = m2_system();
+        m2.access.emits = emits;
+        vec![Box::new(s5), Box::new(m2)]
+    };
     let Err(e) = register(with(vec!["DEATH"], None), &t.spec_table()) else {
         panic!("S5 has absent owners");
     };
@@ -397,7 +402,10 @@ fn commands_and_event_kinds_are_checked_against_the_real_specs() {
         "{:?}",
         e.reports
     );
-    let Err(e) = register(with(vec!["BIRTH"], Some("M2.demography")), &t.spec_table()) else {
+    let Err(e) = register(
+        with(vec!["MURDER_ATTEMPT"], Some("M2.demography")),
+        &t.spec_table(),
+    ) else {
         panic!("an undeclared kind and a wrong owner must be refused");
     };
     let rules: Vec<(&str, &str)> = e
@@ -578,6 +586,8 @@ struct Declared {
 }
 
 impl SystemModel for Declared {
+    type Index = ();
+
     fn descriptor(&self) -> SystemDescriptor {
         SystemDescriptor {
             id: self.id,
@@ -680,7 +690,7 @@ fn the_lint_and_registration_agree_on_one_fixture_set() {
             &["person.birth_tick", "person.alive", "person.alive"],
         ),
         ("M2.demography", &[], &["person.birth_tick", "person.sex"]),
-        ("M2.demography", &["person.residence"], &["person.alive"]),
+        ("M2.demography", &["title.holder"], &["person.alive"]),
         (
             "S5.daily_life",
             &["person.sex"],
@@ -844,10 +854,10 @@ fn as_specified(t: &Ownership, system: &'static str, _world: &[&'static str]) ->
 fn m2_m7_and_t1_register_together_as_specified() {
     let t = real_ownership();
     let world = ["M2.demography", "M7.dynasty", "T1.minds"];
-    let trio = || -> Vec<Box<dyn SystemModel>> {
+    let trio = || -> Vec<Box<dyn SystemModel<Index = ()>>> {
         world
             .iter()
-            .map(|&id| Box::new(as_specified(&t, id, &world)) as Box<dyn SystemModel>)
+            .map(|&id| Box::new(as_specified(&t, id, &world)) as Box<dyn SystemModel<Index = ()>>)
             .collect()
     };
     let r = register(trio(), &t.spec_table()).unwrap_or_else(|e| panic!("{e}"));
@@ -896,6 +906,8 @@ fn m2_m7_and_t1_register_together_as_specified() {
 struct WithRoles(OnSkeleton, &'static [(&'static str, rh_core::RoleId)]);
 
 impl SystemModel for WithRoles {
+    type Index = ();
+
     fn descriptor(&self) -> SystemDescriptor {
         self.0.descriptor()
     }
@@ -984,9 +996,9 @@ fn register_world(
     t: &Ownership,
     world: &[&'static str],
 ) -> Result<rh_core::register::Registered, rh_core::register::RegistrationError> {
-    let systems: Vec<Box<dyn SystemModel>> = world
+    let systems: Vec<Box<dyn SystemModel<Index = ()>>> = world
         .iter()
-        .map(|&id| Box::new(as_specified(t, id, world)) as Box<dyn SystemModel>)
+        .map(|&id| Box::new(as_specified(t, id, world)) as Box<dyn SystemModel<Index = ()>>)
         .collect();
     register(systems, &t.spec_table())
 }
@@ -1005,7 +1017,11 @@ fn v_inv_04_absent_owners_on_the_real_specs() {
     let t = real_ownership();
     // {M2}: M2 reads nothing foreign.
     let r = register_world(&t, &["M2.demography"]).unwrap_or_else(|e| panic!("{e}"));
-    assert!(r.dropped_reads("M2.demography").is_empty());
+    let dropped = r.dropped_reads("M2.demography");
+    assert!(dropped.contains(&("house_member.person", 0)), "{dropped:?}");
+    assert!(dropped.contains(&("person.named", 0)), "{dropped:?}");
+    assert!(dropped.contains(&("person.residence", 0)), "{dropped:?}");
+    assert!(dropped.contains(&("person.vocation", 0)), "{dropped:?}");
     // {M2, M7}: M7's rate read of M6 (exec_constraint) and mode read of T1 (person.named) are
     // dropped with their typed neutrals; nothing refused.
     let r = register_world(&t, &["M2.demography", "M7.dynasty"]).unwrap_or_else(|e| panic!("{e}"));

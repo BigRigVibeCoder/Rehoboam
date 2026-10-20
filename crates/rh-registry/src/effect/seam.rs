@@ -24,6 +24,7 @@
 //!
 //! REF: `specs/registry/effect_language_v0.md` §4.5, §4.6, §5.1, §6, §12 Q9; `05.1` §2 rules 1, 2.
 
+// LINT-ALLOW(hidden-state): per-evaluation environment caches
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -77,9 +78,13 @@ pub struct SystemViewHost<'h, 'v, D> {
     params: BTreeMap<String, Value>,
     days_per_year: i64,
     keys: BTreeMap<KindId, String>,
+    // LINT-ALLOW(hidden-state): per-evaluation environment caches
     rows: RefCell<BTreeMap<KindId, RowIndex>>,
+    // LINT-ALLOW(hidden-state): per-evaluation environment caches
     inverse: RefCell<BTreeMap<ColumnId, BTreeMap<u64, Vec<u64>>>>,
+    // LINT-ALLOW(hidden-state): per-evaluation environment caches
     children: RefCell<Option<BTreeMap<u64, Vec<u64>>>>,
+    // LINT-ALLOW(hidden-state): per-evaluation environment caches
     error: RefCell<Option<SimError>>,
 }
 
@@ -101,9 +106,13 @@ impl<'h, 'v, D: Draws> SystemViewHost<'h, 'v, D> {
             params,
             days_per_year,
             keys: BTreeMap::new(),
+            // LINT-ALLOW(hidden-state): per-evaluation environment caches
             rows: RefCell::new(BTreeMap::new()),
+            // LINT-ALLOW(hidden-state): per-evaluation environment caches
             inverse: RefCell::new(BTreeMap::new()),
+            // LINT-ALLOW(hidden-state): per-evaluation environment caches
             children: RefCell::new(None),
+            // LINT-ALLOW(hidden-state): per-evaluation environment caches
             error: RefCell::new(None),
         }
     }
@@ -319,6 +328,7 @@ pub struct StepDraws<'c, 's, P> {
     ctx: &'c StepCtx<'s>,
     env: &'c Env,
     purposes: std::marker::PhantomData<P>,
+    // LINT-ALLOW(hidden-state): per-evaluation environment caches
     error: RefCell<Option<SimError>>,
 }
 
@@ -330,6 +340,7 @@ impl<'c, 's, P: SpecPurpose> StepDraws<'c, 's, P> {
             ctx,
             env,
             purposes: std::marker::PhantomData,
+            // LINT-ALLOW(hidden-state): per-evaluation environment caches
             error: RefCell::new(None),
         }
     }

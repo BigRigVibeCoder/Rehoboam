@@ -33,6 +33,8 @@ impl Demography {
                     p.brass_beta,
                     p.density_capacity,
                     p.density_mortality_slope,
+                    p.tfr,
+                    p.elite_fertility_mult,
                     spec.calendar,
                 )
             })

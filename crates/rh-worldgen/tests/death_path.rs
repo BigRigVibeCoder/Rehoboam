@@ -187,6 +187,8 @@ fn living(v: &SystemView<'_>, who: PersonId) -> Result<bool, SimError> {
 }
 
 impl SystemModel for Sender {
+    type Index = ();
+
     fn descriptor(&self) -> SystemDescriptor {
         SystemDescriptor {
             id: self.id,
@@ -315,7 +317,7 @@ impl SystemModel for Sender {
     }
 }
 
-fn senders() -> Vec<Box<dyn SystemModel>> {
+fn senders() -> Vec<Box<dyn SystemModel<Index = ()>>> {
     vec![
         Box::new(Sender {
             id: "X7.murder",
@@ -384,6 +386,8 @@ fn engine_with(
             brass_beta: Q16_16::ONE,
             density_capacity: 10_000_000,
             density_mortality_slope: Q16_16::ONE,
+            tfr: Q16_16::from_bits(321_126), // 4.9 in Q16_16
+            elite_fertility_mult: Q16_16::ONE,
         }),
         founders: (0..founders)
             .map(|_| Founder {
@@ -392,13 +396,14 @@ fn engine_with(
                 age_years: Some(age),
             })
             .collect(),
+        households: Vec::new(),
     };
     let table = specs();
     let mut tables = rh_worldgen::genesis(&spec, &table).unwrap();
     tables.insert("x7.plan", x7.to_vec());
     tables.insert("x1.plan", x1.to_vec());
     edit(&mut tables);
-    let mut systems: Vec<Box<dyn SystemModel>> =
+    let mut systems: Vec<Box<dyn SystemModel<Index = ()>>> =
         vec![Box::new(Demography::from_world(&spec).unwrap().unwrap())];
     systems.extend(senders());
     let registered = register(systems, &table).unwrap_or_else(|e| panic!("{e}"));

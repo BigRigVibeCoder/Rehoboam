@@ -183,6 +183,10 @@ pub struct RunArgs {
     /// (`--test-pace-ms`; SPR-026 T-05): a slow host, so a viewer can be ahead of a resumed one.
     /// It changes no byte of the run. Never on a baseline.
     pub pace_ms: Option<u64>,
+    /// Speed band (`--pace <band>`; SPR-027 T-03).
+    pub pace: Option<String>,
+    /// Start held before the first instant (`--start paused`; SPR-027 T-03).
+    pub start_paused: bool,
 }
 
 impl RunArgs {
@@ -217,6 +221,8 @@ impl RunArgs {
             replay: false,
             poison: None,
             pace_ms: None,
+            pace: None,
+            start_paused: false,
         }
     }
 }
@@ -249,12 +255,20 @@ pub struct LiveHost {
     pub policy: rh_stream::live::Policy,
     /// The seal-latency clock.
     pub clock: Option<Arc<dyn rh_stream::writer::SealClock>>,
+    /// Host run nonce.
+    pub nonce: Option<u64>,
     /// Called once with the edge and the run directory.
     pub on_edge: OnEdge,
 }
 
-/// What a host does with the live edge once the stream exists ([`LiveHost::on_edge`]).
-pub type OnEdge = Box<dyn FnOnce(rh_stream::live::LiveEdge, &Path) -> Result<(), Error>>;
+/// What a host does with the live edge and governor once the stream exists ([`LiveHost::on_edge`]).
+pub type OnEdge = Box<
+    dyn FnOnce(
+        rh_stream::live::LiveEdge,
+        &Path,
+        Option<Arc<crate::governor::Governor>>,
+    ) -> Result<(), Error>,
+>;
 
 /// What a run leaves: its ladder and what the scheduler dispatched.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -328,14 +342,14 @@ impl Outcome {
 
 /// The smoke world's systems; with `leak`, `X7.smoke_market` inside [`crate::leak::Leaky`].
 #[must_use]
-pub fn smoke_systems(leak: bool) -> Vec<Box<dyn SystemModel>> {
+pub fn smoke_systems(leak: bool) -> Vec<Box<dyn SystemModel<Index = ()>>> {
     rh_sys_smoke::systems()
         .into_iter()
         .map(|s| {
             if leak && s.descriptor().id == "X7.smoke_market" {
-                Box::new(crate::leak::Leaky(s)) as Box<dyn SystemModel>
+                Box::new(crate::leak::Leaky(s)) as Box<dyn SystemModel<Index = ()>>
             } else {
-                s
+                s as Box<dyn SystemModel<Index = ()>>
             }
         })
         .collect()
@@ -596,6 +610,17 @@ pub fn run_live(args: &RunArgs, live: Option<LiveHost>) -> Result<Outcome, Error
             .map_err(|e| error("registration")(&e))
     };
     // VER-SPR-013-TEST DEF-4: every argument and input is checked before anything is created.
+    let run_dir = args.run_dir.clone().map(RunDir);
+    if live.is_some() && run_dir.is_none() {
+        return Err(Error(
+            "a live edge is served from a run directory (--socket needs --run-dir)".to_owned(),
+        ));
+    }
+    if args.start_paused && live.is_none() {
+        return Err(Error(
+            "--start paused is refused without --socket: nothing could resume the run".to_owned(),
+        ));
+    }
     if args.until.is_some_and(|u| u < 0 || u > args.years) {
         return Err(Error(format!(
             "--until {} is outside the horizon of {} years",
@@ -640,12 +665,6 @@ pub fn run_live(args: &RunArgs, live: Option<LiveHost>) -> Result<Outcome, Error
                 tick.minutes()
             );
         }
-    }
-    let run_dir = args.run_dir.clone().map(RunDir);
-    if live.is_some() && run_dir.is_none() {
-        return Err(Error(
-            "a live edge is served from a run directory (--socket needs --run-dir)".to_owned(),
-        ));
     }
     if args.poison.is_some() && args.vitals {
         return Err(Error(
@@ -770,10 +789,60 @@ pub fn run_live(args: &RunArgs, live: Option<LiveHost>) -> Result<Outcome, Error
         _ => None,
     };
     step(5);
+    // A resumed run starts after its keyframe's own instant: the stops it has nothing to run up
+    // to are the keyframe's state, which the continuous run already took its rung at.
+    let resumed = args.resume.is_some();
+    let first = stops(args, world.calendar)
+        .into_keys()
+        .find(|&t| t >= start && !(resumed && engine.next_instant().is_none_or(|n| n > t)));
+    let need_governor = live.is_some() || args.pace.is_some() || args.start_paused;
+    let governor = if need_governor {
+        let clock = Arc::new(crate::governor::RealClock::new());
+        let mpy = world.calendar.minutes_per_year();
+        let first_tick = first.map_or(0, rh_core::time::SimTime::minutes);
+        #[allow(
+            clippy::disallowed_types,
+            clippy::disallowed_methods,
+            reason = "tool plane: run nonce for control server and governor"
+        )]
+        let nonce = live.as_ref().and_then(|l| l.nonce).unwrap_or_else(|| {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| u64::try_from(d.as_nanos()).unwrap_or(u64::MAX))
+        });
+        let history = rh_protocol::control::History {
+            engine_build: world.provenance.build.clone(),
+            registry_version: world.provenance.registry_version.clone(),
+            manifest_hash: world.provenance.manifest_hash.clone(),
+            world_seed: world.seed,
+        };
+        let log_path = run_dir.as_ref().map(|d| d.0.join("run.log"));
+        let resume_tick = if args.resume.is_some() {
+            Some(start.minutes() - 1)
+        } else {
+            None
+        };
+        Some(Arc::new(crate::governor::Governor::new(
+            clock,
+            mpy,
+            first_tick,
+            nonce,
+            TIMELINE,
+            history,
+            args.pace.as_deref(),
+            args.start_paused,
+            args.resume.is_some(),
+            resume_tick,
+            log_path,
+            None,
+        )))
+    } else {
+        None
+    };
     // SPR-026: the live edge, before the first record is pushed (the socket exists first).
     if let (Some(l), Some(h), Some(dir)) = (live, host.as_mut(), &run_dir) {
         let edge = h.attach_live(l.policy, l.clock, args.stall)?;
-        (l.on_edge)(edge, &dir.0)?;
+        (l.on_edge)(edge, &dir.0, governor.clone())?;
     }
     // The genesis keyframe (year 0) is written for a full run's --keyframes directory (SPR-008)
     // only. A run directory has none: every keyframe there has its KEYFRAME marker in channel A,
@@ -789,23 +858,64 @@ pub fn run_live(args: &RunArgs, live: Option<LiveHost>) -> Result<Outcome, Error
     let mut months: Vec<u8> = Vec::new();
     // A perturbation restores the engine, which starts its count again: keep the earlier part.
     let mut dispatched = DispatchStats::default();
-    // A resumed run starts after its keyframe's own instant: the stops it has nothing to run up
-    // to are the keyframe's state, which the continuous run already took its rung at.
-    let resumed = args.resume.is_some();
-    let first = stops(args, world.calendar)
-        .into_keys()
-        .find(|&t| t >= start && !(resumed && engine.next_instant().is_none_or(|n| n > t)));
+    let mut tip: Option<i64> = if args.resume.is_some() {
+        Some(start.minutes() - 1)
+    } else {
+        None
+    };
     for (t, stop) in stops(args, world.calendar)
         .into_iter()
         .filter(|(t, _)| first.is_some_and(|f| *t >= f))
     {
-        let advanced = match host.as_mut() {
-            Some(h) => engine.advance_until(t, |_, tables| h.after_instant(tables)),
-            None => engine.advance_until(t, |_, _| {}),
+        let advanced = match (host.as_mut(), governor.as_ref()) {
+            (Some(h), Some(gov)) => {
+                let mut res = Ok(());
+                while let Some(nxt) = engine.next_instant() {
+                    if nxt > t {
+                        break;
+                    }
+                    let nxt_m = nxt.minutes();
+                    let cur_seq = h.next_seq();
+                    gov.wait_for_turn(nxt_m, tip, cur_seq)?;
+                    if let Err(e) = engine.advance_until(nxt, |_, tables| h.after_instant(tables)) {
+                        res = Err(e);
+                        break;
+                    }
+                    tip = Some(nxt_m);
+                    gov.after_instant(false, tip, h.next_seq());
+                }
+                res
+            }
+            (None, Some(gov)) => {
+                let mut res = Ok(());
+                while let Some(nxt) = engine.next_instant() {
+                    if nxt > t {
+                        break;
+                    }
+                    let nxt_m = nxt.minutes();
+                    gov.wait_for_turn(nxt_m, tip, 0)?;
+                    if let Err(e) = engine.advance_until(nxt, |_, _| {}) {
+                        res = Err(e);
+                        break;
+                    }
+                    tip = Some(nxt_m);
+                    gov.after_instant(false, tip, 0);
+                }
+                res
+            }
+            (Some(h), None) => engine.advance_until(t, |_, tables| h.after_instant(tables)),
+            (None, None) => engine.advance_until(t, |_, _| {}),
         };
         if let Err(e) = advanced {
             let tick = engine.crash_artifact().map_or(t.minutes(), |a| a.tick);
             ladder.failed = Some((tick, e.to_string()));
+            if let Some(gov) = governor.as_ref() {
+                gov.finish(
+                    "aborted",
+                    tip,
+                    host.as_ref().map_or(0, crate::stream::StreamHost::next_seq),
+                );
+            }
             host = None;
             break;
         }
@@ -869,6 +979,10 @@ pub fn run_live(args: &RunArgs, live: Option<LiveHost>) -> Result<Outcome, Error
         }
     }
     let stream = host.map(StreamHost::finish).transpose()?;
+    if let Some(gov) = governor.as_ref() {
+        let final_seq = stream.as_ref().map_or(0, |s| s.next_seq);
+        gov.finish("finished", tip, final_seq);
+    }
     match log {
         Some(log) => log.finish(&ladder)?,
         None => std::fs::write(&args.out, ladder.render()).map_err(|e| error("ladder")(&e))?,
@@ -1160,6 +1274,9 @@ fn stream_host(
             journal_inputs: identity.map(|p| p.inputs),
             journal_head: identity.map(|p| dump::hex(&p.head)),
             rung: Some(args.rung.name().to_owned()),
+            run_log: None,
+            first_keyframe_year: None,
+            engine_build_commit: crate::stream::engine_build_commit(),
         }
         .write(&dir.0)?;
         StreamHost::create(cfg, engine.tables(), rows, hook)
@@ -1172,6 +1289,8 @@ fn stream_host(
 #[must_use]
 pub fn mutant_features() -> Vec<&'static str> {
     let mut all = [
+        // rh_golden::MUTANTS (BCK-002 A-52)
+        crate::MUTANTS,
         rh_core::MUTANTS,
         rh_manifest::MUTANTS,
         rh_protocol::MUTANTS,

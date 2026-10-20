@@ -159,6 +159,24 @@ pub fn parse_run(words: &[String], repo: &Path) -> Result<RunArgs, Error> {
             "--resume" => args.resume = Some(PathBuf::from(value)),
             "--run-dir" => args.run_dir = Some(PathBuf::from(value)),
             "--inputs" => args.inputs = Some(PathBuf::from(value)),
+            "--pace" => {
+                if !rh_protocol::control::BANDS.contains(&value.as_str()) {
+                    return Err(bad(&format!(
+                        "--pace {value}: must be one of {}",
+                        rh_protocol::control::BANDS.join(", ")
+                    )));
+                }
+                args.pace = Some(value.to_owned());
+            }
+            "--start" => match value.as_str() {
+                "paused" => args.start_paused = true,
+                "running" => args.start_paused = false,
+                other => {
+                    return Err(bad(&format!(
+                        "--start {other}: must be 'paused' or 'running'"
+                    )));
+                }
+            },
             "--test-pace-ms" => args.pace_ms = Some(number("--test-pace-ms")?),
             "--test-poison" => {
                 args.poison = Some(
@@ -532,6 +550,7 @@ fn parse_tail(words: &[String], repo: &Path) -> Result<crate::tail::TailArgs, Er
         ..crate::tail::TailArgs::default()
     };
     let mut run_dir = None;
+    let mut channel_specified = false;
     let mut it = words.iter();
     while let Some(w) = it.next() {
         let mut value = || it.next().ok_or_else(|| bad(&format!("{w} needs a value")));
@@ -551,12 +570,44 @@ fn parse_tail(words: &[String], repo: &Path) -> Result<crate::tail::TailArgs, Er
             }
             "--follow" => args.follow = Some(value()?.clone()),
             "--kind" => args.kinds.push(value()?.clone()),
+            "--place" => args.place = Some(value()?.clone()),
+            "--pattern" => {
+                args.pattern = Some(value()?.clone());
+                if !channel_specified {
+                    args.channel_c = true;
+                }
+            }
+            "--min-tellability" => {
+                let v = value()?;
+                args.min_tellability = Some(
+                    v.parse()
+                        .map_err(|_| bad("--min-tellability is a number (0..255)"))?,
+                );
+            }
+            "--digest" => {
+                if it.clone().next().is_some_and(|next| next == "region") {
+                    let _ = it.next();
+                    return Err(bad("--digest region waits for regions in SPR-018"));
+                }
+                args.digest = true;
+            }
+            "--digest=region" => {
+                return Err(bad("--digest region waits for regions in SPR-018"));
+            }
+            s if s == "--sig" || s.starts_with("--sig") => {
+                return Err(bad(
+                    "--sig waits for channel-C significance in P2.1; use --min-tellability N instead",
+                ));
+            }
             // SPR-026 T-04: the sealed channel C.
-            "--channel" => match value()?.as_str() {
-                "A" => args.channel_c = false,
-                "C" => args.channel_c = true,
-                other => return Err(bad(&format!("--channel {other}: A or C"))),
-            },
+            "--channel" => {
+                channel_specified = true;
+                match value()?.as_str() {
+                    "A" => args.channel_c = false,
+                    "C" => args.channel_c = true,
+                    other => return Err(bad(&format!("--channel {other}: A or C"))),
+                }
+            }
             "--repo" => args.repo = PathBuf::from(value()?),
             flag if flag.starts_with("--") => return Err(bad(&format!("unknown flag {flag}"))),
             dir if run_dir.is_none() => run_dir = Some(PathBuf::from(dir)),
@@ -760,4 +811,127 @@ pub fn canonical_cmd(words: &[String], _repo: &Path) -> u8 {
             TOOL
         }
     }
+}
+
+/// `materialize <run-dir> (--tick T | --at-digest SEQ) [--dump <file>|-] [--hash-only] [--any-tick] [--repo R]`
+/// (SPR-027 T-02; [`crate::materialize`]).
+///
+/// Exit 0 on success, 64 on usage error, 2 on tool error.
+#[must_use]
+pub fn materialize_cmd(words: &[String], repo: &Path) -> u8 {
+    let args = match parse_materialize(words, repo) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("materialize: {e}");
+            return USAGE;
+        }
+    };
+    match crate::materialize::materialize_args(&args) {
+        Ok(m) => {
+            if args.dump_stdout {
+                print!("{}", m.dump.render());
+                eprintln!(
+                    "materialize: tick {} state_hash {:016x} from {}",
+                    m.tick,
+                    m.state_hash,
+                    if m.keyframe_tick >= 0 {
+                        format!("keyframe at tick {}", m.keyframe_tick)
+                    } else {
+                        "genesis".to_owned()
+                    }
+                );
+            } else if args.hash_only {
+                println!("{:016x}", m.state_hash);
+            } else {
+                if let Some(path) = &args.dump
+                    && let Err(e) = std::fs::write(path, m.dump.render())
+                {
+                    eprintln!("materialize: {}: {e}", path.display());
+                    return TOOL;
+                }
+                println!(
+                    "materialize: tick {} state_hash {:016x} from {}",
+                    m.tick,
+                    m.state_hash,
+                    if m.keyframe_tick >= 0 {
+                        format!("keyframe at tick {}", m.keyframe_tick)
+                    } else {
+                        "genesis".to_owned()
+                    }
+                );
+            }
+            OK
+        }
+        Err(e) => {
+            eprintln!("materialize: {e}");
+            TOOL
+        }
+    }
+}
+
+fn parse_materialize(
+    words: &[String],
+    repo: &Path,
+) -> Result<crate::materialize::MaterializeArgs, Error> {
+    let bad = |what: &str| Error(what.to_owned());
+    let mut run_dir = None;
+    let mut tick = None;
+    let mut at_digest = None;
+    let mut dump = None;
+    let mut dump_stdout = false;
+    let mut hash_only = false;
+    let mut any_tick = false;
+    let mut repo = repo.to_path_buf();
+    let mut it = words.iter();
+    while let Some(w) = it.next() {
+        let mut value = || it.next().ok_or_else(|| bad(&format!("{w} needs a value")));
+        match w.as_str() {
+            "--tick" => {
+                tick = Some(value()?.parse().map_err(|_| bad("--tick is a number"))?);
+            }
+            "--at-digest" => {
+                at_digest = Some(
+                    value()?
+                        .parse()
+                        .map_err(|_| bad("--at-digest is a sequence number"))?,
+                );
+            }
+            "--dump" => {
+                let v = value()?;
+                if v == "-" {
+                    dump_stdout = true;
+                } else {
+                    dump = Some(PathBuf::from(v));
+                }
+            }
+            "--hash-only" => hash_only = true,
+            "--any-tick" => any_tick = true,
+            "--repo" => repo = PathBuf::from(value()?),
+            flag if flag.starts_with("--") => return Err(bad(&format!("unknown flag {flag}"))),
+            dir if run_dir.is_none() => run_dir = Some(PathBuf::from(dir)),
+            extra => return Err(bad(&format!("unexpected {extra}"))),
+        }
+    }
+    let Some(run_dir) = run_dir else {
+        return Err(bad("a run directory is required"));
+    };
+    if tick.is_none() && at_digest.is_none() {
+        return Err(bad("either --tick <T> or --at-digest <SEQ> is required"));
+    }
+    if tick.is_some() && at_digest.is_some() {
+        return Err(bad("--tick and --at-digest are mutually exclusive"));
+    }
+    if dump_stdout && hash_only {
+        return Err(bad("--dump - and --hash-only are mutually exclusive"));
+    }
+    Ok(crate::materialize::MaterializeArgs {
+        repo,
+        run_dir,
+        tick,
+        at_digest,
+        dump,
+        dump_stdout,
+        hash_only,
+        any_tick,
+    })
 }

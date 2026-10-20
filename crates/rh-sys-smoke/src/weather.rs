@@ -66,6 +66,7 @@ impl Weather {
 }
 
 impl SystemModel for Weather {
+    type Index = ();
     from_skeleton!();
 
     fn access(&self) -> AccessSpec {

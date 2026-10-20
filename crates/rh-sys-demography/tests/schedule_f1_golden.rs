@@ -495,6 +495,8 @@ fn each_refusal_names_its_step() {
         Some(Q16_16::ZERO),
         Q16_16::ONE,
         10_000_000,
+        Q16_16::ZERO,
+        Q16_16::from_int(4),
         Q16_16::ONE,
         cal,
     )

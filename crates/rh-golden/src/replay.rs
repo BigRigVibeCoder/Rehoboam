@@ -196,7 +196,7 @@ fn check_into(run: &Path, into: &Path) -> Result<(), Error> {
 /// manifest hash must be the world's pinned manifest (the history tuple replay rebuilds), the
 /// ladder header must carry the same horizon, seed and tuple, and the stream's segments the same
 /// manifest hash and seed. An edited `run.toml` is refused by name, the tool exit code, as MIN-5.
-fn cross_check_tuple(
+pub(crate) fn cross_check_tuple(
     src: &RunDir,
     toml: &RunToml,
     world: &crate::world::Setup,
@@ -262,7 +262,7 @@ fn cross_check_tuple(
 /// scope and row digest), and every `INPUT` record its row. A mismatch is a tampered journal
 /// (refused by name, the tool exit code), never a "differs". A directory holding only `run.toml`
 /// and the journal (V-DET-18) has nothing to cross-check against.
-fn cross_check_inputs(src: &RunDir, journal: &Replay, mpy: i64) -> Result<(), Error> {
+pub(crate) fn cross_check_inputs(src: &RunDir, journal: &Replay, mpy: i64) -> Result<(), Error> {
     if !src.stream().is_dir() {
         return Ok(());
     }

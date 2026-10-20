@@ -72,7 +72,7 @@ pub const RESERVED_SYSTEM_IDS: [&str; 1] = ["rh-worldgen"];
 
 /// One registered system and what registration read from it.
 pub(crate) struct Entry {
-    pub(crate) model: Box<dyn SystemModel>,
+    pub(crate) model: Box<dyn SystemModel<Index = ()>>,
     pub(crate) id: &'static str,
     pub(crate) system_id: SystemId,
     pub(crate) access: AccessSpec,
@@ -91,7 +91,7 @@ pub(crate) struct Entry {
 }
 
 /// The registration entries of `systems`, sorted by id.
-fn entries_of(systems: Vec<Box<dyn SystemModel>>) -> Vec<Entry> {
+fn entries_of(systems: Vec<Box<dyn SystemModel<Index = ()>>>) -> Vec<Entry> {
     let mut entries: Vec<Entry> = systems
         .into_iter()
         .map(|model| {
@@ -305,7 +305,7 @@ fn violation(system: &str, rule: &'static str, message: String) -> Violation {
 /// # Errors
 /// [`RegistrationError`] with every violation of the rules in the module table.
 pub fn register(
-    systems: Vec<Box<dyn SystemModel>>,
+    systems: Vec<Box<dyn SystemModel<Index = ()>>>,
     specs: &SpecTable,
 ) -> Result<Registered, RegistrationError> {
     let entries = entries_of(systems);

@@ -261,7 +261,7 @@ impl Stub {
     }
 
     /// Boxes it for registration.
-    pub fn boxed(self) -> Box<dyn SystemModel> {
+    pub fn boxed(self) -> Box<dyn SystemModel<Index = ()>> {
         Box::new(self)
     }
 
@@ -304,6 +304,8 @@ impl Stub {
 }
 
 impl SystemModel for Stub {
+    type Index = ();
+
     fn descriptor(&self) -> SystemDescriptor {
         SystemDescriptor {
             id: self.id,
