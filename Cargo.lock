@@ -1045,6 +1045,7 @@ dependencies = [
  "rh-registry",
  "rh-snapshot",
  "rh-sys-demography",
+ "toml",
 ]
 
 [[package]]

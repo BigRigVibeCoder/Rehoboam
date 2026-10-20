@@ -30,6 +30,7 @@
 #![forbid(unsafe_code)]
 
 pub mod rng_purposes;
+pub mod worldgen_lite;
 
 use core::fmt;
 

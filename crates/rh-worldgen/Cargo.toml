@@ -1,6 +1,6 @@
 [package]
 name = "rh-worldgen"
-description = "World generation: the founders stub of SPR-011 ruling 10 (no raster, regions or settlements yet)"
+description = "World generation: founders, the elevation raster, regions, seats and routes (SPR-011, SPR-018)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -19,6 +19,7 @@ workspace = true
 rh-core = { version = "0.0.0", path = "../rh-core" }
 rh-ids = { version = "0.0.0", path = "../rh-ids" }
 rh-registry = { version = "0.0.0", path = "../rh-registry" }
+toml = "=1.1.8"
 
 # SPR-012 T-06 V-INV-11: genesis tables through a keyframe, with the real M2 system registered.
 [dev-dependencies]
