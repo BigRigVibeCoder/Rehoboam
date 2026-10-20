@@ -49,7 +49,12 @@ def test_there_are_mutant_features_to_guard() -> None:
             "mutant-bytes-window-only",
             "mutant-window-gap",
         ],
-        "rh-sys-demography": ["mutant-resample-day-k0", "mutant-resample-hit-k1"],
+        "rh-sys-demography": [
+            "mutant-m2-e0-plus-15",
+            "mutant-m2-fertility-x2",
+            "mutant-resample-day-k0",
+            "mutant-resample-hit-k1",
+        ],
     }
 
 

@@ -8,15 +8,22 @@ Governed by:
 
 from __future__ import annotations
 
+import hashlib
+import importlib.util
 import math
 import os
 import subprocess
+import sys
+import tomllib
 from pathlib import Path
+from types import ModuleType
 
 import duckdb
 import pytest
 
 from rehoboam_calib.bands import evaluate_band, evaluate_runs, load_bands
+from rehoboam_calib.compare import compare_ensembles, format_comparison_report
+from rehoboam_calib.ensemble import parse_seed_range
 from rehoboam_calib.read import parse_vitals_text, read_run_dir
 from rehoboam_calib.report import (
     format_report_v0,
@@ -421,3 +428,229 @@ def test_no_environment_or_clock_reads() -> None:
         assert "os.getenv" not in text, f"Illegal os.getenv in {py_file.name}"
         assert "time.time" not in text, f"Illegal time.time in {py_file.name}"
         assert "datetime.now" not in text, f"Illegal datetime.now in {py_file.name}"
+
+
+# -----------------------------------------------------------------------------
+# 5. Task T-03: Seed Parsing, Ensembles, Comparison, and Fixtures
+# -----------------------------------------------------------------------------
+
+
+def test_parse_seed_range() -> None:
+    """Test seed range parser across ranges, lists, combinations and error cases."""
+    assert parse_seed_range("1-5") == [1, 2, 3, 4, 5]
+    assert parse_seed_range("1,2,5,8") == [1, 2, 5, 8]
+    assert parse_seed_range("1-4,7,9-11") == [1, 2, 3, 4, 7, 9, 10, 11]
+    assert parse_seed_range("42") == [42]
+    assert parse_seed_range("3, 2, 1, 2") == [1, 2, 3]
+
+    with pytest.raises(ValueError, match="empty"):
+        parse_seed_range("")
+    with pytest.raises(ValueError, match="Invalid range"):
+        parse_seed_range("10-2")
+    with pytest.raises(ValueError, match="Invalid"):
+        parse_seed_range("foo")
+
+
+def _write_fake_run_dir(
+    dest: Path,
+    seed: int,
+    pop: tuple[int, int],
+    years: int,
+    ages_at_death: list[float],
+) -> None:
+    """Write minimal run directory for testing compare_ensembles."""
+    living_start, living_end = pop
+    dest.mkdir(parents=True, exist_ok=True)
+    run_toml = f"""# Test run
+world = "test_world"
+seed = {seed}
+years = {years}
+engine_build = "test"
+registry_version = "0.2.0"
+manifest_hash = "0000000000000000000000000000000000000000000000000000000000000000"
+"""
+    (dest / "run.toml").write_text(run_toml, encoding="utf-8")
+
+    con = duckdb.connect(database=":memory:")
+    seg_dir = dest / "stream" / "t0000000000" / "A" / "y0000"
+    seg_dir.mkdir(parents=True, exist_ok=True)
+
+    # step_digest
+    con.execute("CREATE TABLE step_digest (tick BIGINT, living INT)")
+    con.execute(
+        f"INSERT INTO step_digest VALUES (0, {living_start}), ({years * 518400}, {living_end})"
+    )
+    digest_path = (seg_dir / "step_digest.parquet").as_posix()
+    con.execute(f"COPY step_digest TO '{digest_path}' (FORMAT PARQUET)")
+
+    # life_course_entry
+    con.execute(
+        "CREATE TABLE life_course_entry AS SELECT 1 AS person_id, 0 AS birth_tick, 0 AS origin"
+    )
+    entry_path = (seg_dir / "life_course_entry.parquet").as_posix()
+    con.execute(f"COPY life_course_entry TO '{entry_path}' (FORMAT PARQUET)")
+
+    # life_course_exit
+    exit_rows = ", ".join(
+        f"({i + 1}, {int(age * 518400)}, 0)" for i, age in enumerate(ages_at_death)
+    )
+    if not exit_rows:
+        exit_rows = "(1, 12960000, 0)"
+    con.execute("CREATE TABLE life_course_exit (person_id BIGINT, tick BIGINT, exit_kind INT)")
+    con.execute(f"INSERT INTO life_course_exit VALUES {exit_rows}")
+    exit_path = (seg_dir / "life_course_exit.parquet").as_posix()
+    con.execute(f"COPY life_course_exit TO '{exit_path}' (FORMAT PARQUET)")
+    con.close()
+
+    vitals_txt = (
+        f"vitals: living {living_end} | start {living_start}\n"
+        "vitals: tip 0010-12 | pace 1.0 sim-years/s | state abc observation def narrative 123\n"
+    )
+    (dest / "vitals.txt").write_text(vitals_txt, encoding="utf-8")
+
+
+def test_compare_zero_variance_rule(tmp_path: Path) -> None:
+    """Enforce zero-variance rule: identical before/after runs return EQUIVALENT with diff 0."""
+    dir_a = tmp_path / "before"
+    dir_b = tmp_path / "after"
+
+    ages = [5.0] * 400 + [30.0] * 300 + [70.0] * 300
+    for s in [1, 2, 3]:
+        _write_fake_run_dir(dir_a / f"seed-{s}", s, (1000, 1020), 100, ages)
+        _write_fake_run_dir(dir_b / f"seed-{s}", s, (1000, 1020), 100, ages)
+
+    results, equivalent = compare_ensembles(dir_a, dir_b)
+    assert equivalent is True
+    assert len(results) == 4
+    for r in results:
+        assert r.verdict == "EQUIVALENT"
+        assert r.mean_diff == 0.0
+        assert r.se_diff == 0.0
+        assert r.ci_lo == 0.0
+        assert r.ci_hi == 0.0
+
+    report = format_comparison_report(dir_a, dir_b, results, equivalent)
+    assert "OVERALL VERDICT: EQUIVALENT" in report
+    assert "Zero-variance rule applies" in report
+
+
+def test_compare_mutant_growth_fails(tmp_path: Path) -> None:
+    """Correct build vs fertility mutant returns NOT EQUIVALENT on V-SF-01.r by name."""
+    dir_a = tmp_path / "before"
+    dir_b = tmp_path / "after_mutant"
+
+    ages = [5.0] * 400 + [30.0] * 300 + [70.0] * 300
+    for s in [1, 2, 3]:
+        # Before: 1000 -> 1010 in 100 years: r ~= 0.0001
+        _write_fake_run_dir(dir_a / f"seed-{s}", s, (1000, 1010), 100, ages)
+        # After mutant (fertility x2): 1000 -> 3000 in 100y: r ~= 0.011 (shifts >> 0.0004)
+        _write_fake_run_dir(dir_b / f"seed-{s}", s, (1000, 3000), 100, ages)
+
+    results, equivalent = compare_ensembles(dir_a, dir_b)
+    assert equivalent is False
+
+    vsf01_r_res = next(r for r in results if r.metric == "V-SF-01.r")
+    assert vsf01_r_res.verdict == "NOT_EQUIVALENT"
+    assert vsf01_r_res.mean_diff > 0.005
+
+    report = format_comparison_report(dir_a, dir_b, results, equivalent)
+    assert "OVERALL VERDICT: NOT EQUIVALENT" in report
+    assert "V-SF-01.r" in report
+
+
+def _m2_f1_mortality_ref() -> ModuleType:
+    ref_path = REPO_ROOT / "specs" / "demography" / "selftest_m2_f1_mortality.py"
+    spec = importlib.util.spec_from_file_location("selftest_m2_f1_mortality", ref_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["selftest_m2_f1_mortality"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_demography_1000_fixture_world() -> None:
+    """Verify fixture-demography_1000 manifest, pin, and ron file."""
+    demo_dir = REPO_ROOT / "tests" / "worlds" / "demography_1000"
+    manifest_yaml = demo_dir / "manifest.yaml"
+    world_toml = demo_dir / "world.toml"
+    world_ron = demo_dir / "world.ron"
+
+    assert manifest_yaml.is_file()
+    assert world_toml.is_file()
+    assert world_ron.is_file()
+
+    # Validate against registry via manifest_v0.py
+    cmd = [
+        str(VENV_PYTHON),
+        "-I",
+        str(REPO_ROOT / "specs" / "manifest" / "manifest_v0.py"),
+        "validate",
+        str(manifest_yaml),
+    ]
+    res = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    assert "VALID:" in res.stdout
+    assert "0 errors, 0 warnings" in res.stdout
+
+    # Pinned sha256 check
+    actual_hash = hashlib.sha256(manifest_yaml.read_bytes()).hexdigest()
+    with world_toml.open("rb") as f:
+        toml_data = tomllib.load(f)
+    assert toml_data["world"] == "fixture-demography_1000"
+    assert toml_data["manifest_sha256"] == actual_hash
+
+
+def test_mutant_m2_e0_plus_15_non_vacuous() -> None:
+    """Non-vacuous check: mutant-m2-e0-plus-15 at e0=45 fails V-SF-02 and V-SF-02b by name."""
+    ref = _m2_f1_mortality_ref()
+    sched_normal = ref.compile_schedule("30", "1")
+    l15_n = float(sched_normal.grid[ref.H.index(2 * ref.AGE_15)]) / (2**32)
+    l65_n = float(sched_normal.grid[ref.H.index(2 * ref.AGE_65)]) / (2**32)
+    q15_n = 1.0 - l15_n
+    l_ratio_n = l65_n / l15_n
+
+    assert abs(q15_n - 0.4443) < 0.001
+    assert abs(l_ratio_n - 0.3146) < 0.001
+
+    # Mutant: e0 = 30 + 15 = 45
+    sched_mutant = ref.compile_schedule("45", "1")
+    l15_m = float(sched_mutant.grid[ref.H.index(2 * ref.AGE_15)]) / (2**32)
+    l65_m = float(sched_mutant.grid[ref.H.index(2 * ref.AGE_65)]) / (2**32)
+    q15_m = 1.0 - l15_m
+    l_ratio_m = l65_m / l15_m
+
+    assert abs(q15_m - 0.2463) < 0.001
+    assert abs(l_ratio_m - 0.4530) < 0.001
+
+    # V-SF-02 band is [0.35, 0.55]: mutant q(15)=0.2463 falls ~10 points below
+    assert q15_m < 0.35, "Mutant must fall below V-SF-02 lower bound 0.35"
+
+    # V-SF-02b band is 0.3146 +/- 0.03 = [0.2846, 0.3446]: mutant 0.4530 shifts 0.14 above
+    assert l_ratio_m > 0.3446, "Mutant must exceed V-SF-02b upper bound 0.3446"
+
+
+def test_g1a_script_dry_run() -> None:
+    """Verify bin/g1a_ensembles.sh runs in dry-run mode for both session and weekly."""
+    script = REPO_ROOT / "bin" / "g1a_ensembles.sh"
+    assert script.is_file() and os.access(script, os.X_OK)
+
+    res_session = subprocess.run(
+        [str(script), "--dry-run"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert res_session.returncode == 0
+    assert "fixture-demography_1000" in res_session.stdout
+    assert "kingdom_10k" in res_session.stdout
+    assert "--seeds 1-32" in res_session.stdout
+    assert "--years 1000" in res_session.stdout
+
+    res_weekly = subprocess.run(
+        [str(script), "--mode", "weekly", "--dry-run"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert res_weekly.returncode == 0
+    assert "fixture-demography_1000" in res_weekly.stdout
+    assert "--years 300" in res_weekly.stdout

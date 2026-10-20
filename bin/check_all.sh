@@ -246,7 +246,7 @@ fp_contract_guard() {
         echo "$file sets CFLAGS without force = true, so an environment CFLAGS would replace it: $line"; bad=1
       fi
     done < <(grep -- 'fp-contract' "$file" | grep -vE '^[[:space:]]*#')
-  done < <(find "$root" \( -path "$root/target" -o -path "$root/.git" -o -path "$root/tests/lint_fixtures" \) -prune \
+  done < <(find "$root" \( -path "$root/target" -o -path "$root/.git" -o -path "$root/.claude" -o -path "$root/tests/lint_fixtures" \) -prune \
              -o -type f \( -path '*/.cargo/config' -o -path '*/.cargo/config.toml' \) -print)
   [ $bad -eq 0 ] && echo "no fp-contract in any RUSTFLAGS variable; none but CFLAGS = $FP_CONTRACT_OK in C/C++ compiler variables (CFLAGS, CXXFLAGS, CC, CXX) or .cargo/config under $root"
   return $bad

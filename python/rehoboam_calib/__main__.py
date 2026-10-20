@@ -18,6 +18,13 @@ from pathlib import Path
 from typing import Any
 
 from rehoboam_calib.bands import evaluate_runs, load_bands
+from rehoboam_calib.compare import add_compare_subparser, handle_compare
+from rehoboam_calib.ensemble import (
+    EnsembleConfig,
+    add_ensemble_subparser,
+    parse_seed_range,
+    run_ensemble,
+)
 from rehoboam_calib.read import RunData, read_run_dir
 from rehoboam_calib.report import (
     format_report_v0,
@@ -157,18 +164,34 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory to write output report.txt and report.md",
     )
 
+    add_ensemble_subparser(subparsers)
+    add_compare_subparser(subparsers)
+
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    """CLI main entry point for rehoboam_calib."""
-    parser = build_parser()
-    args = parser.parse_args(argv)
+def _handle_ensemble(args: argparse.Namespace) -> int:
+    """Dispatch ensemble execution."""
+    try:
+        seeds = parse_seed_range(args.seeds)
+    except ValueError as exc:
+        sys.stderr.write(f"Error parsing --seeds: {exc}\n")
+        return 1
+    cfg = EnsembleConfig(
+        world=args.world,
+        seeds=seeds,
+        years=args.years,
+        jobs=args.jobs,
+        out_dir=Path(args.out),
+        rh_cli_bin=Path(args.rust_bin) if args.rust_bin else None,
+        bands=_parse_band_ids(args.bands) if args.bands else None,
+        bands_config=args.bands_config,
+    )
+    return run_ensemble(cfg)
 
-    if args.subcommand != "report":
-        parser.print_help()
-        return 0
 
+def _handle_report(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    """Dispatch report generation."""
     if args.synthetic:
         return _handle_synthetic(args.out)
 
@@ -177,6 +200,29 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     return _handle_runs(args.runs, args.bands, args.bands_config, args.out)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """CLI main entry point for rehoboam_calib."""
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    if args.subcommand == "ensemble":
+        return _handle_ensemble(args)
+
+    if args.subcommand == "compare":
+        return handle_compare(
+            before_str=args.before,
+            after_str=args.after,
+            out_dir_str=args.out,
+            alpha=args.alpha,
+        )
+
+    if args.subcommand == "report":
+        return _handle_report(args, parser)
+
+    parser.print_help()
+    return 0
 
 
 if __name__ == "__main__":

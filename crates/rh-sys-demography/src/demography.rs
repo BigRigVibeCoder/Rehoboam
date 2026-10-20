@@ -321,7 +321,14 @@ impl Demography {
                 bits: brass_beta.to_bits(),
             });
         }
+        #[cfg(feature = "mutant-m2-e0-plus-15")]
+        let e0 = e0 + Q16_16::from_int(15);
+
         let schedule = Schedule::new(e0, calendar).map_err(DemographyError::Schedule)?;
+
+        #[cfg(feature = "mutant-m2-fertility-x2")]
+        let tfr = tfr * Q16_16::from_int(2);
+
         let m = conception_level(tfr);
         let m_e = elite_level(m, elite_fertility_mult);
         let c = conception_table(m);

@@ -1,0 +1,8 @@
+// Test fixture world for SPR-028 (M9 validation harness): not a golden world, no baseline.
+(
+    world: "fixture-demography_1000",
+    manifest: "tests/worlds/demography_1000/manifest.yaml",
+    manifest_sha256: "9349bdb852ee6c2c3dc677cb698c079fafed21a56dd53a65e5f013bd3cfda944",
+    registry: "specs/manifest/registry_v0.toml",
+    inputs: "tests/worlds/demography_1000/inputs.toml",
+)

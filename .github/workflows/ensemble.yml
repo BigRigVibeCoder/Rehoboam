@@ -1,0 +1,172 @@
+# V-GOLD-03 statistical ensemble equivalence testing (SPR-028 Task T-03).
+#
+# Governed by:
+#   CODEX/05_PROJECT/SPR-028_ValidationHarness.md §T-03, §T-04;
+#   docs/09_verification_and_validation.md §1.2, §3.1, §4 (V-GOLD-03).
+
+name: ensemble
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/ensemble.yml"
+      - "python/rehoboam_calib/**"
+      - "specs/validation/**"
+      - "crates/rh-golden/**"
+      - "crates/rh-cli/**"
+      - "crates/rh-sys-demography/**"
+  workflow_dispatch:
+    inputs:
+      base_ref:
+        description: "Base git ref / branch for before comparison"
+        required: true
+        default: "main"
+      head_ref:
+        description: "Candidate head git ref / branch for after comparison"
+        required: true
+        default: "HEAD"
+      world:
+        description: "Simulation world to evaluate"
+        required: true
+        default: "household"
+      seeds:
+        description: "Seeds range"
+        required: true
+        default: "1-32"
+      years:
+        description: "Simulation years per seed"
+        required: true
+        default: "200"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: V-GOLD-03 Equivalence Smoke Test (household 2 seeds x 10y)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Rust toolchain
+        run: |
+          rustup toolchain install
+          rustup show active-toolchain
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ensemble-smoke
+
+      - name: uv and Python 3.12
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.32"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: python/uv.lock
+
+      - name: Python environment from lock
+        run: uv sync --frozen --project python
+
+      - name: Build rh-cli release binary
+        run: cargo build --release -p rh-cli
+
+      - name: Run baseline ensemble (2 seeds x 10 years)
+        run: |
+          python/.venv/bin/python -m rehoboam_calib ensemble \
+            --world household \
+            --seeds 1-2 \
+            --years 10 \
+            --jobs 2 \
+            --out target/ensemble/smoke_base
+
+      - name: Compare baseline with itself (zero-variance rule -> EQUIVALENT)
+        run: |
+          python/.venv/bin/python -m rehoboam_calib compare \
+            --before target/ensemble/smoke_base \
+            --after target/ensemble/smoke_base \
+            --out target/ensemble/smoke_report
+
+      - name: Upload smoke comparison report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ensemble-smoke-report
+          path: target/ensemble/smoke_report/
+          if-no-files-found: warn
+
+  dispatch:
+    name: V-GOLD-03 Ensemble Comparison (${{ inputs.world }} ${{ inputs.seeds }} x ${{ inputs.years }}y)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Rust toolchain
+        run: |
+          rustup toolchain install
+          rustup show active-toolchain
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ensemble-dispatch
+
+      - name: uv and Python 3.12
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.32"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: python/uv.lock
+
+      - name: Python environment from lock
+        run: uv sync --frozen --project python
+
+      # Build and run before / base ref
+      - name: Checkout base ref and run ensemble
+        run: |
+          git checkout "${{ inputs.base_ref }}"
+          cargo build --release -p rh-cli
+          python/.venv/bin/python -m rehoboam_calib ensemble \
+            --world "${{ inputs.world }}" \
+            --seeds "${{ inputs.seeds }}" \
+            --years "${{ inputs.years }}" \
+            --jobs 4 \
+            --out target/ensemble/dispatch_before
+
+      # Build and run after / head ref
+      - name: Checkout head ref and run ensemble
+        run: |
+          git checkout "${{ inputs.head_ref }}"
+          cargo build --release -p rh-cli
+          python/.venv/bin/python -m rehoboam_calib ensemble \
+            --world "${{ inputs.world }}" \
+            --seeds "${{ inputs.seeds }}" \
+            --years "${{ inputs.years }}" \
+            --jobs 4 \
+            --out target/ensemble/dispatch_after
+
+      # Compare before and after
+      - name: Compare before and after ensembles (V-GOLD-03)
+        run: |
+          python/.venv/bin/python -m rehoboam_calib compare \
+            --before target/ensemble/dispatch_before \
+            --after target/ensemble/dispatch_after \
+            --out target/ensemble/dispatch_report
+
+      - name: Upload dispatch comparison report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ensemble-dispatch-report
+          path: target/ensemble/dispatch_report/
+          if-no-files-found: warn

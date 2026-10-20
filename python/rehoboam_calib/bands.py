@@ -19,13 +19,15 @@ from pathlib import Path
 from typing import Any
 
 from rehoboam_calib.read import RunData
-from rehoboam_calib.stats import clopper_pearson_ci, t_ci
+from rehoboam_calib.stats import clopper_pearson_ci, expected_spread, t_ci
 
 _MARGINAL_REL_TOL: float = 1e-9
 _MIN_SEEDS: int = 2
 _MIN_LIVING_RATIO_FLOOR: float = 1e-12
 _AGE_CHILD_LIMIT: float = 15.0
 _AGE_ADULT_LIMIT: float = 65.0
+_POP_RATIO_MIN: float = 0.3
+_POP_RATIO_MAX: float = 5.0
 
 _BUILTIN_BANDS: dict[str, dict[str, Any]] = {
     "V-SCALE-02": {
@@ -114,7 +116,11 @@ def _resolve_bounds(
     hi_bound = band_def.get("upper_bound")
     tol = band_def.get("tolerance")
     if tol is not None and lo_bound is None and hi_bound is None and sample_stat is not None:
-        target = band_def.get("target", 0.0)
+        target = band_def.get("target")
+        if target is None and band_def.get("id") == "V-SF-02b":
+            target = 0.3146
+        elif target is None:
+            target = 0.0
         lo_bound = target - tol
         hi_bound = target + tol
     return lo_bound, hi_bound
@@ -277,7 +283,21 @@ def _eval_vsf01_pop(runs: list[RunData], band_def: dict[str, Any]) -> BandVerdic
     mean_ratio = sum(pop_ratios) / len(pop_ratios)
     min_ratio = min(pop_ratios)
     max_ratio = max(pop_ratios)
-    return evaluate_band(band_def, mean_ratio, (min_ratio, max_ratio), n_seeds)
+
+    f0 = runs[0].demographics.living_start // 2 if runs else 500
+    years = runs[0].metadata.years if runs else 1000
+    s_y = expected_spread(max(f0, 1), max(years, 1))
+    outside = [
+        r.metadata.seed
+        for r in runs
+        if not (
+            _POP_RATIO_MIN
+            <= r.demographics.living_end / max(r.demographics.living_start, 1)
+            <= _POP_RATIO_MAX
+        )
+    ]
+    note = f"expected_spread={s_y:.4f}, seeds_outside={len(outside)}"
+    return evaluate_band(band_def, mean_ratio, (min_ratio, max_ratio), n_seeds, note=note)
 
 
 def _eval_vsf02(runs: list[RunData], band_def: dict[str, Any]) -> BandVerdict:

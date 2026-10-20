@@ -45,8 +45,12 @@ impl Demography {
 /// it is not; `python/tests/test_mutant_features.py` checks that every `mutant-*` feature of the
 /// crate is listed here.
 pub const MUTANTS: &[&str] = &[
-    #[cfg(feature = "mutant-resample-hit-k1")]
-    "mutant-resample-hit-k1",
+    #[cfg(feature = "mutant-m2-e0-plus-15")]
+    "mutant-m2-e0-plus-15",
+    #[cfg(feature = "mutant-m2-fertility-x2")]
+    "mutant-m2-fertility-x2",
     #[cfg(feature = "mutant-resample-day-k0")]
     "mutant-resample-day-k0",
+    #[cfg(feature = "mutant-resample-hit-k1")]
+    "mutant-resample-hit-k1",
 ];
