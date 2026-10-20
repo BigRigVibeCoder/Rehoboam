@@ -298,6 +298,8 @@ def test_sealed_rule_in_report_output() -> None:
     v07 = evaluate_band(catalog["V-SF-07"], None, (None, None), 10)
 
     hamlet_dir = REPO_ROOT / "target" / "golden" / "hamlet_run"
+    if not hamlet_dir.exists():
+        pytest.skip("target/golden/hamlet_run not present")
     run = read_run_dir(hamlet_dir)
     report_text = format_report_v0(run.metadata, (1, 1), 1, [v6c, v07])
 
@@ -360,6 +362,8 @@ def test_cli_report_synthetic_golden() -> None:
 
 def test_cli_report_runs_vscale02() -> None:
     """CLI report on solo, household, hamlet with V-SCALE-02 prints INSUFFICIENT."""
+    if not (REPO_ROOT / "target" / "golden" / "hamlet_run").exists():
+        pytest.skip("target/golden/hamlet_run not present")
     cmd = [
         str(VENV_PYTHON),
         "-I",
@@ -384,6 +388,8 @@ def test_cli_report_runs_vscale02() -> None:
 
 def test_cli_determinism_across_pythonhashseed() -> None:
     """Report output is byte-identical across processes under differing PYTHONHASHSEED."""
+    if not (REPO_ROOT / "target" / "golden" / "hamlet_run").exists():
+        pytest.skip("target/golden/hamlet_run not present")
     cmd = [
         str(VENV_PYTHON),
         "-P",
