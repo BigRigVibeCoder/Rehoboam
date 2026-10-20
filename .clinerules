@@ -24,8 +24,17 @@ You report to the Architect. The rules in CLAUDE.md, AGENTS.md, GOV-009, and GOV
 - If a command shows a `:` prompt or has run for more than 2 minutes with no output, stop and report it; do not continue past it.
 - Do not poll CI. After you push and open the draft PR, stop and report to the Architect.
 
-## Code Discipline (added 2026-10-18)
+## Multi-Agent Worktree Concurrency (GOV-011 §9)
+- MANDATORY WORKTREE ISOLATION: When sharing this host machine with sibling agents, work strictly inside your dedicated worktree (e.g. `.claude/worktrees/agent-<id>-<sprint>`).
+- NEVER run `git checkout` or switch branches in the repository root while sibling worktrees are active.
+- NEVER use bare `git stash` (shared across worktrees; another agent can pop your WIP). Commit WIP to your branch.
+- NO HEAVY BUILDS IN PARALLEL: Coordinate before running full workspace release builds to prevent RAM OOM and disk exhaustion.
+- INBOX MERGE RESOLUTION: If merging `origin/main` pauses on `INBOX.md`, resolve via `git checkout --ours INBOX.md && git add INBOX.md`.
+
+## Code Discipline (added 2026-10-18 / 2026-10-20)
 - Before you edit a type that already exists (e.g. `EntityKind`, `SystemModel`), read its current definition and every use of it (`rg -n 'EntityKind' crates/`). Extend it in place. NEVER rename it, duplicate it, or leave an `...Old` copy.
 - A new trait item on `SystemModel` needs a default implementation so every existing system still compiles.
 - After EVERY edit, run `cargo check -p <crate>` for the crate you changed and `cargo check --workspace` before you commit. Never commit code that does not compile.
-- Do not widen scope: do only the task named in the work order (docs/handoff/2026-10-18/exuberant_work_order.md). Commit once per task (T-01, T-02, T-03).
+- Do not widen scope: do only the task named in the work order (`INBOX.md`). Commit once per task (T-01, T-02, T-03).
+- Living agent rules parity: `.clinerules`, `CLAUDE.md`, and `GEMINI.md` are kept synchronized under GOV-011 §12.
+

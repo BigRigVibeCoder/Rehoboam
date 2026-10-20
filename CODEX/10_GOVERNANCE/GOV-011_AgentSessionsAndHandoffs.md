@@ -8,19 +8,23 @@ agents: [all]
 tags: [governance, agents, workflow]
 related: [GOV-005, GOV-007, GOV-009, GOV-010, AGT-001, ADR-0032]
 created: 2026-10-18
-updated: 2026-10-18
-version: 1.1.0
+updated: 2026-10-20
+version: 1.2.0
 ---
 
-> **BLUF:** Several AI agents work on Rehoboam, at the same time or in turns, and possibly from different vendors. Six rules keep them out of each other's way and within budget:
+> **BLUF:** Several AI agents work on Rehoboam, at the same time or in turns, and possibly from different vendors. Nine core rules keep them out of each other's way, prevent hangs, maintain code integrity, and keep within budget:
 > - one Architect at a time, named by the director;
 > - one owner per branch, named on its PR;
+> - strict worktree isolation when agents share a host machine (§9);
+> - zero interactive pagers and prompt stalls in agent terminals (§10);
+> - in-place type extension and incremental checking for Rust engine code (§11);
 > - reviews by a different model from the author's;
 > - every ruling and finding in a repository file before the session ends;
 > - every session ends with its work pushed and its state written down in `HANDOFF.md`;
+> - `.clinerules`, `CLAUDE.md`, and `GEMINI.md` are actively tuned living governance files kept in parity (§12);
 > - every agent keeps its context small and its calls few (§8).
 >
-> Written on the director's instruction of 2026-10-18, when the work passed to a second AI developer; §8 added the same day, after the usage analysis.
+> Written on the director's instruction of 2026-10-18; §8 added after token usage analysis; §§9–12 added 2026-10-20 incorporating lessons learned from `.clinerules`, `INBOX.md` work orders, multi-agent worktrees, and Rust compiler diagnostics.
 
 # GOV-011 — Agent sessions and handoffs
 
@@ -149,4 +153,64 @@ The rules, for every agent of every vendor:
    - Run three or four sessions at once, not eight.
    - Finish or hand off a task before a limit stops it: work cut off by a limit is wasted, and its restart re-caches everything.
 7. **Watch the meters.** In Claude Code, `/usage` shows spend and limits, and `/context` shows what fills the context.
+
+## 9. Host concurrency and worktree isolation (lessons from multi-agent dispatch)
+
+When sibling agents share a physical workstation or cloud runner:
+
+1. **Mandatory worktree isolation:**
+   - Every active developer agent must work in its own dedicated git worktree (e.g. `.claude/worktrees/agent-<id>-<sprint>` or `../worktrees/<sprint>`).
+   - **Never run `git checkout` or switch branches in the repository root** while sibling agents have active worktrees checked out. Switching branches in the root disrupts global tooling and dirty caches.
+   - **Never use bare `git stash`:** Git stashes are shared across all worktrees of the clone. One agent running `git stash pop` can silently consume or corrupt another agent's WIP. Always commit WIP to the agent's branch.
+2. **Resource arbitration (RAM & disk):**
+   - A single Cargo `target/` directory consumes 8–11 GB. Two concurrent release builds or parallel `bin/check_all.sh` runs will exhaust workstation memory (OOM) or trigger disk-full panics.
+   - Coordinate heavy builds: agents must never initiate full workspace release builds (`cargo build --release --workspace` or `bin/check_all.sh`) in parallel on the same host.
+   - Use targeted crate checks (`cargo check -p <crate>`) during task development.
+3. **Work order protocol via `INBOX.md`:**
+   - The Lead Architect communicates task dispatches and critical CI fixes via `INBOX.md` / `INBOX2.md`.
+   - When merging `origin/main` into a sprint branch, if a merge conflict occurs in `INBOX.md`, resolve it cleanly using `--ours` (`git checkout --ours INBOX.md && git add INBOX.md`) or update it to the latest assigned work order.
+
+## 10. Agent terminal discipline and hung-session defense
+
+Autonomous agents execute shell commands in headless environments where interactive prompts cause unrecoverable hangs.
+
+1. **Mandatory terminal environment setup:**
+   - Always export `GIT_PAGER=cat PAGER=cat` at the beginning of terminal operations.
+   - Source cargo explicitly (`source $HOME/.cargo/env`), as `$HOME/.cargo/bin` is frequently omitted from non-interactive `PATH`s.
+2. **Zero interactive commands:**
+   - Never invoke commands that trigger interactive pagers or editors (`git log`, `git diff`, `git branch`, `git show`). Always use `git --no-pager <cmd>`.
+   - Pipe long command outputs through limiters (`| head -n 60` or `| tail -n 40`) to prevent context blowup and terminal buffer stalls.
+   - Never run commands expecting standard input: no bare `gh pr create`, no interactive `git commit` without `-m`, and no editor invocations. Pass every flag explicitly.
+3. **Two-minute stall rule:**
+   - If any command outputs a pager prompt (`:`) or runs for more than 2 minutes with no output or progress, abort immediately. Report the stall; never wait indefinitely.
+4. **No CI polling in loops:**
+   - Agents must never run tight polling loops on CI status (`gh pr checks`, `gh run watch`). After pushing and opening the draft PR, report status and yield turn or wait for reactive task notification.
+
+## 11. Rust engine code discipline and compiler error mitigation
+
+Working in a high-integrity, deterministic `#![deny(unsafe_code)]` Rust workspace requires strict code discipline:
+
+1. **Read before edit (in-place extension):**
+   - Before editing an existing struct, enum, or system model (e.g. `EntityKind`, `SystemModel`, `Demography`), use ripgrep (`rg -n '<TypeName>' crates/`) to inspect its canonical definition and all call sites.
+   - Extend types in place. **Never rename, duplicate, or leave legacy `...Old` copies** that confuse callers or break workspace imports.
+2. **Trait backward compatibility:**
+   - When introducing a new method or item to a shared trait (e.g. `SystemModel`), provide a sensible default implementation so every existing simulation system continues to compile cleanly.
+3. **Immediate compilation check loop:**
+   - After *every* edit, run `cargo check -p <crate>` for the modified crate.
+   - Before creating a commit, verify `cargo check --workspace`. Never commit code that fails compiler checks.
+   - Address borrow-checker and trait issues directly from `cargo check` diagnostics before running heavy golden or stream test suites.
+4. **Scope containment:**
+   - Execute strictly the assigned task in the work order. Commit once per task (`type(SPR-NNN): T-NN description`). Do not widen scope or perform unsolicited refactoring.
+
+## 12. Living agent rule files and governance synchronization
+
+Agent instructions are not static notes; they are binding governance artifacts maintained under `CODEX/10_GOVERNANCE`.
+
+1. **Three-file parity:**
+   - `.clinerules`: binds agents running in Cline/Roo-Code environments.
+   - `CLAUDE.md`: binds Claude-based agents and serves as repository-wide developer reference.
+   - `GEMINI.md`: binds Gemini-based agents and Antigravity IDE assistants.
+2. **Mandatory synchronization:**
+   - Any lesson learned regarding terminal hangs, worktree isolation, compiler workflows, or governance boundaries discovered by any agent must be reflected across all three files and codified into `GOV-011`.
+   - Tuning and maintaining these files is an explicit responsibility of the Lead Architect (`AGT-001`) under `GOV-007` and `GOV-011`.
 

@@ -102,3 +102,25 @@ When output and a contract or spec disagree:
 - **Rehoboam-specific engineering rules:** `docs/13` (ownership, change classes, CI gates, merge queue, golden-hash divergence).
 - **Day-to-day work:** `CODEX/05_PROJECT`.
 - **Index:** `CODEX/00_INDEX/MANIFEST.yaml`, generated locally by `bin/gen_manifest.py` and not committed. CI fails if the index cannot be built (GOV-001 §3).
+
+## 9. Modern multi-agent project management guidelines
+
+Modern autonomous software engineering requires multi-agent project management that eliminates deadlocks, race conditions, and context loss:
+
+### 9.1 The Six-Level Work Breakdown Structure (WBS)
+Rehoboam operates on a strict hierarchical drill-down from enterprise strategy to atomic code lines:
+1. **Phase (P0–P7):** Strategic multi-month horizons defined in `docs/11`.
+2. **Phase Gate (G0–G7):** Objective empirical barriers; passes only when all listed test suites and `VER-G<n>` reports pass.
+3. **Complexity Rung (0–5):** Progressive empirical scaling ladder (Rung 0: Solo 1-person → Rung 1: Household 5-person → Rung 2: Hamlet 60-person → Rung 3: Manor → Rung 4: Twin Vales 1,500-person → Rung 5: Kingdom 10,000-person).
+4. **Wave:** Coordinated clusters of concurrent sprints sharing dependency horizons (e.g. Wave 5 Mortality/Births, Wave 6 Demography/Space, Wave 7 Dynasties, Wave 8 The Crucible, Viewer Lane).
+5. **Sprint (SPR-NNN):** Atomic delivery unit (1–3 agent-days) governed by an approved `SPR-` document, compliance table, and dedicated branch.
+6. **Task (T-NN):** The lowest granular unit of execution. Exactly one git commit per task (`type(SPR-NNN): T-NN description`), with compiler check verification and bounded scope.
+
+### 9.2 SOTA Multi-Agent Execution Mechanics
+- **Asynchronous Work Order Dispatch:** The Architect dispatches work via `INBOX.md` and `INBOX2.md`. Agents execute sequentially without real-time message dependencies.
+- **Physical Host Concurrency (Worktree Isolation):** Sibling agents sharing a physical machine or runner work in isolated git worktrees (`.claude/worktrees/*`). Branch checkouts in the repository root are strictly forbidden during active worktree sessions.
+- **Draft PR for CI Activation:** Because GitHub Free lacks merge queues and branch rules, Developer agents open a Draft PR on task T-01 to immediately trigger CI runs (`core`, `golden`, `stream`).
+- **Immutable Branch Histories:** Pushed branches are never rebased or force-pushed. Upstream changes are brought in via `git merge origin/main`.
+- **Merge Commits Pinned to Verified Head:** The Architect merges PRs using merge commits pinned to the exact 40-character commit SHA verified green in CI.
+- **Tripartite Agent Guidance Parity:** `.clinerules`, `CLAUDE.md`, and `GEMINI.md` are actively tuned living governance documents maintained in exact parity (GOV-011 §12).
+

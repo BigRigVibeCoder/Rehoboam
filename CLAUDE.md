@@ -20,6 +20,27 @@ Cost is roughly context size times number of calls: in 2026-10-15..18, re-readin
   Other helpers default to a mid-tier model. Brief them tightly, and never resume one that has been idle for more than an hour (its cache is gone).
 - **Effort is high by default.** Use `/effort xhigh` for a hard call, then go back. Watch `/usage` and `/context`.
 
+## Terminal & Execution Rules (GOV-011 §10)
+- **Environment:** Always start terminal sessions with `export GIT_PAGER=cat PAGER=cat` and `source $HOME/.cargo/env` (cargo is not on the default PATH).
+- **No pagers or interactive prompts:** Always use `git --no-pager <cmd>` for every git command (`log`, `diff`, `branch`, `show`). Pipe long output through `| head -n 60` or `| tail -n 40`.
+- **No interactive commands:** Pass all flags explicitly. No bare `gh pr create`, no editor launches, no `git commit` without `-m`.
+- **2-minute stall rule:** If a command shows a `:` prompt or runs for > 2 minutes with no output, abort immediately; do not stall.
+- **Do not poll CI:** After pushing and opening the draft PR, report to the Architect. Do not loop on `gh pr checks`.
+
+## Multi-Agent Worktree Concurrency (GOV-011 §9)
+- **Worktree Isolation:** When sharing this host with sibling agents, work strictly in your assigned worktree (e.g. `.claude/worktrees/agent-<id>-<sprint>`).
+- **Never `git checkout` in root:** NEVER switch branches in the repository root while sibling worktrees are active.
+- **No bare `git stash`:** Stashes are shared across all worktrees. Commit WIP to your branch instead.
+- **Resource arbitration:** Coordinate with sibling agents before running full workspace release builds or `check_all.sh` (prevent RAM OOM / disk fill).
+- **Work orders via `INBOX.md`:** Pick up dispatches from `INBOX.md` / `INBOX2.md`. If a merge conflict occurs in `INBOX.md`, resolve via `git checkout --ours INBOX.md && git add INBOX.md`.
+
+## Rust Engine Code Discipline (GOV-011 §11)
+- **Inspect before edit:** Read existing type definitions and all usages with `rg -n '<TypeName>' crates/`. Extend types in place; NEVER duplicate or leave `...Old` copies.
+- **Trait compatibility:** Add default implementations to new methods on shared traits (e.g. `SystemModel`) so all existing systems compile.
+- **Incremental checks:** Run `cargo check -p <crate>` after EVERY edit, and `cargo check --workspace` before committing.
+- **Bounded scope:** Do only the assigned work order task (`INBOX.md`). Commit once per task (`type(SPR-NNN): T-NN description`).
+- **Agent rules parity:** `.clinerules`, `CLAUDE.md`, and `GEMINI.md` are kept synchronized under GOV-011 §12.
+
 ## Read before any work
 1. `docs/00_executive_summary.md`
 2. `docs/01_vision_and_intent.md` (success criteria S1–S4, principles)
