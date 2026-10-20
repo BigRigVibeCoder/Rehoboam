@@ -109,6 +109,7 @@ impl Market {
 }
 
 impl SystemModel for Market {
+    type Index = ();
     from_skeleton!();
 
     fn access(&self) -> AccessSpec {

@@ -185,7 +185,7 @@ lag = "previous_pulse"
 use = "identity"
 [[reads]]
 column = "household.head"
-owner = "M4.economy"
+owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
 [[reads]]

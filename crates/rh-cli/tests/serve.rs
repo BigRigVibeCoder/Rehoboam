@@ -441,7 +441,10 @@ fn a_socket_path_over_107_bytes_is_refused_naming_it() {
     let h = Host::start(&["run", "solo", "--years", "200", "--run-dir", &d, "--socket"]);
     let (code, _, err) = h.finish();
     assert_eq!(code, 2, "{err}");
-    assert!(err.contains("A.sock") && err.contains("107"), "{err}");
+    assert!(
+        (err.contains("A.sock") || err.contains("control.sock")) && err.contains("107"),
+        "{err}"
+    );
     assert!(!dir.exists(), "nothing was written");
 }
 

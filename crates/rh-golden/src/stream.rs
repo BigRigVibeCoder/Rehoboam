@@ -183,7 +183,16 @@ pub fn is_host_file(path: &Path) -> bool {
         .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or_default();
-    in_timeline && ["A.sock", "A.lock", "C.sock", "C.lock"].contains(&name)
+    in_timeline
+        && [
+            "A.sock",
+            "A.lock",
+            "C.sock",
+            "C.lock",
+            "control.sock",
+            "control.lock",
+        ]
+        .contains(&name)
 }
 
 /// The writer's lock file of a run directory: a run holds it exclusively for its whole length,
@@ -417,6 +426,24 @@ pub struct RunToml {
     /// The ladder's rung kind (`yearly` or `monthly`), so a replay writes a comparable ladder.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rung: Option<String>,
+    /// The run log path, relative to the run directory (SPR-027).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_log: Option<String>,
+    /// The first keyframe year, if recorded (SPR-027).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_keyframe_year: Option<i64>,
+    /// The engine build commit (BCK-002 A-70; SPR-027).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine_build_commit: Option<String>,
+}
+
+/// Returns the engine build commit from build metadata (`RH_BUILD_COMMIT` or `git describe --dirty`),
+/// or `None` if unavailable (BCK-002 A-70; SPR-027).
+#[must_use]
+pub fn engine_build_commit() -> Option<String> {
+    option_env!("RH_BUILD_COMMIT")
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned)
 }
 
 impl RunToml {
@@ -538,6 +565,12 @@ impl StreamHost {
             failed: None,
             hook,
         })
+    }
+
+    /// Channel A's next seq.
+    #[must_use]
+    pub const fn next_seq(&self) -> u64 {
+        self.writer.next_seq()
     }
 
     /// The per-instant callback: the life-course delta of the instant.

@@ -378,6 +378,8 @@ PLANTED = {
     "std_rename_self": ("std-rename", "std as"),
     "extern_crate_std": ("std-rename", "extern crate std as"),
     "file_io": ("file-io", "std::fs"),
+    "hidden_state_mutex": ("hidden-state", "Mutex"),
+    "hidden_state_thread_local": ("hidden-state", "thread_local!"),
 }
 
 
@@ -1371,3 +1373,52 @@ def test_maj_1_min_2_renamed_std_raw_identifiers_and_nested_fs_are_refused(
 def test_min_2_other_renames_and_raw_identifiers_pass(source: str) -> None:
     """Only std itself may not be renamed; a raw identifier or raw string is not a path (MIN-2)."""
     assert rules_hit(source) == []
+
+
+# --- The hidden-state rule (SPR-027 T-02; W31) ------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "static mut FOO: u32 = 0;\n",
+        "thread_local! { static X: u32 = 0; }\n",
+        "use std::sync::OnceLock;\n",
+        "use std::sync::LazyLock;\n",
+        "use std::sync::atomic::AtomicU64;\n",
+        "use std::sync::Mutex;\n",
+        "use std::sync::RwLock;\n",
+        "use std::cell::Cell;\n",
+        "let x: Cell<u32>;\n",
+        "use std::cell::RefCell;\n",
+        "use std::cell::UnsafeCell;\n",
+        "use once_cell::sync::Lazy;\n",
+        "lazy_static! { static ref X: u32 = 0; }\n",
+    ],
+)
+def test_hidden_state_rule_catches_interior_mutability(source: str) -> None:
+    """Interior mutability and atomics are flagged as hidden-state in plane A (W31)."""
+    assert rules_hit(source) == ["hidden-state"]
+
+
+def test_hidden_state_escape_excuses_finding() -> None:
+    """LINT-ALLOW(hidden-state) excuses a hidden-state finding and counts as an escape."""
+    source = (
+        "// LINT-ALLOW(hidden-state): bookkeeping identity, never in a hash\n"
+        "static NEXT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);\n"
+    )
+    rep = scan(source)
+    assert rep.violations == []
+    assert len(rep.escaped) == 2
+    assert all("hidden-state" in e for e in rep.escaped)
+
+
+def test_wrong_escape_kind_is_a_violation() -> None:
+    """LINT-ALLOW(forbidden-api) cannot excuse a hidden-state finding."""
+    source = (
+        "// LINT-ALLOW(forbidden-api): this is an atomic\n"
+        "static NEXT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);\n"
+    )
+    rep = scan(source)
+    expected = "hidden-state finding must use `// LINT-ALLOW(hidden-state): <reason>`"
+    assert any(expected in v for v in rep.violations)

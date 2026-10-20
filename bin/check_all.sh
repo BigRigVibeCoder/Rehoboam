@@ -420,7 +420,7 @@ annals_fold_control() {
 # cannot drift. odd_next_control <case>: algorithm (a frozen S0 step reworded), rng (a purpose planted before
 # death_time), bound (the Registry delta with tfr's upper bound moved). Each must FAIL with its own diagnostic.
 odd_next_control() {
-  local dir=target/rendered-fixtures/odd_next/$1 src=specs/systems/next/M2.demography.odd.toml
+  local dir=target/rendered-fixtures/odd_next/$1 src=specs/systems/M2.demography.odd.toml
   rm -rf "$dir" && mkdir -p "$dir" || return 1
   local lock=specs/systems/next/amendments.lock.toml m7=specs/systems/next/M7.dynasty.odd.toml
   # the M7 draft rides along unchanged where the overlay is the real delta: a next version with a verb of its own
@@ -437,8 +437,8 @@ odd_next_control() {
       grep -q "planted_first" "$dir/M2.demography.odd.toml" || { echo "control not planted: no [[rng]] found"; return 1; }
       "$PY" -I specs/systems/lint_odd.py --next "$dir" --overlay specs/systems/next/registry_delta.toml ;;
     bound)
-      sed 's/tfr = \[1.2, 7.5\]/tfr = [1.2, 9.5]/' specs/systems/next/registry_delta.toml > "$dir/registry_delta.toml" || return 1
-      grep -q "9.5" "$dir/registry_delta.toml" || { echo "control not planted: tfr bounds not found"; return 1; }
+      sed 's/murder_hazard_base = \[0.001, 0.03\]/murder_hazard_base = [0.001, 0.05]/' specs/systems/next/registry_delta.toml > "$dir/registry_delta.toml" || return 1
+      grep -q "0.05" "$dir/registry_delta.toml" || { echo "control not planted: murder_hazard_base bounds not found"; return 1; }
       "$PY" -I specs/systems/lint_odd.py --next specs/systems/next --overlay "$dir/registry_delta.toml" ;;
     lock)
       # REV-SPR-015 round 3 MIN-1: the committed lock pins every amendment's path and text digest; one digest changed
@@ -500,7 +500,7 @@ bad_domains_control() {
 m2_f1_stale_control() {
   local planted=target/rendered-fixtures/m2_f1_stale_check_value.odd.toml
   mkdir -p "$(dirname "$planted")" || return 1
-  sed 's/tfr1_bits = 615614/tfr1_bits = 615615/' specs/systems/next/M2.demography.odd.toml > "$planted" || return 1
+  sed 's/tfr1_bits = 615614/tfr1_bits = 615615/' specs/systems/M2.demography.odd.toml > "$planted" || return 1
   grep -q 'tfr1_bits = 615615' "$planted" || { echo "control not planted: tfr1_bits = 615614 not found in the next M2 spec"; return 1; }
   "$PY" -I specs/demography/selftest_m2_f1.py --spec "$planted"
 }
@@ -511,7 +511,7 @@ m2_f1_stale_control() {
 m2_f1_mortality_stale_control() {
   local planted=target/rendered-fixtures/m2_f1_mortality_stale_check_value.odd.toml
   mkdir -p "$(dirname "$planted")" || return 1
-  sed 's/K = 27498377919,/K = 27498377920,/' specs/systems/next/M2.demography.odd.toml > "$planted" || return 1
+  sed 's/K = 27498377919,/K = 27498377920,/' specs/systems/M2.demography.odd.toml > "$planted" || return 1
   grep -q 'K = 27498377920,' "$planted" || { echo "control not planted: K = 27498377919 not found in the next M2 spec"; return 1; }
   "$PY" -I specs/demography/selftest_m2_f1_mortality.py --spec "$planted"
 }
@@ -656,7 +656,8 @@ FORBIDDEN_API_CONTROLS="hash_map:hash-collections:HashMap hash_set:hash-collecti
   extern_crate_std:std-rename:extern~crate~std~as
   net_socket:network:std::os::unix::net net_parent_alias:network:net::UnixListener
   net_parent_glob:network:net::TcpListener net_parent_self:network:net::UnixDatagram
-  path_attr:source-include:#[path include_macro:source-include:include!("
+  path_attr:source-include:#[path include_macro:source-include:include!(
+  hidden_state_mutex:hidden-state:Mutex hidden_state_thread_local:hidden-state:thread_local!"
 forbidden_api_controls() {
   local - spec file rest rule token tick='`'
   set -f  # tokens such as #[path must not be glob-expanded; `local -` restores the option
@@ -713,14 +714,14 @@ baseline_hand_edited_control() {
 
 # SPR-026 C1: live edge overhead (reported, ungated): solo 3,000 years monthly headless vs --socket
 live_edge_overhead() {
-  local d="$GOLDEN/live_edge_overhead" t0 t1 headless socket pct
+  local d="$GOLDEN/live" t0 t1 headless socket pct out
   rm -rf "$d"; mkdir -p "$d"
   t0=$(date +%s%N)
-  "$RH_CLI_RELEASE" run solo --years 3000 --ladder monthly --out "$d/headless.ladder" >/dev/null 2>&1 || return 1
+  out=$("$RH_CLI_RELEASE" run solo --years 3000 --ladder monthly --out "$d/headless.ladder" 2>&1) || { echo "$out"; return 1; }
   t1=$(date +%s%N)
   headless=$(( (t1 - t0) / 1000000 ))
   t0=$(date +%s%N)
-  "$RH_CLI_RELEASE" run solo --years 3000 --ladder monthly --run-dir "$d/socket" --socket >/dev/null 2>&1 || return 1
+  out=$("$RH_CLI_RELEASE" run solo --years 3000 --ladder monthly --run-dir "$d/socket" --socket 2>&1) || { echo "$out"; return 1; }
   t1=$(date +%s%N)
   socket=$(( (t1 - t0) / 1000000 ))
   if [ "$headless" -gt 0 ]; then
@@ -1493,10 +1494,10 @@ run "lint_odd observes positive control: a kind observed twice must FAIL (EVO-00
 run "lint_odd observes positive control: a system observing its own kind must FAIL (EVO-002; T-00a MIN-8)" "fail:[[observes]] X_FIXTURE_FORMED: a system does not observe its own kind" odd_observes_control own &&
 run "lint_odd observes positive control: an observer bound only before its emitter's phase must FAIL (EVO-002; T-00a MIN-8)" "fail:[[observes]] DEATH: M3.agriculture binds no phase at or after one M2.demography binds" odd_observes_control phase &&
 run "lint_odd observes positive control: an entry that is not a table must FAIL (EVO-002; T-00a MIN-8)" "fail:an [[observes]] entry must be a table" odd_observes_control table &&
-run "System specs, next version: the M2 F1 draft supersedes the frozen rung-0 slice and preserves it (lint_odd --next; SPR-015)" "pass:self-check (next of M2.demography): 46 planted changes rejected (3 of them by the amendments lock), 46 amendments recorded and locked, the clean next version kept" "$PY" -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml &&
+run "System specs, next version: the M2 F1 draft supersedes the frozen rung-0 slice and preserves it (lint_odd --next; SPR-015)" "pass:self-check (next of M7.dynasty): 42 planted changes rejected (2 of them by the amendments lock), 40 amendments recorded and locked, the clean next version kept" "$PY" -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml &&
 run "lint_odd next positive control: a next version that changes a frozen algorithm step must FAIL (SPR-015)" "fail:frozen [algorithm.mortality_rung0] changed" odd_next_control algorithm &&
 run "lint_odd next positive control: a new RNG purpose before a frozen one must FAIL (SPR-015)" "fail:frozen RNG purpose death_time must stay at position 0" odd_next_control rng &&
-run "lint_odd next positive control: a Registry overlay that moves a frozen parameter bound must FAIL (SPR-015)" "fail:replacement changes or drops parameter tfr bounds" odd_next_control bound &&
+run "lint_odd next positive control: a Registry overlay that moves a frozen parameter bound must FAIL (SPR-015)" "fail:replacement changes or drops parameter murder_hazard_base bounds" odd_next_control bound &&
 run "lint_odd next positive control: an amendment whose text changed since the committed lock must FAIL (SPR-015)" "fail:changed its text since amendments.lock.toml" odd_next_control lock &&
 run "lint_odd next positive control: a frozen submodel summary changed without a record must FAIL (deny by default; PR #79 review R3)" "fail:frozen submodels.apply_commands.summary changed without an [[amends]] record" odd_next_control submodel &&
 run "lint_odd next positive control: a frozen command why changed without a record must FAIL (R3)" "fail:frozen commands.ScheduleDeath.why changed without an [[amends]] record" odd_next_control command &&

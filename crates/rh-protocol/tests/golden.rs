@@ -393,3 +393,280 @@ fn the_kind_table_is_the_canonical_golden_files() {
         "every kind of the table appears in the canonical golden file"
     );
 }
+
+fn golden_control() -> Vec<String> {
+    let path = repo().join("specs/stream/golden/control_v1.txt");
+    std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+        .lines()
+        .map(str::to_owned)
+        .collect()
+}
+
+#[test]
+fn every_control_golden_frame_encodes_to_its_bytes_and_decodes_back() {
+    let lines = golden_control();
+    let mut i = 0;
+    let mut n = 0;
+    while i < lines.len() {
+        if !lines[i].starts_with("frame ") {
+            i += 1;
+            continue;
+        }
+        let parts: Vec<&str> = lines[i].split(' ').collect();
+        let (name, data) = (parts[1], unhex(parts[2]));
+        let (decoded, used) =
+            wire::decode(&data, MAX_PAYLOAD).unwrap_or_else(|e| panic!("{name}: {e}"));
+        assert_eq!(used, data.len(), "{name}: unused bytes");
+        assert_eq!(decoded.ftype, FrameType::Control, "{name}: not CONTROL");
+        let next = lines[i + 1]
+            .strip_prefix("control ")
+            .unwrap_or_else(|| panic!("{name}: no control line"));
+        assert_eq!(
+            hex(&wire::encode(&decoded).unwrap_or_default()),
+            parts[2],
+            "{name}: encode"
+        );
+        let (_kind, value) =
+            control::decode_control(next.as_bytes()).unwrap_or_else(|e| panic!("{name}: {e}"));
+        assert_eq!(
+            rh_protocol::json::canonical(&value).unwrap_or_default(),
+            next.as_bytes(),
+            "{name}: not canonical"
+        );
+        i += 2;
+        n += 1;
+    }
+    assert_eq!(n, 18, "the control golden file's frame lines");
+    println!("control_v1 conformance: {n} golden frames encoded byte for byte and decoded back");
+}
+
+struct SimulatedControlHost {
+    tip: Option<i64>,
+    next_tick: Option<i64>,
+    next_seq: u64,
+    band: std::cell::RefCell<String>,
+    state: std::cell::RefCell<String>,
+    step_target: std::cell::RefCell<Option<i64>>,
+    end: Option<String>,
+}
+
+impl SimulatedControlHost {
+    fn new(years: usize, finished: bool, with_step: bool) -> Self {
+        const INSTANTS_PER_YEAR: usize = 12;
+        const INSTANT_MINUTES: i64 = 43_200;
+        const FIRST_TICK: i64 = 0;
+        const HORIZON_YEARS: usize = 4;
+        let instants = if finished {
+            HORIZON_YEARS * INSTANTS_PER_YEAR
+        } else {
+            years * INSTANTS_PER_YEAR
+        };
+        let tip = if instants == 0 {
+            None
+        } else {
+            let inst = i64::try_from(instants).unwrap();
+            Some(FIRST_TICK + (inst - 1) * INSTANT_MINUTES)
+        };
+        let next_tick = if finished {
+            None
+        } else {
+            let inst = i64::try_from(instants).unwrap();
+            Some(FIRST_TICK + inst * INSTANT_MINUTES)
+        };
+        let keyframes = instants / (2 * INSTANTS_PER_YEAR);
+        let next_seq = if instants == 0 {
+            0
+        } else {
+            (instants * 3 + (instants / INSTANTS_PER_YEAR) + keyframes) as u64
+        };
+        let (band, state, step_target, end) = if finished {
+            ("max", "finished", None, Some("finished".to_owned()))
+        } else if with_step {
+            let last_inst = i64::try_from(HORIZON_YEARS * INSTANTS_PER_YEAR - 1).unwrap();
+            let last_instant_tick = FIRST_TICK + last_inst * INSTANT_MINUTES;
+            ("max", "running", Some(last_instant_tick), None)
+        } else {
+            ("max", "running", None, None)
+        };
+        Self {
+            tip,
+            next_tick,
+            next_seq,
+            band: std::cell::RefCell::new(band.to_owned()),
+            state: std::cell::RefCell::new(state.to_owned()),
+            step_target: std::cell::RefCell::new(step_target),
+            end,
+        }
+    }
+
+    fn pace(&self) -> serde_json::Value {
+        let step = self
+            .step_target
+            .borrow()
+            .map(|t| serde_json::json!({"until_tick": t}));
+        serde_json::json!({
+            "band": *self.band.borrow(),
+            "next_seq": self.next_seq,
+            "state": *self.state.borrow(),
+            "step": step,
+            "tick": self.tip,
+        })
+    }
+
+    fn status(&self) -> serde_json::Value {
+        let end = self.end.as_ref().map(|r| serde_json::json!({"reason": r}));
+        serde_json::json!({
+            "calendar": {"minutes_per_year": 518_400},
+            "control": {"format": control::CONTROL_FORMAT, "version": control::CONTROL_VERSION},
+            "controllers": 1,
+            "end": end,
+            "history": {
+                "engine_build": "reference",
+                "manifest_hash": "00".repeat(16),
+                "registry_version": "0.0.0",
+                "world_seed": 0,
+            },
+            "pace": self.pace(),
+            "run_nonce": 1,
+            "timeline_id": 0,
+            "tip": {"next_seq": self.next_seq, "tick": self.tip},
+        })
+    }
+}
+
+impl control::ControlHost for SimulatedControlHost {
+    fn submit(
+        &self,
+        _conn: &control::ControlConn,
+        id: &serde_json::Value,
+        cmd: control::ControlCommand,
+    ) -> serde_json::Value {
+        if cmd == control::ControlCommand::Status {
+            return control::response(&Some(id.clone()), self.status());
+        }
+        if self.state.borrow().as_str() == "finished" {
+            let mut d = serde_json::Map::new();
+            if let Some(ref end) = self.end {
+                d.insert("end".into(), serde_json::json!(end));
+            }
+            return control::error(&Some(id.clone()), control::Reason::RunFinished, d);
+        }
+        match cmd {
+            control::ControlCommand::Status => unreachable!(),
+            control::ControlCommand::Pace { band } => {
+                let changed = band != *self.band.borrow();
+                if changed {
+                    *self.band.borrow_mut() = band;
+                }
+                let mut res = self.pace();
+                res.as_object_mut()
+                    .unwrap()
+                    .insert("changed".into(), serde_json::json!(changed));
+                control::response(&Some(id.clone()), res)
+            }
+            control::ControlCommand::Pause => {
+                let changed = *self.state.borrow() == "running";
+                if changed {
+                    "paused".clone_into(&mut self.state.borrow_mut());
+                    *self.step_target.borrow_mut() = None;
+                }
+                let mut res = self.pace();
+                res.as_object_mut()
+                    .unwrap()
+                    .insert("changed".into(), serde_json::json!(changed));
+                control::response(&Some(id.clone()), res)
+            }
+            control::ControlCommand::Resume => {
+                let changed =
+                    *self.state.borrow() == "paused" || self.step_target.borrow().is_some();
+                if changed {
+                    "running".clone_into(&mut self.state.borrow_mut());
+                    *self.step_target.borrow_mut() = None;
+                }
+                let mut res = self.pace();
+                res.as_object_mut()
+                    .unwrap()
+                    .insert("changed".into(), serde_json::json!(changed));
+                control::response(&Some(id.clone()), res)
+            }
+            control::ControlCommand::Step { until } => {
+                let Some(nxt) = self.next_tick else {
+                    let mut d = serde_json::Map::new();
+                    if let Some(ref end) = self.end {
+                        d.insert("end".into(), serde_json::json!(end));
+                    }
+                    return control::error(&Some(id.clone()), control::Reason::RunFinished, d);
+                };
+                let target = match until {
+                    control::StepUntil::Instant => nxt,
+                    control::StepUntil::Tick(t) => t,
+                };
+                if (self.tip.is_none() && target < 0)
+                    || (self.tip.is_some() && target <= self.tip.unwrap())
+                {
+                    let mut d = serde_json::Map::new();
+                    d.insert("tip_tick".into(), serde_json::json!(self.tip));
+                    return control::error(&Some(id.clone()), control::Reason::PastTick, d);
+                }
+                let changed =
+                    *self.step_target.borrow() != Some(target) || *self.state.borrow() != "running";
+                if changed {
+                    "running".clone_into(&mut self.state.borrow_mut());
+                    *self.step_target.borrow_mut() = Some(target);
+                    if nxt > target {
+                        "paused".clone_into(&mut self.state.borrow_mut());
+                        *self.step_target.borrow_mut() = None;
+                    }
+                }
+                let mut res = self.pace();
+                res.as_object_mut()
+                    .unwrap()
+                    .insert("changed".into(), serde_json::json!(changed));
+                control::response(&Some(id.clone()), res)
+            }
+        }
+    }
+}
+
+#[test]
+fn every_control_dispatch_line_is_answered_byte_for_byte() {
+    let (mut n, mut closed) = (0, 0);
+    for line in golden_control()
+        .iter()
+        .filter(|l| l.starts_with("dispatch "))
+    {
+        let parts: Vec<&str> = line.split(' ').collect();
+        let (name, request, want) = (parts[1], unhex(parts[2]), parts[3]);
+        let finished = name.ends_with("_finished");
+        let with_step = name.contains("_with_step") || name == "dispatch_step_replace";
+        let years =
+            usize::from(name != "dispatch_step_genesis" && name != "dispatch_step_before_first");
+        let host = SimulatedControlHost::new(years, finished, with_step);
+        let mut conn = control::ControlConn::default();
+        let reply = control::dispatch_control(&mut conn, &host, &request);
+        assert_eq!(hex(&reply.frames.concat()), want, "dispatch {name}");
+        assert_eq!(reply.frames.len(), 1, "dispatch {name}: one reply frame");
+        let want_close = matches!(
+            name,
+            "dispatch_version_2"
+                | "dispatch_records_frame"
+                | "dispatch_oversize"
+                | "dispatch_not_json"
+                | "dispatch_batch"
+                | "dispatch_notification"
+                | "dispatch_pace_float"
+        );
+        assert_eq!(conn.closed, want_close, "dispatch {name}: conn.closed");
+        assert_eq!(reply.close, want_close, "dispatch {name}: reply.close");
+        if conn.closed {
+            closed += 1;
+        }
+        n += 1;
+    }
+    assert_eq!(n, 41, "the control golden file's dispatch lines");
+    assert_eq!(closed, 7, "closed connections");
+    println!(
+        "control_v1 conformance: {n} golden dispatch lines answered byte for byte ({closed} closed)"
+    );
+}

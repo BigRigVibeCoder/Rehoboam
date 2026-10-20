@@ -221,6 +221,9 @@ def load(extra_dirs=(), overlay=None, specs_dir=SPECS, next_dir=None):
             clash = sorted(set(over.get(sec, {})) & set(reg.get(sec, {})))
             # With --next, the [systems] entry of a superseded system may be replaced (its F1 defaults), never another's.
             replaced = [c for c in clash if sec == "systems" and c in frozen]
+            # An alternate world's overlay (--specs DIR) provides its own verbs without clashing with the Registry.
+            if sec == "verbs" and specs_dir != SPECS:
+                clash = []
             if sorted(set(clash) - set(replaced)):
                 raise SystemExit(f"overlay {overlay}: [{sec}] entries already in the Registry: {sorted(set(clash) - set(replaced))}")
             for sid in replaced:

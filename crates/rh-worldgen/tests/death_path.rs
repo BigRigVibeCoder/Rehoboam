@@ -187,6 +187,8 @@ fn living(v: &SystemView<'_>, who: PersonId) -> Result<bool, SimError> {
 }
 
 impl SystemModel for Sender {
+    type Index = ();
+
     fn descriptor(&self) -> SystemDescriptor {
         SystemDescriptor {
             id: self.id,
@@ -315,7 +317,7 @@ impl SystemModel for Sender {
     }
 }
 
-fn senders() -> Vec<Box<dyn SystemModel>> {
+fn senders() -> Vec<Box<dyn SystemModel<Index = ()>>> {
     vec![
         Box::new(Sender {
             id: "X7.murder",
@@ -382,6 +384,8 @@ fn engine_with(
         demography: Some(DemographyParams {
             e0: Q16_16::from_int(e0),
             brass_beta: Q16_16::ONE,
+            tfr: Q16_16::from_bits(321_126), // 4.9 in Q16_16
+            elite_fertility_mult: Q16_16::ONE,
             density_capacity: 10_000_000,
             density_mortality_slope: Q16_16::ONE,
         }),
@@ -392,13 +396,14 @@ fn engine_with(
                 age_years: Some(age),
             })
             .collect(),
+        households: Vec::new(),
     };
     let table = specs();
     let mut tables = rh_worldgen::genesis(&spec, &table).unwrap();
     tables.insert("x7.plan", x7.to_vec());
     tables.insert("x1.plan", x1.to_vec());
     edit(&mut tables);
-    let mut systems: Vec<Box<dyn SystemModel>> =
+    let mut systems: Vec<Box<dyn SystemModel<Index = ()>>> =
         vec![Box::new(Demography::from_world(&spec).unwrap().unwrap())];
     systems.extend(senders());
     let registered = register(systems, &table).unwrap_or_else(|e| panic!("{e}"));
@@ -529,7 +534,7 @@ fn v_inv_03_commanded_deaths_take_the_single_death_path() {
 fn a_natural_and_a_commanded_death_in_one_slot_apply_once_the_natural_first() {
     // Founders aged 99 at e0 = 20: some draw a natural death in month 0. Find one, and its day,
     // with a run that commands nothing, then aim X1 at that very slot.
-    let mut probe = engine(5, 30, 99, 20, IDLE, IDLE);
+    let mut probe = engine(5, 100, 99, 20, IDLE, IDLE);
     probe.advance_until(SimTime::EPOCH, |_, _| {}).unwrap();
     let (key, timer) = probe
         .agenda()
@@ -539,7 +544,7 @@ fn a_natural_and_a_commanded_death_in_one_slot_apply_once_the_natural_first() {
         .expect("a natural death timer in month 0");
     let (who, tau) = (key.entity.raw(), key.time.minutes());
     assert_eq!(timer.kind, 1, "M2's DEATH_TIMER");
-    let mut e = engine(5, 30, 99, 20, IDLE, plan(who, tau - DAY, tau));
+    let mut e = engine(5, 100, 99, 20, IDLE, plan(who, tau - DAY, tau));
     let events = run(&mut e, MONTH);
     assert_eq!(
         exit(&e, who),
@@ -631,7 +636,7 @@ fn a_death_clears_the_survivors_spouse_by_command_and_by_timer() {
     assert_eq!(spouse_of(&e, b), None, "B's row compacted");
     assert_eq!(spouse_of(&e, a), Some(0), "A's spouse cleared");
     // By timer: B draws a natural death in month 0; A has no timer that month.
-    let mut probe = engine(5, 30, 99, 20, IDLE, IDLE);
+    let mut probe = engine(5, 100, 99, 20, IDLE, IDLE);
     probe.advance_until(SimTime::EPOCH, |_, _| {}).unwrap();
     let pending: Vec<u64> = probe
         .agenda()
@@ -645,7 +650,7 @@ fn a_death_clears_the_survivors_spouse_by_command_and_by_timer() {
         .into_iter()
         .find(|p| !pending.contains(p))
         .expect("a founder with no death in month 0");
-    let mut e = engine_with(5, (30, 99, 20), IDLE, IDLE, |t| marry(t, a, b));
+    let mut e = engine_with(5, (100, 99, 20), IDLE, IDLE, |t| marry(t, a, b));
     let events = run(&mut e, MONTH - 1);
     assert_eq!(deaths_of(&events, b).len(), 1, "B died by M2's timer");
     assert_eq!(spouse_of(&e, b), None, "B's row compacted");
@@ -692,7 +697,7 @@ fn two_commanded_deaths_of_one_person_in_one_slot_apply_once() {
 /// M2 drops it as `dead` and nothing else happens.
 #[test]
 fn a_natural_timer_after_a_commanded_death_is_dropped_as_dead() {
-    let mut probe = engine(5, 30, 99, 20, IDLE, IDLE);
+    let mut probe = engine(5, 100, 99, 20, IDLE, IDLE);
     probe.advance_until(SimTime::EPOCH, |_, _| {}).unwrap();
     let (key, _) = probe
         .agenda()
@@ -702,7 +707,7 @@ fn a_natural_timer_after_a_commanded_death_is_dropped_as_dead() {
         .expect("a natural death timer after day 3 of month 0");
     let (who, tau) = (key.entity.raw(), key.time.minutes());
     let due = 2 * DAY;
-    let mut e = engine(5, 30, 99, 20, IDLE, plan(who, due - DAY, due));
+    let mut e = engine(5, 100, 99, 20, IDLE, plan(who, due - DAY, due));
     let events = run(&mut e, MONTH - 1);
     assert_eq!(
         deaths_of(&events, who).len(),
@@ -731,7 +736,7 @@ type MakeEngine = Box<dyn Fn() -> Engine>;
 fn every_death_path_scenario_is_thread_invariant() {
     let ids = founder_ids(3, 8, 20, 85);
     let v = [ids[0], ids[1]];
-    let mut probe = engine(5, 30, 99, 20, IDLE, IDLE);
+    let mut probe = engine(5, 100, 99, 20, IDLE, IDLE);
     probe.advance_until(SimTime::EPOCH, |_, _| {}).unwrap();
     let (key, _) = probe
         .agenda()
@@ -759,7 +764,7 @@ fn every_death_path_scenario_is_thread_invariant() {
         ),
         (
             "same slot",
-            Box::new(move || engine(5, 30, 99, 20, IDLE, plan(natural, tau - DAY, tau))),
+            Box::new(move || engine(5, 100, 99, 20, IDLE, plan(natural, tau - DAY, tau))),
             MONTH,
         ),
         (

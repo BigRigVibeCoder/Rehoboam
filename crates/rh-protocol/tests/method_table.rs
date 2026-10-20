@@ -112,3 +112,114 @@ fn every_method_outside_the_table_is_the_read_only_refusal() {
         );
     }
 }
+
+struct MockControlHost;
+
+impl control::ControlHost for MockControlHost {
+    fn submit(
+        &self,
+        _conn: &control::ControlConn,
+        id: &Value,
+        cmd: control::ControlCommand,
+    ) -> Value {
+        match cmd {
+            control::ControlCommand::Status => {
+                control::response(&Some(id.clone()), json!({"mock": "status"}))
+            }
+            _ => control::response(&Some(id.clone()), json!({"changed": true})),
+        }
+    }
+}
+
+fn ask_control(method: &str, params: Option<Value>) -> Value {
+    let frame =
+        control::control_frame(&control::request(&json!(1), method, params)).unwrap_or_default();
+    let mut conn = control::ControlConn::default();
+    let reply = control::dispatch_control(&mut conn, &MockControlHost, &frame);
+    let (f, _) = rh_protocol::wire::decode(&reply.frames.concat(), rh_protocol::wire::MAX_PAYLOAD)
+        .unwrap_or_else(|e| panic!("{method}: {e}"));
+    control::decode_control(&f.payload)
+        .unwrap_or_else(|e| panic!("{method}: {e}"))
+        .1
+}
+
+#[test]
+fn the_control_method_table_is_exactly_the_five_methods() {
+    let stream_names: BTreeSet<&str> = METHOD_TABLE.iter().map(|(n, _, _)| *n).collect();
+    let control_names: BTreeSet<&str> = control::CONTROL_METHOD_TABLE
+        .iter()
+        .map(|(n, _, _)| *n)
+        .collect();
+    let want: BTreeSet<&str> = [
+        "control.status",
+        "control.pace",
+        "control.pause",
+        "control.resume",
+        "control.step",
+    ]
+    .into_iter()
+    .collect();
+    let extra: Vec<&&str> = control_names.difference(&want).collect();
+    assert!(
+        extra.is_empty() && control_names == want,
+        "control method table broken: the table is {control_names:?}; extra entries {extra:?} (control_v1.md §4: exactly 5 methods)"
+    );
+    let overlap: Vec<&&str> = stream_names.intersection(&control_names).collect();
+    assert!(
+        overlap.is_empty(),
+        "stream and control method tables must be disjoint: overlap {overlap:?}"
+    );
+    for (name, m, access) in control::CONTROL_METHOD_TABLE {
+        if *m == control::ControlMethod::Status {
+            assert_eq!(*access, Access::Read, "{name} is a read");
+        } else {
+            assert_eq!(*access, Access::Write, "{name} is a write");
+        }
+    }
+}
+
+#[test]
+fn every_method_outside_control_table_is_refused_with_control_message_and_socket_data() {
+    for method in [
+        "stream.status",
+        "stream.subscribe",
+        "stream.unsubscribe",
+        "player.act",
+        "timeline.run",
+        "timeline.pause",
+        "timeline.run_until",
+        "timeline.seek",
+        "timeline.fork",
+        "control.schedule",
+        "sift.set_autopause",
+        "oracle.whisper",
+        "console.say",
+        "world.seek",
+        "control.Status",
+        "",
+    ] {
+        let reply = ask_control(method, Some(json!({"x": 1})));
+        assert_eq!(
+            control::reply_reason(&reply),
+            Some("method_not_found"),
+            "method {method:?} was answered {reply}"
+        );
+        assert_eq!(
+            reply["error"]["message"],
+            control::CONTROL_MESSAGE,
+            "{method}"
+        );
+        assert_eq!(reply["error"]["data"]["socket"], "control", "{method}");
+        if let Some((_, detail)) = control::RESERVED.iter().find(|(name, _)| *name == method) {
+            assert_eq!(reply["error"]["data"]["detail"], *detail, "{method}");
+        } else if let Some((ns, _)) = method.split_once('.')
+            && control::RESERVED_NAMESPACES.contains(&ns)
+        {
+            assert_eq!(
+                reply["error"]["data"]["detail"],
+                control::IF3_DETAIL,
+                "{method}"
+            );
+        }
+    }
+}

@@ -21,10 +21,13 @@ use std::path::{Path, PathBuf};
 use rh_core::ownership::SpecTable;
 use rh_core::time::{Calendar, DaysPerYear, SeasonsPerYear};
 use rh_core::world::WorldTables;
+use rh_ids::household::household_base;
 use rh_ids::person::{PersonIdTable, founder_base, rehash};
 use rh_registry::ownership::Ownership;
-use rh_registry::{Founder, FounderRole, Sex, WorldSpec};
-use rh_worldgen::{GenesisError, SEX_FEMALE, founder_ids, genesis, genesis_with};
+use rh_registry::{Founder, FounderRole, HouseholdSpec, Sex, WorldSpec};
+use rh_worldgen::{
+    GenesisError, MAR_SOURCE_GENESIS, SEX_FEMALE, founder_ids, genesis, genesis_with,
+};
 use spec_files::{load_specs, registry_system_ids, registry_table};
 
 mod spec_files;
@@ -53,6 +56,7 @@ fn world(seed: u64, calendar: Calendar, founders: Vec<Founder>) -> WorldSpec {
         systems: Vec::new(),
         demography: None,
         founders,
+        households: Vec::new(),
     }
 }
 
@@ -271,6 +275,12 @@ fn random_worlds_have_sorted_aligned_rows_and_ages_in_range() {
         let t = genesis(&spec, &specs).unwrap();
         let n = spec.founders.len();
         for c in t.names() {
+            // No manifest household, so nothing marries, and every founder is in a one-person
+            // household (SPR-015 H2).
+            if c.starts_with("marriage.") {
+                assert_eq!(t.get(c).unwrap().len(), 0, "case {case}: {c}");
+                continue;
+            }
             assert_eq!(t.get(c).unwrap().len(), n, "case {case}: {c}");
         }
         let ids = col(&t, "person.id");
@@ -344,4 +354,126 @@ fn drawn_sex_is_fair_and_ages_cover_their_range() {
         .map(|b| -b / year)
         .collect();
     assert_eq!(ages, (0..60).collect());
+}
+
+/// `household.yaml`'s six founders with their two manifest households, resolved by hand in the
+/// compile order (cast: Oswin, Maren, Wulf; then Oswin's two sons and a daughter).
+fn household_world() -> WorldSpec {
+    let cast = |sex| Founder {
+        role: FounderRole::Cast,
+        sex: Some(sex),
+        age_years: Some(30),
+    };
+    let child = |sex| Founder {
+        role: FounderRole::Child,
+        sex: Some(sex),
+        age_years: None,
+    };
+    WorldSpec {
+        seed: 7,
+        calendar: D360,
+        horizon_years: 80,
+        systems: Vec::new(),
+        demography: None,
+        founders: vec![
+            cast(Sex::Male),    // 0 Oswin (head)
+            cast(Sex::Female),  // 1 Maren (spouse)
+            cast(Sex::Male),    // 2 Wulf (his own household)
+            child(Sex::Male),   // 3 son
+            child(Sex::Male),   // 4 son
+            child(Sex::Female), // 5 daughter
+        ],
+        households: vec![
+            HouseholdSpec {
+                head: 0,
+                spouse: Some(1),
+                children: 3..6,
+                servants: 6..6,
+            },
+            HouseholdSpec {
+                head: 2,
+                spouse: None,
+                children: 6..6,
+                servants: 6..6,
+            },
+        ],
+    }
+}
+
+#[test]
+fn h2_marries_the_couple_assigns_children_and_one_person_households() {
+    let t = genesis(&household_world(), &specs()).unwrap();
+    let ids = founder_ids(7, 6, &mut PersonIdTable::new()).unwrap();
+    let raw = |k: usize| ids[k].to_raw();
+    let row = |id: u64| {
+        col(&t, "person.id")
+            .binary_search_by_key(&id, |v| v.cast_unsigned())
+            .unwrap()
+    };
+    let (ro, rm, rw) = (row(raw(0)), row(raw(1)), row(raw(2)));
+    let rc = [row(raw(3)), row(raw(4)), row(raw(5))];
+
+    // The couple is married reciprocally, Wulf is not.
+    assert_eq!(col(&t, "person.spouse")[ro].cast_unsigned(), raw(1));
+    assert_eq!(col(&t, "person.spouse")[rm].cast_unsigned(), raw(0));
+    assert_eq!(col(&t, "person.spouse")[rw], 0);
+
+    // The children's parents are Maren and Oswin, in person.* and life_course.*.
+    for &c in &rc {
+        assert_eq!(col(&t, "person.mother")[c].cast_unsigned(), raw(1));
+        assert_eq!(col(&t, "person.father")[c].cast_unsigned(), raw(0));
+        assert_eq!(col(&t, "life_course.mother")[c].cast_unsigned(), raw(1));
+        assert_eq!(col(&t, "life_course.father")[c].cast_unsigned(), raw(0));
+    }
+
+    // Maren's parity and last_birth_tick are her three children and the youngest's birth tick.
+    assert_eq!(col(&t, "person.parity")[rm], 3);
+    let youngest = rc
+        .iter()
+        .map(|&c| col(&t, "person.birth_tick")[c])
+        .max()
+        .unwrap();
+    assert_eq!(col(&t, "person.last_birth_tick")[rm], youngest);
+
+    // Households: Oswin's (the couple and the children) and Wulf's one-person household, sorted by
+    // household id.
+    let oswin_hh = household_base(raw(0), 0).to_raw();
+    let wulf_hh = household_base(raw(2), 0).to_raw();
+    let mut expected: Vec<(u64, u64)> = vec![(oswin_hh, raw(0)), (wulf_hh, raw(2))];
+    expected.sort_unstable();
+    let got_ids: Vec<u64> = col(&t, "household.id")
+        .iter()
+        .map(|v| v.cast_unsigned())
+        .collect();
+    let got_heads: Vec<u64> = col(&t, "household.head")
+        .iter()
+        .map(|v| v.cast_unsigned())
+        .collect();
+    assert_eq!(
+        got_ids,
+        expected.iter().map(|&(id, _)| id).collect::<Vec<_>>()
+    );
+    assert_eq!(
+        got_heads,
+        expected.iter().map(|&(_, head)| head).collect::<Vec<_>>()
+    );
+    assert!(col(&t, "household.formed_tick").iter().all(|&v| v == 0));
+    assert!(
+        col(&t, "household.dissolved_tick")
+            .iter()
+            .all(|&v| v == i64::MAX)
+    );
+
+    // Membership: Oswin, Maren and the children are in Oswin's household; Wulf in his own.
+    for &r in [ro, rm].iter().chain(&rc) {
+        assert_eq!(col(&t, "person.household")[r].cast_unsigned(), oswin_hh);
+    }
+    assert_eq!(col(&t, "person.household")[rw].cast_unsigned(), wulf_hh);
+
+    // One genesis marriage: husband Oswin, wife Maren, start 0, open end, source genesis.
+    assert_eq!(col(&t, "marriage.husband"), [raw(0).cast_signed()]);
+    assert_eq!(col(&t, "marriage.wife"), [raw(1).cast_signed()]);
+    assert_eq!(col(&t, "marriage.start_tick"), [0]);
+    assert_eq!(col(&t, "marriage.end_tick"), [i64::MAX]);
+    assert_eq!(col(&t, "marriage.source"), [MAR_SOURCE_GENESIS]);
 }

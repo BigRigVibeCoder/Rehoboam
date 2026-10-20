@@ -36,9 +36,10 @@ use core::fmt;
 use rh_core::ownership::SpecTable;
 use rh_core::register::system_id;
 use rh_core::world::WorldTables;
+use rh_ids::household::household_base;
 use rh_ids::person::{IdError, PersonIdTable, founder_base};
 use rh_ids::{BranchSalt, PersonId, PurposeId, SystemKey};
-use rh_registry::{Founder, FounderRole, Sex, WorldSpec};
+use rh_registry::{Founder, FounderRole, HouseholdSpec, Sex, WorldSpec};
 
 pub use rng_purposes::RngPurpose;
 
@@ -51,28 +52,49 @@ pub const SEX_MALE: i64 = 0;
 pub const SEX_FEMALE: i64 = 1;
 /// `life_course.origin` of a founder (M2 spec: born 0, founder 1, immigrant 2).
 pub const ORIGIN_FOUNDER: i64 = 1;
+/// `marriage.source` of a manifest household's genesis marriage (H2; the M2 spec's
+/// `[[owns]] marriage.source` values: genesis 0, partnering 1, command 2).
+pub const MAR_SOURCE_GENESIS: i64 = 0;
 
 /// Every column genesis writes, with its value per founder (the M2 spec's `[initialization]`).
-const COLUMNS: [&str; 19] = [
+const COLUMNS: [&str; 33] = [
+    // person.* ledger columns (M2.demography owns them all).
+    "person.id",
+    "person.birth_tick",
+    "person.sex",
+    "person.alive",
+    "person.death_tick",
+    "person.death_cause",
+    "person.mother",
+    "person.father",
+    "person.spouse",
+    "person.household",
+    "person.parity",
+    "person.last_birth_tick",
+    "person.conceived_tick",
+    "person.unborn_father",
+    // household.* table (SPR-015; initially empty at genesis).
+    "household.id",
+    "household.head",
+    "household.formed_tick",
+    "household.dissolved_tick",
+    // marriage.* table (SPR-015; initially empty at genesis).
+    "marriage.husband",
+    "marriage.wife",
+    "marriage.start_tick",
+    "marriage.end_tick",
+    "marriage.source",
+    // life_course.* columns.
+    "life_course.person_id",
+    "life_course.origin",
+    "life_course.mother",
+    "life_course.father",
+    "life_course.sex",
     "life_course.birth_tick",
-    "life_course.death_cause",
     "life_course.entry_tick",
     "life_course.exit_kind",
     "life_course.exit_tick",
-    "life_course.father",
-    "life_course.mother",
-    "life_course.origin",
-    "life_course.person_id",
-    "life_course.sex",
-    "person.alive",
-    "person.birth_tick",
-    "person.death_cause",
-    "person.death_tick",
-    "person.father",
-    "person.id",
-    "person.mother",
-    "person.sex",
-    "person.spouse",
+    "life_course.death_cause",
 ];
 
 /// Why genesis refused a world.
@@ -180,16 +202,37 @@ pub struct FounderRow {
     pub sex: i64,
     /// `person.birth_tick`, minutes (negative: before the epoch).
     pub birth_tick: i64,
+    /// `person.household`: the founder's household id, never 0 at genesis (H2).
+    pub household: i64,
+    /// `person.mother` and `life_course.mother`.
+    pub mother: i64,
+    /// `person.father` and `life_course.father`.
+    pub father: i64,
+    /// `person.spouse`.
+    pub spouse: i64,
+    /// `person.parity`.
+    pub parity: i64,
+    /// `person.last_birth_tick`.
+    pub last_birth_tick: i64,
 }
 
-/// The founders' rows, in genesis order (before sorting by id).
+/// Everything genesis lays out: the founder rows (in genesis order) and the household and marriage
+/// table rows H2 derives from the manifest households.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Genesis {
+    /// The founders, in genesis order (before the id sort [`write_columns`] applies).
+    pub rows: Vec<FounderRow>,
+    /// `household.*` rows as `[id, head, formed_tick, dissolved_tick]`, sorted by id.
+    pub households: Vec<[i64; 4]>,
+    /// `marriage.*` rows as `[husband, wife, start_tick, end_tick, source]`, in genesis order.
+    pub marriages: Vec<[i64; 5]>,
+}
+
+/// The founders' rows and the household and marriage table rows, in genesis order.
 ///
 /// # Errors
 /// [`GenesisError::Ids`]; [`GenesisError::Overflow`].
-pub fn founders(
-    spec: &WorldSpec,
-    table: &mut PersonIdTable,
-) -> Result<Vec<FounderRow>, GenesisError> {
+pub fn founders(spec: &WorldSpec, table: &mut PersonIdTable) -> Result<Genesis, GenesisError> {
     let ids = founder_ids(spec.seed, spec.founders.len(), table)?;
     let key = SystemKey::new(
         spec.seed,
@@ -202,11 +245,116 @@ pub fn founders(
             .draw(0, 0)
     };
     let year = spec.calendar.minutes_per_year();
-    ids.iter()
+    let mut rows: Vec<FounderRow> = ids
+        .iter()
         .zip(&spec.founders)
         .enumerate()
         .map(|(k, (&id, &f))| row(k, id, f, year, &draw))
-        .collect()
+        .collect::<Result<_, _>>()?;
+    let (households, marriages) = layout_households(&mut rows, &spec.households);
+    Ok(Genesis {
+        rows,
+        households,
+        marriages,
+    })
+}
+
+/// Lays out H2: sets each founder's `person.household`, spouse, parents, parity and
+/// `last_birth_tick`, and returns the `household.*` rows (sorted by id) and the `marriage.*` rows.
+fn layout_households(
+    rows: &mut [FounderRow],
+    specs: &[HouseholdSpec],
+) -> (Vec<[i64; 4]>, Vec<[i64; 5]>) {
+    let mut households: Vec<[i64; 4]> = Vec::new();
+    let mut marriages: Vec<[i64; 5]> = Vec::new();
+    let mut covered = vec![false; rows.len()];
+
+    for h in specs {
+        let head = h.head;
+        let head_id = rows[head].id.to_raw();
+        let hh = household_base(head_id, 0).to_raw().cast_signed();
+
+        // Membership: the head, the spouse, the children and the servants (H2).
+        rows[head].household = hh;
+        covered[head] = true;
+        for k in h.children.clone() {
+            rows[k].household = hh;
+            covered[k] = true;
+        }
+        for k in h.servants.clone() {
+            rows[k].household = hh;
+            covered[k] = true;
+        }
+
+        // The married couple: the head and the one other adult of the other sex (H2). The wife is
+        // the female, the husband the male.
+        let mother = if rows[head].sex == SEX_FEMALE {
+            Some(head)
+        } else {
+            h.spouse
+        };
+        let father = if rows[head].sex == SEX_MALE {
+            Some(head)
+        } else {
+            h.spouse
+        };
+        if let Some(s) = h.spouse {
+            rows[s].household = hh;
+            covered[s] = true;
+            rows[head].spouse = rows[s].id.to_raw().cast_signed();
+            rows[s].spouse = head_id.cast_signed();
+        }
+
+        // The children's parents, in person.* and life_course.* (H2); 0 when the couple is not
+        // married.
+        for k in h.children.clone() {
+            rows[k].mother = mother.map_or(0, |m| rows[m].id.to_raw().cast_signed());
+            rows[k].father = father.map_or(0, |f| rows[f].id.to_raw().cast_signed());
+        }
+
+        // The wife's parity and last_birth_tick (REV-SPR-019 R14: one rule for every genesis
+        // mother).
+        let count = h.children.end - h.children.start;
+        if let Some(m) = mother.filter(|_| count > 0) {
+            rows[m].parity = i64::try_from(count).unwrap_or(i64::MAX);
+            rows[m].last_birth_tick = h
+                .children
+                .clone()
+                .map(|k| rows[k].birth_tick)
+                .max()
+                .unwrap_or(i64::MIN);
+        }
+
+        households.push([hh, head_id.cast_signed(), 0, i64::MAX]);
+        if let Some(s) = h.spouse {
+            let (husband, wife) = if rows[head].sex == SEX_MALE {
+                (head, s)
+            } else {
+                (s, head)
+            };
+            marriages.push([
+                rows[husband].id.to_raw().cast_signed(),
+                rows[wife].id.to_raw().cast_signed(),
+                0,
+                i64::MAX,
+                MAR_SOURCE_GENESIS,
+            ]);
+        }
+    }
+
+    // Every founder no manifest household covers gets a one-person household (H2).
+    for (k, row) in rows.iter_mut().enumerate() {
+        if covered[k] {
+            continue;
+        }
+        let hh = household_base(row.id.to_raw(), 0).to_raw().cast_signed();
+        row.household = hh;
+        households.push([hh, row.id.to_raw().cast_signed(), 0, i64::MAX]);
+    }
+
+    // H1: the household table is sorted ascending by household.id.
+    households.sort_by_key(|h| h[0].cast_unsigned());
+    (households, marriages)
 }
 
 fn row(
@@ -239,6 +387,12 @@ fn row(
         id,
         sex,
         birth_tick,
+        household: 0,
+        mother: 0,
+        father: 0,
+        spouse: 0,
+        parity: 0,
+        last_birth_tick: i64::MIN,
     })
 }
 
@@ -293,24 +447,45 @@ pub fn genesis_with(
     write_columns(specs, &sections, founders(spec, table)?)
 }
 
-/// Writes the founders' rows into the columns, after checking each column's owner.
+/// Writes the founders' rows and the household and marriage table rows into the columns, after
+/// checking each column's owner.
 ///
 /// # Errors
 /// [`GenesisError::NoOwner`]; [`GenesisError::NotFromManifest`].
 pub fn write_columns(
     specs: &SpecTable,
     sections: &[&'static str],
-    mut rows: Vec<FounderRow>,
+    genesis: Genesis,
 ) -> Result<WorldTables, GenesisError> {
     for column in COLUMNS {
         check_owner(specs, column, sections)?;
     }
+    let Genesis {
+        mut rows,
+        households,
+        marriages,
+    } = genesis;
     rows.sort_by_key(|r| r.id);
     let mut tables = WorldTables::new();
     let n = rows.len();
     let ids: Vec<i64> = rows.iter().map(|r| r.id.to_raw().cast_signed()).collect();
     let sexes: Vec<i64> = rows.iter().map(|r| r.sex).collect();
     let births: Vec<i64> = rows.iter().map(|r| r.birth_tick).collect();
+    let memberships: Vec<i64> = rows.iter().map(|r| r.household).collect();
+    let mothers: Vec<i64> = rows.iter().map(|r| r.mother).collect();
+    let fathers: Vec<i64> = rows.iter().map(|r| r.father).collect();
+    let spouses: Vec<i64> = rows.iter().map(|r| r.spouse).collect();
+    let parities: Vec<i64> = rows.iter().map(|r| r.parity).collect();
+    let last_births: Vec<i64> = rows.iter().map(|r| r.last_birth_tick).collect();
+    let hh_ids: Vec<i64> = households.iter().map(|h| h[0]).collect();
+    let hh_heads: Vec<i64> = households.iter().map(|h| h[1]).collect();
+    let hh_formed: Vec<i64> = households.iter().map(|h| h[2]).collect();
+    let hh_dissolved: Vec<i64> = households.iter().map(|h| h[3]).collect();
+    let mar_husbands: Vec<i64> = marriages.iter().map(|m| m[0]).collect();
+    let mar_wives: Vec<i64> = marriages.iter().map(|m| m[1]).collect();
+    let mar_starts: Vec<i64> = marriages.iter().map(|m| m[2]).collect();
+    let mar_ends: Vec<i64> = marriages.iter().map(|m| m[3]).collect();
+    let mar_sources: Vec<i64> = marriages.iter().map(|m| m[4]).collect();
     for column in COLUMNS {
         let values = match column {
             "person.id" | "life_course.person_id" => ids.clone(),
@@ -318,9 +493,28 @@ pub fn write_columns(
             "person.birth_tick" | "life_course.birth_tick" => births.clone(),
             "person.alive" => vec![1; n],
             "person.death_tick" | "life_course.exit_tick" => vec![i64::MAX; n],
+            "person.conceived_tick" => vec![i64::MIN; n],
+            "person.last_birth_tick" => last_births.clone(),
+            "person.household" => memberships.clone(),
+            "person.mother" | "life_course.mother" => mothers.clone(),
+            "person.father" | "life_course.father" => fathers.clone(),
+            "person.spouse" => spouses.clone(),
+            "person.parity" => parities.clone(),
+            "person.death_cause" | "person.unborn_father" => vec![0; n],
             "life_course.origin" => vec![ORIGIN_FOUNDER; n],
-            // mother, father, spouse, death_cause none, entry_tick 0, exit_kind open.
-            _ => vec![0; n],
+            "life_course.entry_tick" | "life_course.exit_kind" | "life_course.death_cause" => {
+                vec![0; n]
+            }
+            "household.id" => hh_ids.clone(),
+            "household.head" => hh_heads.clone(),
+            "household.formed_tick" => hh_formed.clone(),
+            "household.dissolved_tick" => hh_dissolved.clone(),
+            "marriage.husband" => mar_husbands.clone(),
+            "marriage.wife" => mar_wives.clone(),
+            "marriage.start_tick" => mar_starts.clone(),
+            "marriage.end_tick" => mar_ends.clone(),
+            "marriage.source" => mar_sources.clone(),
+            _ => unreachable!("unhandled genesis column {column}"),
         };
         tables.insert(column, values);
     }

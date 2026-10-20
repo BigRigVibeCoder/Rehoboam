@@ -372,7 +372,8 @@ def vocation_shares(chain: ChainLike, holy: float) -> tuple[float, float, float,
 
 def rates(mult: str, holy: float = 0.2) -> Rates:
     """NRR of commoner and member women, the mean age of net maternity, l(T) and the shares."""
-    st = m2f1.Standards(m2f1.load_spec(m2f1.NEXT_SPEC))
+    spec_path = m2f1.NEXT_SPEC if m2f1.NEXT_SPEC.exists() else m2f1.MAIN_SPEC
+    st = m2f1.Standards(m2f1.load_spec(spec_path))
     tfr_bits = m2f1.q16(TFR)
     level = m2f1.level_bits(st, tfr_bits)
     nrr_c, t_years = m2f1.nrr_with_widowhood(st, tfr_bits)
