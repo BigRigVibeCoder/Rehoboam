@@ -73,9 +73,9 @@
 
 | Branch @ head | Node / Role | State & PR | Next Action |
 |:---|:---|:---|:---|
-| `sprint/SPR-016-mortality-f1` | **Exuberant** / Agent 2<br>`AGT-002-CORE` | PR #88: Stage 3 complete; merged healed `origin/main` (`775f9391`). | CI running; Architect audit (`VER-SPR-016.md`) and merge |
-| `sprint/SPR-028-ensembles` | Adjutant Agent 1<br>`AGT-002-TOOLS` | Sprint branch: T-01 & T-02 merged via PR #124. Dispatched for T-03 (Ensembles, G1a demography gates, V-GOLD-03). | Implement `rehoboam_calib ensemble`, `fixture-demography_1000`, open draft PR |
-| `sprint/SPR-021a-…` | Queued (`AGT-002-CORE`) | No branch. Queued behind SPR-016 and SPR-019 stage A (D58 item 5). | Dispatch to `AGT-002-CORE` upon SPR-016 merge |
+| `sprint/SPR-016-mortality-f1`<br>@ `c1186e1` | Agent 2<br>`AGT-002-CORE` | PR #88: Absorbed healed `main` (`775f9391`), ladders synced. Gate 89 diagnosed (W18 null band). | Apply 2-line fix in `m2_system.rs` → CI 100% green → Architect merge |
+| `sprint/SPR-018-worldgen-lite`<br>@ `dc84ba6` | **Exuberant**<br>`AGT-002-CORE` | PR #126 (Draft): Stage A (T-01 & T-02) **COMPLETE & VERIFIED** bit-identically across all 10 golden cases. Agent stood down. | Architect Stage A audit → Stage B / T-03 dispatch |
+| `sprint/SPR-028-ensembles`<br>@ `534b5866` | Adjutant Agent 1<br>`AGT-002-TOOLS` | PR #125 (Draft): Task T-03 **COMPLETE & VERIFIED**. Core & Stream CI passed, V-GOLD-03 smoke test passed. Agent stood down. | Stage A review → T-04 / Stage B dispatch |
 | `arch/red-team-batch-04`<br>@ `63046c9` | Red Team | **Do not open a PR from it.** Carries `tools/asset_ripper`, 7 copyrighted PDFs and a viewer HTML that ADR-0036 and the licence rules keep out | Red Team retires it |
 
 ---
