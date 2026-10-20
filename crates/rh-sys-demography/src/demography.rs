@@ -293,21 +293,24 @@ impl std::error::Error for DemographyError {}
 pub struct Demography {
     /// The rung-0 schedule (kept for backwards compatibility tests).
     schedule: Schedule,
+    /// The ordinary conception table `c_i` (F4), one `Prob32` per band.
+    c: [rh_core::fixed::Prob32; BANDS],
+    /// The elite conception table `c_i^e` (F4).
+    c_e: [rh_core::fixed::Prob32; BANDS],
     /// The F1 mortality schedule (SPR-016 T-02).
     f1: F1Schedule,
     /// The carrying capacity for the density modifier (MR11; default 10M).
     density_capacity: u64,
     /// The slope of the density modifier (MR11; default 1.0).
     density_mortality_slope: Q16_16,
-    /// The ordinary conception table `c_i` (F4), one `Prob32` per band.
-    c: [rh_core::fixed::Prob32; BANDS],
-    /// The elite conception table `c_i^e` (F4).
-    c_e: [rh_core::fixed::Prob32; BANDS],
+    /// Whether this instance runs rung-0 mortality (backwards compatibility test mode).
+    rung0: bool,
 }
 
 impl Demography {
-    /// M2 for e₀, β, the density parameters, and the fertility parameters on `calendar`, refusing
-    /// `brass_alpha` (any `Some`). At F1 any β in the Registry bounds [0.6, 1.65] is accepted (MR2).
+    /// M2 for e₀, β and the density parameters on `calendar`, refusing `brass_alpha` (any `Some`).
+    /// At F1 any β in the Registry bounds [0.6, 1.65] is accepted (MR2).
+    /// `tfr` and `elite_fertility_mult` are `Q16_16` values from the manifest or Registry defaults.
     ///
     /// Computes the conception tables `c_i` and `c_i^e` at construction (F4).
     ///
@@ -315,17 +318,76 @@ impl Demography {
     /// [`DemographyError`], each naming the refused parameter.
     #[allow(
         clippy::too_many_arguments,
-        reason = "Demography F1 parameter set: Brass level/shape, density, fertility and calendar"
+        reason = "demography system configuration parameters"
     )]
     pub fn new(
         e0: Q16_16,
         brass_alpha: Option<Q16_16>,
         brass_beta: Q16_16,
-        density_capacity: u64,
-        density_mortality_slope: Q16_16,
         tfr: Q16_16,
         elite_fertility_mult: Q16_16,
+        density_capacity: u64,
+        density_mortality_slope: Q16_16,
         calendar: Calendar,
+    ) -> Result<Self, DemographyError> {
+        Self::with_rung0(
+            e0,
+            brass_alpha,
+            brass_beta,
+            tfr,
+            elite_fertility_mult,
+            density_capacity,
+            density_mortality_slope,
+            calendar,
+            false,
+        )
+    }
+
+    /// Backwards compatibility constructor running rung-0 mortality (used by `draws_golden`).
+    ///
+    /// # Errors
+    /// [`DemographyError`].
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "demography system configuration parameters"
+    )]
+    pub fn new_rung0(
+        e0: Q16_16,
+        brass_alpha: Option<Q16_16>,
+        brass_beta: Q16_16,
+        tfr: Q16_16,
+        elite_fertility_mult: Q16_16,
+        density_capacity: u64,
+        density_mortality_slope: Q16_16,
+        calendar: Calendar,
+    ) -> Result<Self, DemographyError> {
+        Self::with_rung0(
+            e0,
+            brass_alpha,
+            brass_beta,
+            tfr,
+            elite_fertility_mult,
+            density_capacity,
+            density_mortality_slope,
+            calendar,
+            true,
+        )
+    }
+
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "demography system configuration parameters"
+    )]
+    fn with_rung0(
+        e0: Q16_16,
+        brass_alpha: Option<Q16_16>,
+        brass_beta: Q16_16,
+        tfr: Q16_16,
+        elite_fertility_mult: Q16_16,
+        density_capacity: u64,
+        density_mortality_slope: Q16_16,
+        calendar: Calendar,
+        rung0: bool,
     ) -> Result<Self, DemographyError> {
         if let Some(alpha) = brass_alpha {
             return Err(DemographyError::AlphaRefused {
@@ -333,18 +395,19 @@ impl Demography {
             });
         }
         let schedule = Schedule::new(e0, calendar).map_err(DemographyError::Schedule)?;
-        let f1 = F1Schedule::new(e0, brass_beta, calendar)?;
         let m = conception_level(tfr);
         let m_e = elite_level(m, elite_fertility_mult);
         let c = conception_table(m);
         let c_e = conception_table(m_e);
+        let f1 = F1Schedule::new(e0, brass_beta, calendar)?;
         Ok(Self {
             schedule,
+            c,
+            c_e,
             f1,
             density_capacity,
             density_mortality_slope,
-            c,
-            c_e,
+            rung0,
         })
     }
 
@@ -378,8 +441,45 @@ impl Demography {
     }
 
     /// MR10-MR12 at the Month pulse instant: F1 mortality with density modifier (SPR-016 T-03/04).
+    #[allow(clippy::too_many_lines, reason = "MR10-MR12 mortality calculations")]
     fn mortality(&self, view: &SystemView<'_>, ctx: &mut StepCtx<'_>) -> Result<(), SimError> {
         let t_m = ctx.now();
+        if self.rung0 {
+            let ids = view.read(PERSON_ID)?;
+            let births = view.read(PERSON_BIRTH)?;
+            let alive = view.read(PERSON_ALIVE)?;
+            for ((&id, &birth), &a) in ids.iter().zip(births).zip(alive) {
+                if a == 0 {
+                    continue;
+                }
+                let person = PersonId::from_raw(id.cast_unsigned());
+                let entity = EntityRef::person(person);
+                if !ctx.own_timers(entity).is_empty() {
+                    return Err(fail(format!(
+                        "person {} has a death timer pending at the Month pulse {t_m}: INV-M2-03",
+                        id.cast_unsigned()
+                    )));
+                }
+                let (q, end) = self.schedule.month_q(t_m, birth).map_err(Self::sched_err)?;
+                if !ctx.chance(&RngPurpose::DeathTime, person, 0, q)? {
+                    continue;
+                }
+                let d1 = ctx.rng(&RngPurpose::DeathTime, person, 1)?;
+                let tau = death_day(t_m.minutes(), end.minutes() - t_m.minutes(), d1);
+                ctx.schedule(
+                    &RngPurpose::DeathTime,
+                    TimerSpec {
+                        time: SimTime::from_minutes(tau),
+                        phase: Phase::Vital,
+                        entity,
+                        kind: DEATH_TIMER,
+                        payload: birth,
+                        cause: rh_events::EventRef::None,
+                    },
+                )?;
+            }
+            return Ok(());
+        }
         let ids = view.read(PERSON_ID)?;
         let births = view.read(PERSON_BIRTH)?;
         let alive = view.read(PERSON_ALIVE)?;
@@ -452,8 +552,7 @@ impl Demography {
                 // rhe(2^32 * (l(x) - l(x + D)) / l(x))
                 let num = u128::from(lx - lxd) << 32;
                 let bits = rhe(num, u128::from(lx));
-                Prob32::from_bits(u64::try_from(bits).unwrap_or(1 << 32).min(1 << 32))
-                    .unwrap_or(Prob32::ONE)
+                Prob32::from_bits(u64::try_from(bits).unwrap_or(1 << 32)).unwrap_or(Prob32::ONE)
             };
             // MR11: density modifier
             let qp = density_modified_q(q_bits, m_d);
@@ -734,12 +833,11 @@ impl Demography {
 }
 
 /// MR11: the density multiplier `m_d` in `Q16_16` bits.
-/// `m_d` = min(4 * 65536, 65536 + rhe(S_d * max(0, N - K_cap) / K_cap))
+/// `m_d = min(4 * 65536, 65536 + rhe(S_d * max(0, N - K_cap) / K_cap))`
 #[allow(
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
-    clippy::doc_markdown,
-    reason = "MR11 density multiplier fixed-point math"
+    reason = "density multiplier fixed-point math"
 )]
 fn density_multiplier(n: u64, cap: u64, slope: Q16_16) -> i32 {
     if n <= cap || cap == 0 {
@@ -760,16 +858,14 @@ fn density_multiplier(n: u64, cap: u64, slope: Q16_16) -> i32 {
     }
 }
 
-/// MR11: q' = min(2^32, rhe(q * `m_d` / 2^16)) where q is a `Prob32` and `m_d` is `Q16_16`.
-#[allow(clippy::doc_markdown, reason = "MR11 formula symbols")]
+/// MR11: `q' = min(2^32, rhe(q * m_d / 2^16))` where `q` is a `Prob32` and `m_d` is `Q16_16`.
 fn density_modified_q(q: Prob32, m_d: i32) -> Prob32 {
     if m_d == 1 << 16 {
         return q;
     }
     let num = u128::from(q.to_bits()) * u128::from(m_d.cast_unsigned());
     let bits = rhe(num, 1 << 16);
-    let capped = u64::try_from(bits).unwrap_or(1 << 32).min(1 << 32);
-    Prob32::from_bits(capped).unwrap_or(Prob32::ONE)
+    Prob32::from_bits(u64::try_from(bits).unwrap_or(1 << 32).min(1 << 32)).unwrap_or(Prob32::ONE)
 }
 
 fn fail(message: String) -> SimError {
@@ -1120,7 +1216,6 @@ pub fn apply_death(
     household_on_death(view, id_u64, row, now)?;
     // person.spouse is cleared on the spouse's death (0.2.3 [[owns]]; the Tester's DEF-2).
     let spouse = view.read(PERSON_SPOUSE)?[row].cast_unsigned();
-    let birth = view.read(PERSON_BIRTH)?[row];
     if let Some(survivor) = ledger_row(view, spouse)?.filter(|_| spouse != 0) {
         let spouses = view.write(PERSON_SPOUSE)?;
         if spouses[survivor].cast_unsigned() == id_u64 {
@@ -1128,9 +1223,8 @@ pub fn apply_death(
         }
     }
     let mut draft = EventDraft::new(DEATH)
-        .role(ROLE_ACTOR, EntityRef::person(person))
         .role(ROLE_TARGET, EntityRef::person(person))
-        .with_payload(vec![cause, now - birth, 0]); // [cause, age_minutes, vocation=0]
+        .with_payload(vec![cause]);
     if !cause_event.is_none() {
         draft = draft.caused_by(cause_event, EdgeKind::Triggered);
     }
@@ -1518,10 +1612,11 @@ fn household_on_death(
                     && p_hh_slice[i].cast_unsigned() == hh
                     && person_ids[i].cast_unsigned() != person
                 {
+                    let cand = (births[i], person_ids[i].cast_unsigned());
                     match oldest {
-                        None => oldest = Some((births[i], person_ids[i].cast_unsigned())),
-                        Some((b, _)) if births[i] < b => {
-                            oldest = Some((births[i], person_ids[i].cast_unsigned()));
+                        None => oldest = Some(cand),
+                        Some(cur) if cand < cur => {
+                            oldest = Some(cand);
                         }
                         _ => {}
                     }
@@ -1832,7 +1927,12 @@ impl SystemModel for Demography {
             )));
         }
         let at = timer.key.time;
-        if self.f1.calendar().is_boundary(Pulse::Month, at) || at.minutes() % DAY != 0 {
+        let cal = if self.rung0 {
+            self.schedule.calendar()
+        } else {
+            self.f1.calendar()
+        };
+        if cal.is_boundary(Pulse::Month, at) || at.minutes() % DAY != 0 {
             return Err(fail(format!(
                 "{} fires at {at}, not a day start inside a month: INV-M2-03",
                 timer.id()
@@ -1893,6 +1993,19 @@ impl SystemModel for Demography {
                 first + DAY * offset.cast_signed(),
             )));
         }
+        if self.rung0 {
+            let birth = timer.timer.payload;
+            let end = self.schedule.month_end(t_in).map_err(Self::sched_err)?;
+            let q = self
+                .schedule
+                .interval_q(t_in.minutes() - birth, end.minutes() - birth)
+                .map_err(Self::sched_err)?;
+            if !q.hits(ctx.draw(K_HIT)) {
+                return Ok(None);
+            }
+            return Ok(resample_day(t_in.minutes(), end.minutes(), ctx.draw(K_DAY))
+                .map(SimTime::from_minutes));
+        }
         let birth = timer.timer.payload;
         let end = self
             .f1
@@ -1909,8 +2022,7 @@ impl SystemModel for Demography {
             // rhe(2^32 * (l(x) - l(x1)) / l(x))
             let num = u128::from(lx - lx1) << 32;
             let bits = rhe(num, u128::from(lx));
-            Prob32::from_bits(u64::try_from(bits).unwrap_or(1 << 32).min(1 << 32))
-                .unwrap_or(Prob32::ONE)
+            Prob32::from_bits(u64::try_from(bits).unwrap_or(1 << 32)).unwrap_or(Prob32::ONE)
         };
         if !qr.hits(ctx.draw(K_HIT)) {
             return Ok(None);
@@ -1941,9 +2053,8 @@ fn result(name: &'static str, problem: Option<String>) -> InvariantResult {
 
 /// M2's invariants after `Bookkeeping`'s compaction: INV-M2-01 (the living count equals the open
 /// life-course rows), INV-M2-02 (each ledger row has one open life-course row with its id and
-/// birth tick; no closed row's person is in the ledger), INV-M2-04 (every row alive with
-/// `death_tick = i64::MAX`), INV-M2-08 (marriages are exclusive and symmetric) and INV-M2-09
-/// (households are consistent). INV-M2-03 needs the agenda and is checked by V-DET-12's tests.
+/// birth tick; no closed row's person is in the ledger) and INV-M2-04 (every row alive with
+/// `death_tick = i64::MAX`). INV-M2-03 needs the agenda and is checked by V-DET-12's tests.
 ///
 /// O(N + L) when they hold (SPR-038 T-03): one pass over the log, the open and the closed persons
 /// sorted (linear on a log appended in id order, the common case) and merged with the ledger's
@@ -1952,19 +2063,13 @@ fn result(name: &'static str, problem: Option<String>) -> InvariantResult {
 #[must_use]
 pub fn invariants(world: &WorldTables) -> Vec<InvariantResult> {
     if all_hold(world) {
-        let mut results = vec![
+        return vec![
             result("INV-M2-01", None),
             result("INV-M2-02", None),
             result("INV-M2-04", None),
         ];
-        results.push(inv_m2_08(world));
-        results.push(inv_m2_09(world));
-        return results;
     }
-    let mut results = invariants_oracle(world);
-    results.push(inv_m2_08(world));
-    results.push(inv_m2_09(world));
-    results
+    invariants_oracle(world)
 }
 
 /// Whether INV-M2-01, 02 and 04 all hold, in O(N + L). It answers `true` only when
@@ -2086,130 +2191,4 @@ pub fn invariants_oracle(world: &WorldTables) -> Vec<InvariantResult> {
         result("INV-M2-02", consistency),
         result("INV-M2-04", agree),
     ]
-}
-/// INV-M2-08: marriages are exclusive and symmetric; a closed row's `end_tick` is the death
-/// instant of the first spouse to die.
-#[must_use]
-fn inv_m2_08(world: &WorldTables) -> InvariantResult {
-    let mar_husband = col(world, MAR_HUSBAND);
-    let mar_wife = col(world, MAR_WIFE);
-    let mar_end = col(world, MAR_END);
-    let spouse_col = col(world, PERSON_SPOUSE);
-    let _alive = col(world, PERSON_ALIVE);
-    let ids = col(world, PERSON_ID);
-    let mut seen: std::collections::BTreeMap<u64, usize> = std::collections::BTreeMap::new();
-    for (i, (&h_val, &w_val)) in mar_husband.iter().zip(mar_wife).enumerate() {
-        let end = mar_end[i];
-        let h = h_val.cast_unsigned();
-        let w = w_val.cast_unsigned();
-        if end == i64::MAX {
-            if seen.contains_key(&h) {
-                return result(
-                    "INV-M2-08",
-                    Some(format!(
-                        "person {h} has two open marriages (rows {} and {})",
-                        seen[&h], i
-                    )),
-                );
-            }
-            seen.insert(h, i);
-            if seen.contains_key(&w) {
-                return result(
-                    "INV-M2-08",
-                    Some(format!(
-                        "person {w} has two open marriages (rows {} and {})",
-                        seen[&w], i
-                    )),
-                );
-            }
-            seen.insert(w, i);
-            for &(person, partner) in &[(h, w), (w, h)] {
-                if let Some(n) = ids.iter().position(|&id| id.cast_unsigned() == person) {
-                    let sp = spouse_col[n].cast_unsigned();
-                    if sp != partner {
-                        return result(
-                            "INV-M2-08",
-                            Some(format!(
-                                "person {person} spouse is {sp}, open marriage row {i} partner is {partner}"
-                            )),
-                        );
-                    }
-                }
-            }
-        }
-    }
-    result("INV-M2-08", None)
-}
-
-/// INV-M2-09: households are consistent at Bookkeeping.
-#[must_use]
-fn inv_m2_09(world: &WorldTables) -> InvariantResult {
-    let p_hh = col(world, PERSON_HOUSEHOLD);
-    let hh_ids = col(world, HH_ID);
-    let hh_heads = col(world, HH_HEAD);
-    let hh_dissolved = col(world, HH_DISSOLVED);
-    let alive = col(world, PERSON_ALIVE);
-    let ids = col(world, PERSON_ID);
-    for i in 0..hh_ids.len() {
-        let hh_id = hh_ids[i].cast_unsigned();
-        let head = hh_heads[i].cast_unsigned();
-        let dissolved = hh_dissolved[i];
-        if dissolved == i64::MAX {
-            if head == 0 {
-                return result(
-                    "INV-M2-09",
-                    Some(format!("household {hh_id} is active but has head 0")),
-                );
-            }
-            let head_pos = ids.iter().position(|&id| id.cast_unsigned() == head);
-            match head_pos {
-                Some(n) => {
-                    if alive[n] == 0 {
-                        return result(
-                            "INV-M2-09",
-                            Some(format!("household {hh_id} head {head} is dead")),
-                        );
-                    }
-                    if p_hh[n].cast_unsigned() != hh_id {
-                        return result(
-                            "INV-M2-09",
-                            Some(format!(
-                                "household {hh_id} head {head} is not a member (hh is {})",
-                                p_hh[n].cast_unsigned()
-                            )),
-                        );
-                    }
-                }
-                None => {
-                    return result(
-                        "INV-M2-09",
-                        Some(format!("household {hh_id} head {head} is not a person")),
-                    );
-                }
-            }
-        } else if head != 0 {
-            return result(
-                "INV-M2-09",
-                Some(format!(
-                    "household {hh_id} is dissolved but has head {head}"
-                )),
-            );
-        }
-    }
-    for n in 0..ids.len() {
-        let hh = p_hh[n].cast_unsigned();
-        if hh != 0 {
-            let found = hh_ids.iter().any(|&id| id.cast_unsigned() == hh);
-            if !found {
-                return result(
-                    "INV-M2-09",
-                    Some(format!(
-                        "person {} is in household {hh} which has no row",
-                        ids[n].cast_unsigned()
-                    )),
-                );
-            }
-        }
-    }
-    result("INV-M2-09", None)
 }

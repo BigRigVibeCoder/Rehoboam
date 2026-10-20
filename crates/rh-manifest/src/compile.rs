@@ -310,10 +310,10 @@ fn demography(
     Some(DemographyParams {
         e0,
         brass_beta,
-        density_capacity: 10_000_000,
-        density_mortality_slope: Q16_16::ONE,
         tfr,
         elite_fertility_mult,
+        density_capacity: 10_000_000,
+        density_mortality_slope: Q16_16::ONE,
     })
 }
 

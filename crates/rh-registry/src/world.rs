@@ -62,14 +62,14 @@ pub struct DemographyParams {
     pub e0: Q16_16,
     /// The Brass slope; exactly 1 at rung 0, any value in [0.6, 1.65] at F1.
     pub brass_beta: Q16_16,
-    /// The carrying capacity N above which the density modifier raises mortality (MR11; default 10M).
-    pub density_capacity: u64,
-    /// The slope of the density modifier above the capacity (MR11; default 1.0).
-    pub density_mortality_slope: Q16_16,
     /// Total fertility rate target (F2), in `Q16_16`.
     pub tfr: Q16_16,
     /// Fertility multiplier for house members (F2), in `Q16_16`.
     pub elite_fertility_mult: Q16_16,
+    /// The carrying capacity N above which the density modifier raises mortality (MR11; default 10M).
+    pub density_capacity: u64,
+    /// The slope of the density modifier above the capacity (MR11; default 1.0).
+    pub density_mortality_slope: Q16_16,
 }
 
 /// A founder's sex: as the manifest gives it, else drawn by `rh-worldgen` (ruling 10).

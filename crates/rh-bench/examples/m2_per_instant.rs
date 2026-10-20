@@ -47,10 +47,10 @@ fn engine(n: usize) -> Engine {
         demography: Some(DemographyParams {
             e0: Q16_16::from_int(30),
             brass_beta: Q16_16::ONE,
-            density_capacity: 10_000_000,
-            density_mortality_slope: Q16_16::ONE,
             tfr: Q16_16::from_bits(321_126), // 4.9 in Q16_16
             elite_fertility_mult: Q16_16::ONE,
+            density_capacity: 10_000_000,
+            density_mortality_slope: Q16_16::ONE,
         }),
         founders: vec![
             Founder {

@@ -303,9 +303,9 @@ fn engine(persons: &[(u64, i64, i64)], commanders: Vec<Commander>) -> Engine {
         Q16_16::from_int(30),
         None,
         Q16_16::ONE,
-        10_000_000,
-        Q16_16::ZERO,
         Q16_16::from_bits(321_126), // 4.9
+        Q16_16::ONE,
+        10_000_000,
         Q16_16::ONE,
         D360,
     )
@@ -524,9 +524,9 @@ fn a_head_death_widows_the_survivor_and_transfers_headship() {
         Q16_16::from_int(30),
         None,
         Q16_16::ONE,
-        10_000_000,
-        Q16_16::ZERO,
         Q16_16::from_bits(321_126),
+        Q16_16::ONE,
+        10_000_000,
         Q16_16::ONE,
         D360,
     )
@@ -587,9 +587,9 @@ fn the_last_members_death_dissolves_the_household() {
         Q16_16::from_int(30),
         None,
         Q16_16::ONE,
-        10_000_000,
-        Q16_16::ZERO,
         Q16_16::from_bits(321_126),
+        Q16_16::ONE,
+        10_000_000,
         Q16_16::ONE,
         D360,
     )

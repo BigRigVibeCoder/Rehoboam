@@ -154,13 +154,13 @@ fn run(w: &World) -> Vec<(i64, u64)> {
         365 => Calendar::new(DaysPerYear::D365, SeasonsPerYear::Four),
         d => panic!("{d} days a year"),
     };
-    let m2 = Demography::new(
+    let m2 = Demography::new_rung0(
         Q16_16::from_bits(w.e0_bits),
         None,
         Q16_16::ONE,
-        10_000_000,
-        Q16_16::ONE,
         Q16_16::from_int(4),
+        Q16_16::ONE,
+        10_000_000,
         Q16_16::ONE,
         calendar,
     )

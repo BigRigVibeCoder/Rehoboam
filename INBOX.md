@@ -1,79 +1,51 @@
-# Work Order: Exuberant (AGT-002-CORE) — SPR-016 Stage 3 (Merge Conclusion & Final Verification)
+# Exuberant (AGT-002-CORE): Work Order — Stage B (Partnering & Households)
 
 **Role:** Core Developer (Rust Core Engine)  
 **Assigned VM:** `exuberant`  
-**Current Branch:** `sprint/SPR-016-mortality-f1` (PR #88)  
-**Date:** 2026-10-19  
-**Author:** Lead Architect (`AGT-001`)  
+**Branch:** `sprint/SPR-015-births-f1` (PR #107)  
+**Date:** 2026-10-18  
 
 ---
 
-## 1. Incident Root Cause & Architect Remediation
-
-During your previous session, your execution was halted after 6 consecutive tool errors:
-- **Root Cause:** A syntax error occurred in tool calling where shell commands were prefixed with `>` (e.g. `>cargo check ...`) and passed with a second array element `"description"`. The shell interpreted `>` as an output redirection, creating accidental empty files named `cargo`, `cd`, `grep`, `python3`, `rm` and reporting `description: command not found` (exit code 127).
-- **Remediation Applied by Architect:**
-  1. Removed all accidental files (`cargo`, `cd`, `grep`, `python3`, `rm`).
-  2. Patched all 5 downstream `Demography::new` call sites across the workspace to match the 8-argument signature (`density_capacity: 10_000_000`, `density_mortality_slope: Q16_16::ZERO`).
-  3. Resolved all Clippy warnings and disallowed `unwrap()` calls in `demography.rs`.
-  4. Ran `cargo fmt` cleanly across all modified crates.
-  5. Staged all resolved conflicts and fixes into git (`git add -u`).
+## 1. Status Update & Verification Report
+- ✅ **Task T-03 Approved**: Your `[algorithm.fertility_f1]` implementation passed all 15 crate tests, the 9-step Python selftest, and all 6 Red Team adversarial failure-mode traps.
+- ✅ **Downstream Fixtures Approved**: Commit `3ead3ab` properly updated downstream test fixtures.
+- ℹ️ **Genesis Invariant Fix**: The Architect on Adjutant is handling the `rh-worldgen` sentinel column plumbing for `person.conceived_tick` to turn PR #107 CI green. Before starting, run `git pull origin sprint/SPR-015-births-f1` to pick up any changes.
 
 ---
 
-## 2. Current Verified State
+## 2. Stage B Implementation: Task T-04 (Partnering & Marriages)
 
-The workspace is in an advanced, near-complete state:
-- ✅ **Upstream Main Merge:** PR #107 (SPR-015: Births & Households) and PR #123 (SPR-027: Stream Materializer) are merged into working tree. All conflicts resolved and staged.
-- ✅ **Python Verification:** `python/tests/test_mutant_features.py` indentation fixed. `ruff check`, `ruff format --check`, `mypy --strict`, and `pytest` are **100% green**.
-- ✅ **Rust Compilation & Linting:**
-  - `cargo check --tests --workspace` passes with **0 errors and 0 warnings**.
-  - `cargo clippy --workspace --all-targets -- -D warnings` passes cleanly.
-  - `cargo fmt --check` passes cleanly.
-- ✅ **Test Coverage:**
-  - `partnering_tests` (7 passed).
-  - `schedule_f1_golden` (5 passed).
-  - `rh-core` (63 passed).
-  - `rh-contracts` (all passed).
-  - `demography.rs` implements `inv_m2_08` and `inv_m2_09`.
-  - `household_on_death` is verified in `apply_death`.
+Implement `[algorithm.partnering_f1]` (N1–N7, H3, H4; INV-M2-08, 11, 13) in `crates/rh-sys-demography`:
 
----
+### 1. Constants & Hazard Lookup (N1–N2)
+- Monthly nuptiality hazard $\mu_i$ from `constants.nuptiality_thousandths`.
+- Marriage age bounds: `MIN_AGE_F = 15`, `MIN_AGE_M = 18`.
 
-## 3. Action Steps to Execute
+### 2. Month/Vital Partnering Step (N3–N5)
+- Scan eligible women (unmarried, female, alive, age in marriage range).
+- Draw $k = 0$ against $\mu_i$.
+- On a hit: scan candidate men (alive, male, unmarried, age $\ge 18$, `named = 0`, `holy_orders = 0`, not matched this step, not in `kin(w, 2)` over the index).
+- **CRN Husband Pick**: Select candidate with minimum keyed hash `H(husband_pick, branch_salt, candidate_id)`.
+- Schedule `MARRIAGE_TIMER` on day $d$ ($k = 1$).
 
-### Step 1: Conclude the Merge Commit
-All merge conflicts and fixes are already staged in git. Conclude the merge:
-```bash
-cd /home/bdavidriggins/Documents/Rehoboam
-git commit -m "chore(SPR-016): merge origin/main and resolve M2 F1 constructor parity [C1]"
-```
+### 3. `apply_marry` (N7)
+- Re-check ages for M2 timers.
+- Set reciprocal `person.spouse` on both parties (`a.spouse = b`, `b.spouse = a`).
+- Append `marriage` row (`source = partnering` or `source = command`).
+- Emit `MARRIAGE` event (`actor` = husband, `target` = wife).
+- Update household membership per H3.
 
-### Step 2: Handle F1 Draws Golden Fold (Task T-03 / W19)
-Note that `crates/rh-sys-demography/tests/draws_golden.rs` is the old Rung-0 test where founders > 90 face linear mortality to 100. Under F1 (MR8), founders > 90 face logistic mortality to 120.
-- Per SPR-016 Task T-03 and ruling W19: the draws golden is folded into the F1 model (`f1_draws_golden.rs` / `specs/demography/golden/m2_f1_mortality.txt`).
-- Confirm `python3 -I specs/demography/selftest_m2_f1_mortality.py` passes cleanly (it generates 21,109 lines of golden vectors bit-for-bit).
-
-### Step 3: Run Verification
-Ensure your environment includes Rust and Python tools:
-```bash
-export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
-cd /home/bdavidriggins/Documents/Rehoboam
-cargo check --tests --workspace
-cargo test -p rh-sys-demography --test partnering_tests
-cargo test -p rh-sys-demography --test schedule_f1_golden
-python/.venv/bin/python -I -m ruff check --config python/pyproject.toml --no-cache .
-```
-
-### Step 4: Push to Origin
-Once verification succeeds, push your branch:
-```bash
-git push origin sprint/SPR-016-mortality-f1
-```
+### 4. H4 Household Dissolution & Widowhood
+- On spouse death in S12: clear `person.spouse`, close marriage row (`end_tick = now`), transfer headship to surviving spouse or oldest living member, dissolve household if empty.
 
 ---
 
-## 4. Critical Command Execution Rules for Cline
-1. **Never prefix commands with `>`**. Do not type `>cargo check`.
-2. **Proper JSON command format:** Pass commands as a single object with `"command": "..."` and `"description": "..."`, or run commands directly without extra strings in the array.
-3. If cargo or rust tools report command not found in your subshell, prefix with `export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH" && ...`.
+## 3. Verification Commands
+- `cargo check --tests --workspace`
+- `cargo test -p rh-sys-demography`
+- `cargo test -p rh-worldgen`
+
+When ready, commit as:
+`feat(SPR-015): T-04 implement partnering, apply_marry, and households F1`
+and push to `origin/sprint/SPR-015-births-f1`.

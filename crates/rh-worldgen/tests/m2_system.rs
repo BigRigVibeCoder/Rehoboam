@@ -66,10 +66,10 @@ fn world(seed: u64, calendar: Calendar, e0: i16, founders: Vec<Founder>) -> Worl
         demography: Some(DemographyParams {
             e0: Q16_16::from_int(e0),
             brass_beta: Q16_16::ONE,
-            density_capacity: 10_000_000,
-            density_mortality_slope: Q16_16::ONE,
             tfr: Q16_16::from_bits(321_126), // 4.9 in Q16_16
             elite_fertility_mult: Q16_16::ONE,
+            density_capacity: 10_000_000,
+            density_mortality_slope: Q16_16::ONE,
         }),
         founders,
         households: Vec::new(),
@@ -137,13 +137,14 @@ fn registration_against_the_frozen_spec_passes() {
 #[test]
 fn alpha_and_beta_other_than_one_are_refused_by_name() {
     let thirty = Q16_16::from_int(30);
+    let tfr = Q16_16::from_bits(321_126);
     let e = Demography::new(
         thirty,
         Some(Q16_16::ZERO),
         Q16_16::ONE,
-        10_000_000,
+        tfr,
         Q16_16::ONE,
-        Q16_16::from_bits(321_126),
+        10_000_000,
         Q16_16::ONE,
         D360,
     )
@@ -156,11 +157,11 @@ fn alpha_and_beta_other_than_one_are_refused_by_name() {
             thirty,
             None,
             Q16_16::from_bits(65_537),
+            tfr,
+            Q16_16::ONE,
             10_000_000,
             Q16_16::ONE,
-            Q16_16::from_bits(321_126),
-            Q16_16::ONE,
-            D360
+            D360,
         )
         .is_ok()
     );
@@ -168,9 +169,9 @@ fn alpha_and_beta_other_than_one_are_refused_by_name() {
         Q16_16::from_int(19),
         None,
         Q16_16::ONE,
-        10_000_000,
+        tfr,
         Q16_16::ONE,
-        Q16_16::from_bits(321_126),
+        10_000_000,
         Q16_16::ONE,
         D360,
     )
@@ -181,9 +182,9 @@ fn alpha_and_beta_other_than_one_are_refused_by_name() {
             thirty,
             None,
             Q16_16::ONE,
-            10_000_000,
+            tfr,
             Q16_16::ONE,
-            Q16_16::from_bits(321_126),
+            10_000_000,
             Q16_16::ONE,
             D360
         )
@@ -444,9 +445,9 @@ fn q15_of_10000_newborns_is_inside_the_binomial_band_for_32_seeds() {
         Q16_16::from_int(30),
         None,
         Q16_16::ONE,
-        10_000_000,
-        Q16_16::ONE,
         Q16_16::from_bits(321_126),
+        Q16_16::ONE,
+        10_000_000,
         Q16_16::ONE,
         D360,
     )

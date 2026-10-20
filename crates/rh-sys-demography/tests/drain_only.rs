@@ -32,9 +32,9 @@ fn check(spec: &SystemSpec) -> Result<usize, String> {
         Q16_16::from_int(30),
         None,
         Q16_16::ONE,
-        10_000_000,
-        Q16_16::ONE,
         Q16_16::from_int(4),
+        Q16_16::ONE,
+        10_000_000,
         Q16_16::ONE,
         CALENDAR,
     )
