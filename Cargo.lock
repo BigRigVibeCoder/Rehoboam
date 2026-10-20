@@ -1025,6 +1025,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rh-sys-regions"
+version = "0.0.0"
+dependencies = [
+ "rh-core",
+ "rh-ids",
+ "rh-registry",
+]
+
+[[package]]
 name = "rh-sys-smoke"
 version = "0.0.0"
 dependencies = [
