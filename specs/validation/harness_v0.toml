@@ -1,0 +1,570 @@
+# harness_v0.toml: machine-readable stylized fact declarations (SPR-028)
+# Format: rehoboam/m9/bands/v0
+# Governed by: docs/09_verification_and_validation.md §3.1, specs/validation/harness_v0.md
+
+[schema]
+format = "rehoboam/m9/bands/v0"
+version = "0.1.0"
+
+[bands."V-SF-01.r"]
+id = "V-SF-01.r"
+fact = "Long-run growth rate without technology shocks"
+kind = "Identity"
+role = "Calibration"
+level = "System"
+status = "gate_g1a"
+statistic = "Seed-mean growth rate r with two-sided 99.9% Student-t interval"
+unit = "%/yr"
+min_samples = 32
+lower_bound = -0.001
+upper_bound = 0.003
+test_method = "student_t"
+alpha = 0.001
+
+[bands."V-SF-01.pop"]
+id = "V-SF-01.pop"
+fact = "Population range per seed"
+kind = "Identity"
+role = "Calibration"
+level = "System"
+status = "report"
+statistic = "Per-seed population ratio N(y)/N_0 compared against expected spread"
+unit = "ratio"
+min_samples = 32
+lower_bound = 0.3
+upper_bound = 5.0
+test_method = "range_report"
+
+[bands."V-SF-02"]
+id = "V-SF-02"
+fact = "Child mortality to age 15 (agrarian)"
+kind = "Identity"
+role = "Calibration"
+level = "Individual"
+status = "gate_g1a"
+statistic = "Cohort child mortality q(15) from life-course log with two-sided 99.9% Student-t interval"
+unit = "probability"
+min_samples = 400
+lower_bound = 0.35
+upper_bound = 0.55
+test_method = "student_t"
+alpha = 0.001
+
+[bands."V-SF-02b"]
+id = "V-SF-02b"
+fact = "Adult mortality shape"
+kind = "Identity"
+role = "Calibration"
+level = "Individual"
+status = "gate_g1a"
+statistic = "Adult survival ratio l(65)/l(15) from life-course log within manifest-implied tolerance"
+unit = "ratio"
+min_samples = 400
+tolerance = 0.03
+test_method = "student_t"
+alpha = 0.001
+
+[bands."V-SF-03"]
+id = "V-SF-03"
+fact = "Famine mortality crises (agrarian windows)"
+kind = "Emergent"
+role = "Calibration"
+level = "Settlement"
+status = "gate_g1b"
+statistic = "Crises per settlement-century: any class 2-5, medium or worse 1-3, major 0.1-0.5"
+unit = "crises/century"
+min_samples = 10
+test_method = "bootstrap"
+
+[bands."V-SF-03a"]
+id = "V-SF-03a"
+fact = "Harvest shortfalls (temperate zones)"
+kind = "Identity"
+role = "Calibration"
+level = "Region"
+status = "gate_g1b"
+statistic = "Detrended composite staple yield CV and shortfall frequencies"
+unit = "probability"
+min_samples = 200
+test_method = "clopper_pearson"
+
+[bands."V-SF-03b"]
+id = "V-SF-03b"
+fact = "Price response and famine price amplitude"
+kind = "Emergent"
+role = "Calibration"
+level = "Region"
+status = "report"
+statistic = "Mean absolute YoY price change and peak/normal price ratio in worst famine"
+unit = "ratio"
+min_samples = 100
+test_method = "bootstrap"
+
+[bands."V-SF-03c"]
+id = "V-SF-03c"
+fact = "What triggers famine"
+kind = "Emergent"
+role = "Held-out"
+level = "Region"
+status = "gate_g1b"
+statistic = "Share of crisis windows following consecutive shortfalls or siege >= 70%"
+unit = "share"
+min_samples = 20
+lower_bound = 0.70
+test_method = "clopper_pearson"
+
+[bands."V-SF-03d"]
+id = "V-SF-03d"
+fact = "Entitlement, not stock alone"
+kind = "Emergent"
+role = "Held-out"
+level = "Household"
+status = "gate_g4"
+statistic = "Real wages rise and crisis share falls after mortality shock; Spearman rho > 0"
+unit = "correlation"
+min_samples = 100
+test_method = "crn_paired"
+
+[bands."V-SF-03e"]
+id = "V-SF-03e"
+fact = "General famines per polity-century"
+kind = "Emergent"
+role = "Held-out"
+level = "Polity"
+status = "soft"
+statistic = "General famines per polity-century in pressured windows 2-5"
+unit = "count/century"
+min_samples = 30
+lower_bound = 2.0
+upper_bound = 5.0
+test_method = "poisson_exact"
+
+[bands."V-SF-04"]
+id = "V-SF-04"
+fact = "Secular cycles (agrarian windows)"
+kind = "Emergent"
+role = "Calibration"
+level = "Polity"
+status = "gate_g4"
+statistic = "Cycle length between turning points median 200-330 years, >=80% in 150-450"
+unit = "years"
+min_samples = 30
+lower_bound = 200.0
+upper_bound = 330.0
+test_method = "bootstrap"
+
+[bands."V-SF-04b"]
+id = "V-SF-04b"
+fact = "Instability contrast between phases"
+kind = "Emergent"
+role = "Held-out"
+level = "Polity"
+status = "gate_g4"
+statistic = "Instability events per decade decline/growth > 1 in every completed cycle; median 3-10"
+unit = "ratio"
+min_samples = 10
+lower_bound = 1.0
+test_method = "wilcoxon"
+
+[bands."V-SF-05"]
+id = "V-SF-05"
+fact = "Fathers-and-sons violence waves"
+kind = "Emergent"
+role = "Held-out"
+level = "Polity"
+status = "gate_g4"
+statistic = "Intervals between internal-violence peaks median 40-60 years, IQR in 30-75"
+unit = "years"
+min_samples = 10
+lower_bound = 40.0
+upper_bound = 60.0
+test_method = "bootstrap"
+
+[bands."V-SF-05b"]
+id = "V-SF-05b"
+fact = "Structural-demographic lead-lag"
+kind = "Emergent"
+role = "Calibration"
+level = "Polity"
+status = "soft"
+statistic = "Relative-wage downturn leads elite rise by 10-30 years"
+unit = "years"
+min_samples = 10
+lower_bound = 10.0
+upper_bound = 30.0
+test_method = "cross_correlation"
+
+[bands."V-SF-06"]
+id = "V-SF-06"
+fact = "Ruler murder (era-conditioned)"
+kind = "Identity"
+role = "Calibration"
+level = "Polity"
+status = "gate_g1b"
+statistic = "Murders per 1,000 ruler-years by institutional state; violent share of ruler deaths 15-30%"
+unit = "rate/1000yr"
+min_samples = 20
+test_method = "poisson_exact"
+
+[bands."V-SF-06b"]
+id = "V-SF-06b"
+fact = "Deposition by succession law"
+kind = "Identity"
+role = "Calibration"
+level = "Polity"
+status = "gate_g1b"
+statistic = "Domestic deposition share by law; primogeniture vs elective HR in [0.17, 0.63]"
+unit = "hazard_ratio"
+min_samples = 20
+lower_bound = 0.17
+upper_bound = 0.63
+test_method = "cox_stratified"
+
+[bands."V-SF-06c"]
+id = "V-SF-06c"
+fact = "Reign length follows institutions"
+kind = "Emergent"
+role = "Held-out"
+level = "Polity"
+status = "sealed"
+statistic = "Kaplan-Meier restricted mean reign length: unconstrained 8-15y, constrained 17-22y"
+unit = "years"
+min_samples = 20
+test_method = "kaplan_meier"
+
+[bands."V-SF-06d"]
+id = "V-SF-06d"
+fact = "Regicide contagion"
+kind = "Identity"
+role = "Calibration"
+level = "Polity"
+status = "soft"
+statistic = "Murdered predecessor raises odds of next ruler murder: odds ratio 1.5-4.0"
+unit = "odds_ratio"
+min_samples = 20
+lower_bound = 1.5
+upper_bound = 4.0
+test_method = "logistic_regression"
+
+[bands."V-SF-07"]
+id = "V-SF-07"
+fact = "Polity lifespans"
+kind = "Emergent"
+role = "Held-out"
+level = "Polity"
+status = "sealed"
+statistic = "Weibull shape k in [0.8, 1.7]; empire mean lifespan 150-320 years"
+unit = "shape_k"
+min_samples = 20
+lower_bound = 0.8
+upper_bound = 1.7
+test_method = "weibull_censored"
+
+[bands."V-SF-08"]
+id = "V-SF-08"
+fact = "City sizes"
+kind = "Emergent"
+role = "Calibration"
+level = "Settlement"
+status = "soft"
+statistic = "Settlement-size tail exponent alpha in [1.8, 2.6]"
+unit = "exponent"
+min_samples = 100
+lower_bound = 1.8
+upper_bound = 2.6
+test_method = "csn_powerlaw"
+
+[bands."V-SF-09"]
+id = "V-SF-09"
+fact = "War severity (era-invariant shape)"
+kind = "Emergent"
+role = "Calibration"
+level = "System"
+status = "gate_g4"
+statistic = "Heavy tail alpha in [1.3, 1.9]; Clauset-Shalizi-Newman recipe"
+unit = "exponent"
+min_samples = 100
+lower_bound = 1.3
+upper_bound = 1.9
+test_method = "csn_powerlaw"
+
+[bands."V-SF-09b"]
+id = "V-SF-09b"
+fact = "War onsets are memoryless"
+kind = "Emergent"
+role = "Held-out"
+level = "System"
+status = "gate_g4"
+statistic = "Gaps between interstate war onsets geometric-plausible; dispersion in [0.7, 1.5]"
+unit = "dispersion"
+min_samples = 50
+lower_bound = 0.7
+upper_bound = 1.5
+test_method = "bootstrap"
+
+[bands."V-SF-09c"]
+id = "V-SF-09c"
+fact = "The war tail is produced, not fitted"
+kind = "Emergent"
+role = "Calibration"
+level = "System"
+status = "gate_g4"
+statistic = "Ablation raises alpha by >= 0.3 or makes tail implausible"
+unit = "delta_exponent"
+min_samples = 32
+lower_bound = 0.3
+test_method = "crn_paired"
+
+[bands."V-SF-10"]
+id = "V-SF-10"
+fact = "Malthusian test (agrarian windows)"
+kind = "Identity"
+role = "Calibration"
+level = "System"
+status = "report"
+statistic = "Density increase; long-run real income TOST-equivalent to no change, delta = +/-5%"
+unit = "%_income"
+min_samples = 32
+tolerance = 0.05
+test_method = "tost"
+
+[bands."V-SF-10b"]
+id = "V-SF-10b"
+fact = "Malthusian wage pressure and its escape"
+kind = "Emergent"
+role = "Calibration"
+level = "Region"
+status = "report"
+statistic = "Frozen tech lowers WR_A; productivity matching population keeps WR_A within +/-20%"
+unit = "ratio"
+min_samples = 32
+test_method = "crn_paired"
+
+[bands."V-SF-11"]
+id = "V-SF-11"
+fact = "Post-mortality-shock real wage"
+kind = "Identity"
+role = "Calibration"
+level = "Region"
+status = "report"
+statistic = "Mean WR_A over years +10 to +50 exceeds years -25 to -1"
+unit = "sign"
+min_samples = 10
+test_method = "sign_test"
+
+[bands."V-SF-11b"]
+id = "V-SF-11b"
+fact = "Post-plague levelling"
+kind = "Emergent"
+role = "Held-out"
+level = "Household"
+status = "report"
+statistic = "Top-10% wealth share falls below pre-event level within 50 years"
+unit = "sign"
+min_samples = 10
+test_method = "sign_test"
+
+[bands."V-SF-11c"]
+id = "V-SF-11c"
+fact = "Black-Death-scale wage magnitude"
+kind = "Emergent"
+role = "Held-out"
+level = "Region"
+status = "report"
+statistic = "WR_A(+40..+60)/WR_A(-25..-1) in [1.2, 2.5]"
+unit = "ratio"
+min_samples = 5
+lower_bound = 1.2
+upper_bound = 2.5
+test_method = "bootstrap"
+
+[bands."V-SF-12"]
+id = "V-SF-12"
+fact = "Hive / testing (modern)"
+kind = "Identity"
+role = "Calibration"
+level = "Individual"
+status = "gate_g4"
+statistic = "At prevalence < 1% with se/sp=0.99, > 50% of detentions are false positives"
+unit = "probability"
+min_samples = 100
+lower_bound = 0.50
+test_method = "clopper_pearson"
+
+[bands."V-SF-13"]
+id = "V-SF-13"
+fact = "Sensitivity screening"
+kind = "Identity"
+role = "Calibration"
+level = "System"
+status = "report"
+statistic = "Morris and Sobol screening flags high-influence parameters"
+unit = "indices"
+min_samples = 100
+test_method = "screening"
+
+[bands."V-SF-14"]
+id = "V-SF-14"
+fact = "Demographic-structural crises"
+kind = "Emergent"
+role = "Held-out"
+level = "Polity"
+status = "report"
+statistic = "Breakdown frequency by population growth class"
+unit = "frequency"
+min_samples = 30
+test_method = "clopper_pearson"
+
+[bands."V-SF-15"]
+id = "V-SF-15"
+fact = "Industrial damping (era pack E3)"
+kind = "Emergent"
+role = "Calibration"
+level = "Polity"
+status = "report"
+statistic = "Breakdown hazard ratio with damping tech < 1"
+unit = "hazard_ratio"
+min_samples = 32
+upper_bound = 1.0
+test_method = "cox_ph"
+
+[bands."V-SF-16"]
+id = "V-SF-16"
+fact = "Income inequality (agrarian windows)"
+kind = "Emergent"
+role = "Calibration"
+level = "Household"
+status = "report"
+statistic = "Person-weighted Gini in [24, 64], median in [33, 58]; ER = Gini / IPF"
+unit = "gini_index"
+min_samples = 100
+lower_bound = 24.0
+upper_bound = 64.0
+test_method = "gini_bootstrap"
+
+[bands."V-SF-17"]
+id = "V-SF-17"
+fact = "Wealth inequality"
+kind = "Emergent"
+role = "Calibration"
+level = "Household"
+status = "report"
+statistic = "Wealth Gini > income Gini; top-10% share rises without major shock"
+unit = "sign"
+min_samples = 200
+test_method = "sign_test"
+
+[bands."V-SF-18"]
+id = "V-SF-18"
+fact = "Household structure"
+kind = "Emergent"
+role = "Calibration"
+level = "Household"
+status = "soft"
+statistic = "Mean household size and complex share within culture bounds"
+unit = "size_and_share"
+min_samples = 100
+test_method = "bootstrap"
+
+[bands."V-SF-19"]
+id = "V-SF-19"
+fact = "Polity consolidation"
+kind = "Emergent"
+role = "Calibration"
+level = "Polity"
+status = "soft"
+statistic = "Power projection tech reduces number of independent polities"
+unit = "sign"
+min_samples = 32
+test_method = "crn_paired"
+
+[bands."V-SF-20"]
+id = "V-SF-20"
+fact = "Agrarian welfare-ratio levels"
+kind = "Emergent"
+role = "Calibration"
+level = "Region"
+status = "report"
+statistic = "Labourer WR_A in [0.35, 1.7]; craftsman in [0.65, 2.9]; skill premium in [1.3, 2.0]"
+unit = "welfare_ratio"
+min_samples = 10
+lower_bound = 0.35
+upper_bound = 1.70
+test_method = "bootstrap"
+
+[bands."V-SF-20b"]
+id = "V-SF-20b"
+fact = "Subsistence floor coupling"
+kind = "Identity"
+role = "Calibration"
+level = "Household"
+status = "gate_g1b"
+statistic = "WR_kcal < 0.44 for > 1 year raises hunger mortality hazard in M2"
+unit = "invariant"
+min_samples = 1
+test_method = "invariant"
+
+[bands."V-SF-21"]
+id = "V-SF-21"
+fact = "Regional price dispersion"
+kind = "Emergent"
+role = "Calibration"
+level = "Region"
+status = "report"
+statistic = "Ratio of dearest to cheapest basket cost in [1.8, 4.0]; falls with integration"
+unit = "ratio"
+min_samples = 9
+lower_bound = 1.8
+upper_bound = 4.0
+test_method = "spearman"
+
+[bands."V-SF-22"]
+id = "V-SF-22"
+fact = "Isolation harness: each system alone"
+kind = "Identity"
+role = "Calibration"
+level = "System"
+status = "gate_g1a"
+statistic = "Runs under synthetic forcing match spec expect clauses (M2, M7, T1.minds)"
+unit = "verdict"
+min_samples = 32
+test_method = "isolation_expect"
+
+[bands."V-SF-23"]
+id = "V-SF-23"
+fact = "Coupling-strength sweep"
+kind = "Emergent"
+role = "Calibration"
+level = "System"
+status = "report"
+statistic = "Ensemble at coupling strength alpha in {0, 0.25, 0.5, 0.75, 1}; no runaway or flatline"
+unit = "liveness"
+min_samples = 8
+test_method = "sweep_liveness"
+
+[bands."V-SF-24"]
+id = "V-SF-24"
+fact = "Age-specific conception rate (M2 F1)"
+kind = "Identity"
+role = "Calibration"
+level = "Individual"
+status = "report"
+statistic = "Conceptions per susceptible woman-month match c_i within binomial 99.9% interval"
+unit = "probability"
+min_samples = 400
+test_method = "binomial_exact"
+alpha = 0.001
+
+[bands."V-SF-25"]
+id = "V-SF-25"
+fact = "Nuptiality and fathers (M2 F1)"
+kind = "Identity"
+role = "Calibration"
+level = "Individual"
+status = "report"
+statistic = "Mean age at first marriage in [18, 22]y; >=90% ever married by 50; 100% have father"
+unit = "years_and_shares"
+min_samples = 200
+lower_bound = 18.0
+upper_bound = 22.0
+test_method = "student_t"

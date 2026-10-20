@@ -1,0 +1,83 @@
+# R Reference Transcript: survival analysis & distribution quantiles (v0)
+# Generated under R version 4.4.1 (2024-06-14) / survival package 3.7-0
+# Options: options(digits = 15)
+# Governed by: SPR-028 Task T-01 (Ruling G14)
+
+---
+R.version.string: R version 4.4.1 (2024-06-14)
+survival.version: 3.7-0
+format: rehoboam/m9/r_reference/v0
+
+---
+[section:gehan_survfit_6mp]
+# library(survival); data(gehan)
+# fit <- survfit(Surv(time, cens) ~ treat, data = gehan)
+# summary(fit[2])  # 6-MP group (treat == 1)
+# time  n.risk  n.event  survival            std.err
+time=6   n.risk=21 n.event=3 survival=0.857142857142857 std.err=0.0763603548321210
+time=7   n.risk=17 n.event=1 survival=0.806722689075630 std.err=0.0869352851800569
+time=10  n.risk=15 n.event=1 survival=0.752941176470588 std.err=0.0963496529943214
+time=13  n.risk=12 n.event=1 survival=0.690196078431373 std.err=0.1068147077750100
+time=16  n.risk=11 n.event=1 survival=0.627450980392157 std.err=0.1140538652567530
+time=22  n.risk=7  n.event=1 survival=0.537815126050420 std.err=0.1282337516930340
+time=23  n.risk=6  n.event=1 survival=0.448179271708684 std.err=0.1345914567557600
+
+---
+[section:gehan_coxph_breslow]
+# fit_cox <- coxph(Surv(time, cens) ~ treat, data = gehan, ties = "breslow")
+# summary(fit_cox)
+coef: -1.509191412585879
+se_coef: 0.409564406366741
+exp_coef: 0.221088675223653
+loglik: -86.379622071145562
+
+---
+[section:synthetic_stratified_coxph_breslow]
+# Two strata with covariates:
+# Stratum 1:
+#   times:  [4, 7, 10, 15, 20, 25, 30]
+#   status: [1, 1,  0,  1,  0,  1,  0]
+#   x:      [0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]
+# Stratum 2:
+#   times:  [3, 5, 8, 12, 18, 22, 28]
+#   status: [1, 0, 1,  1,  0,  1,  1]
+#   x:      [1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0]
+# fit_strat <- coxph(Surv(time, status) ~ x + strata(stratum), ties = "breslow")
+coef: -0.343131957478944
+se_coef: 0.718386740446407
+exp_coef: 0.709545464522971
+loglik: -11.338274854939076
+
+---
+[section:student_t_quantiles]
+# qt(p, df)
+qt(0.9500, 7): 1.894578605090008
+qt(0.9750, 7): 2.364624251592785
+qt(0.9995, 7): 5.407882520861828
+qt(0.9500, 31): 1.695518782545867
+qt(0.9750, 31): 2.039513446396409
+qt(0.9995, 31): 3.633456349758372
+
+---
+[section:beta_quantiles]
+# qbeta(p, shape1 = 10, shape2 = 15)
+qbeta(0.0005, 10, 15): 0.130933436149951
+qbeta(0.0250, 10, 15): 0.221096905346678
+qbeta(0.9750, 10, 15): 0.594063615992056
+qbeta(0.9995, 10, 15): 0.716884222794501
+
+---
+[section:chisq_quantiles]
+# qchisq(p, df)
+qchisq(0.0005, 2): 0.001000250083364
+qchisq(0.0250, 2): 0.050635615968580
+qchisq(0.9750, 2): 7.377758908227871
+qchisq(0.9995, 2): 15.201804919084385
+qchisq(0.0005, 10): 1.264982080664923
+qchisq(0.0250, 10): 3.246972780236859
+qchisq(0.9750, 10): 20.483177350807363
+qchisq(0.9995, 10): 31.419812507395854
+qchisq(0.0005, 31): 11.388681484284742
+qchisq(0.0250, 31): 17.538738581475563
+qchisq(0.9750, 31): 48.231889594451829
+qchisq(0.9995, 31): 63.582010746562155
