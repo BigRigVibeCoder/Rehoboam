@@ -165,7 +165,7 @@ version: 0.3.1
   - **The sealed rule holds on real reports:** no report the package writes contains a V-SF-06c or V-SF-07 statistic.
   - **Determinism:** the report of a run set is byte-identical in two processes under different `PYTHONHASHSEED` values; the package reads no environment variable and no clock (a grep test). **The two processes run as `python/.venv/bin/python -P -s -m rehoboam_calib …`** (PY-PKG review P3): `-I` implies `-E` and so ignores `PYTHONHASHSEED`, and `-S` would drop the installed packages and their dependencies; `-P` keeps the working directory off `sys.path` and `-s` keeps the user site off it.
   - `ruff` and `mypy --strict` clean; no dependency added (the lock changes only as PY-PKG's packaging makes it change for a new package).
-- **Status:** [ ] not started
+- **Status:** [x] done (REV-SPR-028-calib 1.0.0 APPROVED; PR #124)
 
 #### T-03: Ensembles, the G1a demography gates, V-GOLD-03's comparison (F-8, F-12, F-14; G10, G12; 0.75 day)
 - **Deliverable:**

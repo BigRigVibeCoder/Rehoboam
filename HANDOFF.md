@@ -1,4 +1,4 @@
-# HANDOFF: Rehoboam, 2026-10-18 (Architect Project Management & Roadmap Snapshot)
+# HANDOFF: Rehoboam, 2026-10-20 (Architect Project Management & Roadmap Snapshot)
 
 > **Read this first, then `AGENTS.md` and `CLAUDE.md`.** This file is an authoritative snapshot of in-flight work for the developer or agent picking up the project. The repository's own records (CODEX, `docs/`, PRs) are authoritative; this file tells you where they are and what to do next, in order.
 >
@@ -8,7 +8,7 @@
 >   - `GOV-011`: ownership, independence, records and handoffs.
 >
 >   `CLAUDE.md` binds every agent whatever its vendor; `GEMINI.md` points here.
-> - **main:** `736e8e5b` (the merge of PR #112, 2026-10-18); check it with `git ls-remote origin main`.
+> - **main:** `775f9391` (the merge of PR #124, 2026-10-20); check it with `git ls-remote origin main`.
 > - **Priority (the director's D62, binding):**
 >   - **P1:** the engine core (P1a "Bloodlines", gate G1a), which wins every contention for CI minutes, review time and merge slots.
 >   - **P2:** the voxel viewer lane.
@@ -44,10 +44,14 @@
 
 ---
 
-## 2. State of `main` and what merged on 2026-10-18 / 2026-10-19
+## 2. State of `main` and what merged on 2026-10-18 / 2026-10-20
 
 | PR | What | Commit |
 |:---|:---|:---|
+| #124 | **SPR-028**: Validation Harness Contract, Reference & Calibration Package T-01/T-02 (`spec/SPR-028-validation-contract`; REV-SPR-028-harness, REV-SPR-028-calib) | `775f939` |
+| #123 | **SPR-027**: Stream Materializer (`sprint/SPR-027-stream-materializer`) | `c452fd8` |
+| #107 | **SPR-015**: M2 Births & Households Stage B (`sprint/SPR-015-births-f1`; VER-SPR-015) | `8bd963b` |
+| #120 | **A-69**: Deny added keys on frozen entries by default in `lint_odd.py` | `059b09a` |
 | #111 | **SPR-033a**: Bevy Voxel Viewer Core (Bevy-free core, greedy mesher, hamlet terrain golden, isolation lint, viewer CI) (`sprint/SPR-033a-viewer-core`; VER-SPR-033a) | `7083e64` |
 | #119 | **A-73**: Ignore agent worktrees in `lint_arch` and `lint_forbidden` (`tools/A-73-worktree-lint-skip`) | `39d6bfb` |
 | #118 | Fix cargo-deny advisories (`deny.toml`) and nightly ignored-test panic (`rh-manifest`) | `4d3d14e` |
@@ -69,29 +73,23 @@
 
 | Branch @ head | Node / Role | State & PR | Next Action |
 |:---|:---|:---|:---|
-| `sprint/SPR-015-births-f1` | **Exuberant** (`100.115.214.32`)<br>`AGT-002-CORE` | PR #107 (draft): Phase 1 approved; `ci_scope.py` demography input registered; core gates passing. | Finalizing local tier gates, commit, push, and mark ready |
-| `sprint/SPR-016-mortality-f1`<br>@ `da6c74d` | Developer<br>`AGT-002-CORE` | PR #88 (draft): stage 1 only, Tester PASS on stage 1. **234 commits behind `main`.** | Held until SPR-015 merges; then merge `main` by gate name |
-| `sprint/SPR-027-stream-materializer`<br>@ `9625584` | Adjutant Agent 1 (`AGT-002-TOOLS`, VM `adjutant`) | Pushed through `9625584` (T-02, T-03, T-04 done; A-70 `engine_build_commit` implemented; `origin/main` merged). | Open draft PR or request split of T-05 into SPR-027b |
-| `tools/A-69-lint-odd-frozen-keys`<br>@ `3c82cf2` | Adjutant Agent 2 (`AGT-002-TOOLS`, VM `adjutant`) | PR #120: Deny added keys on frozen entries by default in `lint_odd.py`. CI running. | Merge when CI green |
-| `sprint/SPR-033a-viewer-core`<br>@ `17f6ca7` | `AGT-002-TOOLS` | PR #111 **MERGED** into `main` at `7083e64`. Audit record: `VER-SPR-033a.md`. | Stage B scheduled for Bevy 0.20.0 entry (2026-10-22 22:31Z) |
-| `tools/A-73-worktree-lint-skip`<br>@ `cb351ab` | Adjutant Agent 2 (`AGT-002-TOOLS`) | PR #119 **MERGED** into `main` at `39d6bfb`. | Complete |
-| `sprint/SPR-021a-…` | Unassigned | No branch. Queued behind SPR-015, SPR-016 and SPR-019 stage A (D58 item 5) | Dispatch to `AGT-002-CORE` when the gate arrives |
+| `sprint/SPR-016-mortality-f1` | **Exuberant** / Agent 2<br>`AGT-002-CORE` | PR #88: Stage 3 complete; merged healed `origin/main` (`775f9391`). | CI running; Architect audit (`VER-SPR-016.md`) and merge |
+| `sprint/SPR-028-ensembles` | Adjutant Agent 1<br>`AGT-002-TOOLS` | Sprint branch: T-01 & T-02 merged via PR #124. Dispatched for T-03 (Ensembles, G1a demography gates, V-GOLD-03). | Implement `rehoboam_calib ensemble`, `fixture-demography_1000`, open draft PR |
+| `sprint/SPR-021a-…` | Queued (`AGT-002-CORE`) | No branch. Queued behind SPR-016 and SPR-019 stage A (D58 item 5). | Dispatch to `AGT-002-CORE` upon SPR-016 merge |
 | `arch/red-team-batch-04`<br>@ `63046c9` | Red Team | **Do not open a PR from it.** Carries `tools/asset_ripper`, 7 copyrighted PDFs and a viewer HTML that ADR-0036 and the licence rules keep out | Red Team retires it |
 
 ---
 
 ## 4. Key Records & Directives
 
-- **Status report (read this for the full picture):** [`docs/handoff/2026-10-18/pm_status_report.md`](file:///home/bdavidriggins/Documents/Rehoboam/docs/handoff/2026-10-18/pm_status_report.md): sprint ledger, code status, findings, governance gaps, backlog, next seven days.
-- **Interim audit:** [`CODEX/40_VERIFICATION/VER-SPR-015-INTERIM.md`](file:///home/bdavidriggins/Documents/Rehoboam/CODEX/40_VERIFICATION/VER-SPR-015-INTERIM.md) (DRAFT; no pass given).
-- **Work orders and briefings:**
-  - [`exuberant_stage_b_work_order.md`](file:///home/bdavidriggins/Documents/Rehoboam/docs/handoff/2026-10-18/exuberant_stage_b_work_order.md) (revision 2).
-  - [`viewer_lane_briefing.md`](file:///home/bdavidriggins/Documents/Rehoboam/docs/handoff/2026-10-18/viewer_lane_briefing.md): P2 lane (SPR-033a/b, 034, 035).
-- **Red-team files** (PR #113): `docs/red_team/RT-2026-10-18-batch-09-dossier.md` (RT-039..041) and `tests/probes/probe_fertility_adversarial_traps.py` (B09-01). The probe passes 6 of 6 but tests a Python model of the M2 spec, not the engine; the six traps must become Rust tests against `rh-core` / `rh-ids` in SPR-015.
-- **Director rulings of 2026-10-18:** [`director_rulings_20261018.md`](file:///home/bdavidriggins/Documents/Rehoboam/docs/handoff/2026-10-18/director_rulings_20261018.md).
+- **Verification Records:**
+  - [`CODEX/40_VERIFICATION/REV-SPR-028-harness.md`](file:///home/bdavidriggins/Documents/Rehoboam/CODEX/40_VERIFICATION/REV-SPR-028-harness.md): T-01 approved.
+  - [`CODEX/40_VERIFICATION/REV-SPR-028-calib.md`](file:///home/bdavidriggins/Documents/Rehoboam/CODEX/40_VERIFICATION/REV-SPR-028-calib.md): T-02 approved.
+  - [`CODEX/40_VERIFICATION/VER-SPR-016.md`](file:///home/bdavidriggins/Documents/Rehoboam/CODEX/40_VERIFICATION/VER-SPR-016.md): Stage 3 audit drafted.
+- **Status report:** [`docs/handoff/2026-10-18/pm_status_report.md`](file:///home/bdavidriggins/Documents/Rehoboam/docs/handoff/2026-10-18/pm_status_report.md).
 - **Roadmap & Plans:**
   - `CODEX/05_PROJECT/PRJ-002_P1aPlan.md` (P1a "Bloodlines" plan through Gate G1a).
-  - `CODEX/05_PROJECT/PRJ-003_BevyVoxelViewer.md` (P2 Viewer lane plan).
+  - `CODEX/05_PROJECT/SPR-028_ValidationHarness.md` (Validation harness plan, T-01 & T-02 done).
   - `docs/decisions-log.md` (ratified Director decisions D58, D59, D61, D63).
 
 ---
