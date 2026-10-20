@@ -1405,12 +1405,18 @@ fn household_on_marry(
     } else {
         // Form a new household.
         let new_id = gen_household_id(a, now, view);
-        view.write(HH_ID)?.push(new_id.cast_signed());
-        view.write(HH_HEAD)?.push(a.cast_signed());
-        view.write(HH_FORMED)?.push(now);
-        view.write(HH_DISSOLVED)?.push(i64::MAX);
-        view.write(PERSON_HOUSEHOLD)?[ra] = new_id.cast_signed();
-        view.write(PERSON_HOUSEHOLD)?[rb] = new_id.cast_signed();
+        let new_raw = new_id.cast_signed();
+        // Insert at sorted position so binary_search_by_key stays valid.
+        let pos = view
+            .read(HH_ID)?
+            .binary_search_by_key(&new_id, |v| v.cast_unsigned())
+            .unwrap_or_else(|p| p);
+        view.write(HH_ID)?.insert(pos, new_raw);
+        view.write(HH_HEAD)?.insert(pos, a.cast_signed());
+        view.write(HH_FORMED)?.insert(pos, now);
+        view.write(HH_DISSOLVED)?.insert(pos, i64::MAX);
+        view.write(PERSON_HOUSEHOLD)?[ra] = new_raw;
+        view.write(PERSON_HOUSEHOLD)?[rb] = new_raw;
     }
     Ok(())
 }
