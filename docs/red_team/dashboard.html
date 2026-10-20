@@ -1672,6 +1672,193 @@
     .pm-table tr:hover td {
       background: rgba(0, 240, 255, 0.03);
     }
+  
+    /* ============================================================ */
+    /* MASTER TREE DRILL-DOWN HIERARCHY STYLES                      */
+    /* ============================================================ */
+    .phase-node-wrapper {
+      margin-bottom: 20px;
+      transition: all 0.25s ease;
+    }
+    .tree-drilldown-drawer {
+      background: rgba(10, 15, 26, 0.85);
+      border: 1px solid var(--border-subtle);
+      border-top: none;
+      border-bottom-left-radius: 16px;
+      border-bottom-right-radius: 16px;
+      padding: 20px 24px;
+      margin-top: -6px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
+    }
+    .tree-sublevel-block {
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid var(--border-subtle);
+      border-left: 4px solid var(--cyan);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .tree-sublevel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .tree-wave-container {
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 16px;
+      margin-top: 12px;
+    }
+    .tree-wave-container.merged-wave {
+      background: rgba(10, 20, 30, 0.5);
+      border-color: rgba(16, 185, 129, 0.25);
+    }
+    .tree-wave-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 8px;
+    }
+    .tree-sprint-list {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .tree-sprint-card {
+      background: rgba(20, 29, 47, 0.85);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 14px 18px;
+      transition: all 0.2s ease;
+    }
+    .tree-sprint-card:hover {
+      border-color: rgba(0, 240, 255, 0.4);
+      background: rgba(24, 35, 58, 0.95);
+    }
+    .tree-sprint-card.blocked {
+      border-color: rgba(239, 68, 68, 0.45);
+      background: rgba(239, 68, 68, 0.04);
+    }
+    .tree-sprint-card.in-progress {
+      border-color: rgba(0, 240, 255, 0.4);
+      background: rgba(0, 240, 255, 0.03);
+    }
+    .tree-sprint-card.ready {
+      border-color: rgba(168, 85, 247, 0.35);
+      background: rgba(168, 85, 247, 0.03);
+    }
+    .tree-sprint-card.merged {
+      border-color: rgba(16, 185, 129, 0.3);
+      background: rgba(16, 185, 129, 0.03);
+    }
+    .tree-sprint-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .tree-tasks-container {
+      margin-top: 12px;
+      border-top: 1px dashed rgba(255, 255, 255, 0.1);
+      padding-top: 10px;
+    }
+    .tree-tasks-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.8rem;
+      font-family: var(--font-mono);
+      color: var(--cyan);
+      cursor: pointer;
+      user-select: none;
+      font-weight: 700;
+    }
+    .tree-tasks-drawer {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .tree-task-row {
+      background: rgba(10, 15, 26, 0.85);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .tree-task-row.done { border-left: 3px solid var(--emerald); }
+    .tree-task-row.blocked { border-left: 3px solid var(--crimson); background: rgba(239, 68, 68, 0.06); }
+    .tree-task-row.in-progress { border-left: 3px solid var(--cyan); }
+    .tree-task-info { flex: 1; min-width: 200px; }
+    .tree-task-info strong { font-size: 0.88rem; color: #ffffff; }
+    .tree-task-info p { font-size: 0.78rem; color: var(--slate-300); margin-top: 2px; }
+    .tree-sprints-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+    }
+    .tree-sprint-pill-card {
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 0.82rem;
+    }
+    .tree-sprint-pill-card.merged { border-left: 3px solid var(--emerald); }
+    .tree-sprint-pill-card.queued { border-left: 3px solid var(--slate-500); }
+    .tree-sprint-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .tree-sprint-tasks-chip {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--emerald);
+      margin-top: 4px;
+    }
+    .drill-toggle-indicator {
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      color: var(--cyan);
+      font-weight: 600;
+      cursor: pointer;
+      user-select: none;
+    }
+    .pr-link-pill {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: rgba(0, 240, 255, 0.15);
+      color: var(--cyan);
+      text-decoration: none;
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      transition: all 0.2s;
+    }
+    .pr-link-pill:hover {
+      background: var(--cyan);
+      color: #080b11;
+    }
+
   </style>
 </head>
 <body>
@@ -1700,13 +1887,12 @@
       </div>
 
       <nav class="nav-tabs">
-        <button class="nav-tab active" onclick="switchTab('roadmap')">🗺️ Roadmap & WBS Drill-Down</button>
-        <button class="nav-tab" onclick="switchTab('sprints')">🏃 Sprints & Tasks</button>
-        <button class="nav-tab" onclick="switchTab('fleet')">🚀 Live Fleet & Branches</button>
-        <button class="nav-tab" onclick="switchTab('ladder')">🪜 World Scale (Rungs)</button>
-        <button class="nav-tab" onclick="switchTab('decisions')">⚖️ Decisions (D1–D64)</button>
-        <button class="nav-tab" onclick="switchTab('ledger')">📋 Backlog & Gaps</button>
-        <button class="nav-tab" onclick="switchTab('jargon')">📖 Dumb Guy Rosetta Stone</button>
+        <button class="nav-tab active" data-tab="roadmap" onclick="switchTab('roadmap')">🌳 Master WBS Tree (Phases → Tasks)</button>
+        <button class="nav-tab" data-tab="fleet" onclick="switchTab('fleet')">🚀 Live Fleet & PR Ledger</button>
+        <button class="nav-tab" data-tab="decisions" onclick="switchTab('decisions')">⚖️ Decisions (D1–D64)</button>
+        <button class="nav-tab" data-tab="ladder" onclick="switchTab('ladder')">🪜 World Scale (Rungs)</button>
+        <button class="nav-tab" data-tab="ledger" onclick="switchTab('ledger')">📋 Backlog & Gaps</button>
+        <button class="nav-tab" data-tab="jargon" onclick="switchTab('jargon')">📖 Rosetta Stone</button>
       </nav>
     </div>
   </header>
@@ -2799,1281 +2985,939 @@
     </section>
 
     <!-- TAB 1: ROADMAP & GATES -->
+        <!-- TAB 1: CONSOLIDATED MASTER PM DRILL-DOWN TREE -->
     <section id="tab-roadmap" class="tab-content active">
-      <div class="section-header">
-        <div>
-          <h3>🗺️ Master Journey: Phases & Gates</h3>
-          <p>Click any phase or gate to see what happens, what can break, and what the Red Team is guarding.</p>
+      
+      <!-- Top Executive PM Flight Deck & Quick Search Controls -->
+      <div style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(10, 15, 26, 0.9) 100%); border: 1px solid var(--border-active); border-radius: 16px; padding: 22px 24px; margin-bottom: 24px; box-shadow: 0 0 30px rgba(0, 240, 255, 0.1);">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; margin-bottom: 16px;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="phase-tag cyan" style="font-size: 0.8rem; padding: 3px 10px; border-radius: 4px; background: rgba(0, 240, 255, 0.15); border: 1px solid rgba(0, 240, 255, 0.3);">UNIFIED PM 360° COMMAND SYSTEM</span>
+              <span class="branch-pill main-branch">main: 775f9391</span>
+              <span class="branch-pill" style="color: var(--amber); border-color: rgba(245, 158, 11, 0.4);">3 PRs Open (#88, #125, #126)</span>
+            </div>
+            <h3 style="font-size: 1.45rem; color: #ffffff; margin-top: 6px; font-weight: 800;">🎯 Master Project Tree: Strategy Down to Tasks</h3>
+            <p style="font-size: 0.88rem; color: var(--slate-300); margin-top: 4px;">
+              Click any Phase or Gate card below to drill down into its Checkpoints, Complexity Rungs, Waves, Sprints, and atomic Tasks (T-NN).
+            </p>
+          </div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn-action" style="padding: 7px 14px; font-size: 0.82rem;" onclick="expandAllTreeNodes()">▼ Expand All</button>
+            <button class="btn-action" style="padding: 7px 14px; font-size: 0.82rem; background: rgba(255,255,255,0.08); color: var(--slate-300);" onclick="collapseAllTreeNodes()">▲ Collapse All</button>
+          </div>
+        </div>
+
+        <!-- Interactive Filter & Search Bar -->
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; border-top: 1px solid var(--border-subtle); padding-top: 14px;">
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;" id="tree-filter-pills">
+            <button class="filter-pill active" onclick="filterMasterTree('all', this)">All (Past, Present, Future)</button>
+            <button class="filter-pill" onclick="filterMasterTree('active', this)" style="border-color: var(--cyan); color: var(--cyan);">⚡ Active In Flight (Phase 1a)</button>
+            <button class="filter-pill" onclick="filterMasterTree('blocked', this)" style="border-color: var(--crimson); color: var(--crimson);">⛔ Blockers Only (Gate 89)</button>
+            <button class="filter-pill" onclick="filterMasterTree('merged', this)" style="border-color: var(--emerald); color: var(--emerald);">✓ Past Merged (Phase 0)</button>
+            <button class="filter-pill" onclick="filterMasterTree('future', this)" style="border-color: var(--violet); color: var(--violet);">⏳ Future Horizons (Phases 1b–5)</button>
+          </div>
+          <div style="flex: 1; max-width: 320px; min-width: 220px;">
+            <input type="text" id="tree-search-input" placeholder="🔍 Filter tree by keyword, task, PR..." onkeyup="searchMasterTree()" style="width: 100%; background: rgba(10, 15, 26, 0.8); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 7px 12px; color: #ffffff; font-size: 0.82rem; outline: none;">
+          </div>
+        </div>
+
+        <!-- Immediate Blocker Alert Banner -->
+        <div style="margin-top: 14px; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 10px; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 1.2rem;">⛔</span>
+            <div style="font-size: 0.84rem; color: #ffffff;">
+              <strong style="color: var(--crimson);">IMMEDIATE FLEET BLOCKER:</strong> Gate 89 null binomial band on <strong>PR #88 (SPR-016)</strong> in <code>crates/rh-core/src/systems/m2_system.rs:442,452</code>.
+            </div>
+          </div>
+          <button onclick="revealSprintInTree('node-spr-016')" style="background: var(--crimson); color: #ffffff; border: none; padding: 4px 12px; border-radius: 6px; font-size: 0.76rem; font-weight: 700; cursor: pointer;">
+            View Blocker Task (T-06) →
+          </button>
         </div>
       </div>
 
-      <!-- ======================================================== -->
-      <!-- 6-LEVEL WBS HIERARCHICAL DRILL-DOWN (PHASE -> TASK)      -->
-      <!-- ======================================================== -->
-      <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid var(--border-active); border-radius: 16px; padding: 24px; margin-bottom: 28px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
-          <div>
-            <span class="phase-tag cyan" style="font-size: 0.8rem;">SOTA MULTI-AGENT WORK BREAKDOWN STRUCTURE</span>
-            <h4 style="font-size: 1.35rem; color: #ffffff; margin-top: 4px;">🎯 6-Level Hierarchy: Strategy Down to Task Commits</h4>
-            <p style="font-size: 0.86rem; color: var(--slate-300); margin-top: 4px;">
-              Every line of code traces from a Strategic Phase down to an atomic Task (T-NN). Click any level to expand.
-            </p>
+      <!-- MASTER HIERARCHICAL DRILL-DOWN TIMELINE -->
+      <div class="roadmap-timeline" id="master-tree-container">
+
+        <!-- ======================================================== -->
+        <!-- 1. PHASE 0: FOUNDATIONS (PAST / 100% MERGED)            -->
+        <!-- ======================================================== -->
+        <div class="phase-node-wrapper" data-category="merged" data-phase="p0" id="wrapper-p0">
+          <div class="phase-card" onclick="toggleTreeDrilldown('p0')">
+            <div class="phase-meta">
+              <span class="phase-tag emerald">✓ 100% MERGED</span>
+              <div class="phase-title">Phase 0: Foundations</div>
+              <span style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">Sprints SPR-001 to SPR-010</span>
+            </div>
+            <div class="phase-body">
+              <div class="phase-plain-text">
+                The core engine block is built and certified: perfectly fair dice, fixed-point math with zero decimal bugs, universal simulation clock, and black-box event recorder.
+              </div>
+              <div class="phase-tech-text">10/10 Sprints Merged · Complete Kernel Verification Passed · Gate G0 Ratified</div>
+            </div>
+            <div class="phase-status-box">
+              <span class="status-pill merged">100% Merged</span>
+              <span class="drill-toggle-indicator" id="p0-toggle-text">▼ Click to Drill Down</span>
+            </div>
           </div>
-          <span class="status-pill active">Hierarchical Drill-Down Active</span>
+
+          <!-- Phase 0 Drilldown Drawer -->
+          <div class="tree-drilldown-drawer" id="p0-drawer" style="display: none;">
+            
+            <!-- Level 2: Gate G0 Details -->
+            <div class="tree-sublevel-block gate-block">
+              <div class="tree-sublevel-header">
+                <span class="phase-tag emerald">LEVEL 2: GATE G0 — DETERMINISM EXAM (VER-G0)</span>
+                <span class="status-pill merged">✓ RATIFIED & PASSED</span>
+              </div>
+              <p style="font-size: 0.84rem; color: var(--slate-300); margin-top: 4px;">
+                1,000 simulated years run across different CPU architectures (ThinkPad Intel P51 vs Cloud AMD Genoa) with 100% bitwise parity. Zero IEEE-754 hardware floats in Plane A state. Benches 7 & 8 passed.
+              </p>
+            </div>
+
+            <!-- Level 3: Complexity Rung 0 -->
+            <div class="tree-sublevel-block rung-block">
+              <div class="tree-sublevel-header">
+                <span class="phase-tag cyan">LEVEL 3: COMPLEXITY RUNG 0 — SOLO SURVIVAL</span>
+                <span class="status-pill merged">✓ 10,000 TICKS/SEC VERIFIED</span>
+              </div>
+              <p style="font-size: 0.84rem; color: var(--slate-300); margin-top: 4px;">
+                One hermit in a 64×64 valley. Steady-state memory footprint &lt;5 MB RAM with zero dynamic heap allocations.
+              </p>
+            </div>
+
+            <!-- Level 4: Wave 0 (Phase 0 Sprints) -->
+            <div style="margin-top: 12px;">
+              <strong style="color: var(--slate-400); font-size: 0.78rem; text-transform: uppercase; font-family: var(--font-mono);">
+                Level 5: Completed Sprints (SPR-001..SPR-010):
+              </strong>
+
+              <div class="tree-sprints-grid" style="margin-top: 8px;">
+                
+                <div class="tree-sprint-pill-card merged">
+                  <div class="tree-sprint-top">
+                    <strong>SPR-001: Repo Bootstrap</strong>
+                    <span class="status-pill merged">PR #1 Merged</span>
+                  </div>
+                  <p>Directory layout, Cargo workspace, 149-test fail-fast gate script.</p>
+                  <div class="tree-sprint-tasks-chip">3 Tasks (T-01..T-03) Verified · Audit: VER-SPR-001</div>
+                </div>
+
+                <div class="tree-sprint-pill-card merged">
+                  <div class="tree-sprint-top">
+                    <strong>SPR-002: Deterministic Dice & IDs</strong>
+                    <span class="status-pill merged">PR #5 Merged</span>
+                  </div>
+                  <p>SplitMix64 & ChaCha8 streams, 128-bit PersonId, PRNG covariance test.</p>
+                  <div class="tree-sprint-tasks-chip">4 Tasks Verified · V-DET-20 Passed</div>
+                </div>
+
+                <div class="tree-sprint-pill-card merged">
+                  <div class="tree-sprint-top">
+                    <strong>SPR-003: Samplers & Float Zone</strong>
+                    <span class="status-pill merged">PR #12 Merged</span>
+                  </div>
+                  <p>rh-sample crate, libm software FMA, binomial & geometric samplers.</p>
+                  <div class="tree-sprint-tasks-chip">3 Tasks Verified · Sandboxed Floats</div>
+                </div>
+
+                <div class="tree-sprint-pill-card merged">
+                  <div class="tree-sprint-top">
+                    <strong>SPR-004: Registry Loader</strong>
+                    <span class="status-pill merged">PR #18 Merged</span>
+                  </div>
+                  <p>YAML rulebook loader, single-writer column tables, PyYAML oracle parity.</p>
+                  <div class="tree-sprint-tasks-chip">4 Tasks Verified · Single-Writer Enforced</div>
+                </div>
+
+                <div class="tree-sprint-pill-card merged">
+                  <div class="tree-sprint-top">
+                    <strong>SPR-005: Core Time & Scheduler</strong>
+                    <span class="status-pill merged">PR #21 Merged</span>
+                  </div>
+                  <p>Master simulation clock, binding scheduler, lag types (instant vs deferred).</p>
+                  <div class="tree-sprint-tasks-chip">3 Tasks Verified · Monotonic Agenda</div>
+                </div>
+
+                <div class="tree-sprint-pill-card merged">
+                  <div class="tree-sprint-top">
+                    <strong>SPR-006: Agenda & Invariants</strong>
+                    <span class="status-pill merged">PR #24 Merged</span>
+                  </div>
+                  <p>Min-heap agenda, event emission ordering, crash artifact poison guards.</p>
+                  <div class="tree-sprint-tasks-chip">3 Tasks Verified · Crash-Proof</div>
+                </div>
+
+                <div class="tree-sprint-pill-card merged">
+                  <div class="tree-sprint-top">
+                    <strong>SPR-007: Save Hashes & Journal</strong>
+                    <span class="status-pill merged">PR #25 Merged</span>
+                  </div>
+                  <p>Arrow keyframes with zstd compression, SQLite input journal replay.</p>
+                  <div class="tree-sprint-tasks-chip">4 Tasks Verified · Black-Box Snapshots</div>
+                </div>
+
+                <div class="tree-sprint-pill-card merged">
+                  <div class="tree-sprint-top">
+                    <strong>SPR-008: 1,000-Year Golden Replay</strong>
+                    <span class="status-pill merged">PR #28 Merged</span>
+                  </div>
+                  <p>1,000-year golden simulation, automated bisect locator, thread hash parity.</p>
+                  <div class="tree-sprint-tasks-chip">3 Tasks Verified · Bitwise Match</div>
+                </div>
+
+                <div class="tree-sprint-pill-card merged">
+                  <div class="tree-sprint-top">
+                    <strong>SPR-009: Wall-Clock Benchmarks</strong>
+                    <span class="status-pill merged">PR #29 Merged</span>
+                  </div>
+                  <p>Counting allocator, arena instruction counters backing Benches 7 & 8.</p>
+                  <div class="tree-sprint-tasks-chip">3 Tasks Verified · Zero Alloc Loop</div>
+                </div>
+
+                <div class="tree-sprint-pill-card merged">
+                  <div class="tree-sprint-top">
+                    <strong>SPR-010: Fixed-Point Pure Math</strong>
+                    <span class="status-pill merged">PR #35 Merged</span>
+                  </div>
+                  <p>Strict float ban, Q8_8/Q16_16 math, banker's half-to-even rounding.</p>
+                  <div class="tree-sprint-tasks-chip">4 Tasks Verified · Zero Float Trap</div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
         </div>
 
-        <div class="wbs-container">
-          <!-- WBS NODE 1: Phase 1a -> Gate G1a -->
-          <div class="wbs-tree-node">
-            <div class="wbs-node-header" onclick="toggleWbs('wbs-p1a')">
-              <div style="display: flex; align-items: center; gap: 10px;">
-                <span style="font-size: 1.2rem;">📦</span>
-                <div>
-                  <strong style="color: #ffffff; font-size: 0.96rem;">Level 1: Phase 1a — Bloodlines & Walking Skeleton</strong>
-                  <span style="font-size: 0.76rem; color: var(--cyan); margin-left: 8px;">Target: Gate G1a (Crucible Run)</span>
-                </div>
-              </div>
-              <div style="display: flex; align-items: center; gap: 10px;">
-                <span class="status-pill active" style="font-size: 0.72rem;">ACTIVE IN FLIGHT</span>
-                <span id="wbs-p1a-icon" style="color: var(--cyan); font-weight: 700;">▼</span>
-              </div>
+        <!-- GATE G0 CARD (INLINE MILESTONE) -->
+        <div class="phase-node-wrapper" data-category="merged" data-phase="g0" id="wrapper-g0">
+          <div class="phase-card gate-card" onclick="toggleTreeDrilldown('g0')" style="border-left-color: var(--emerald);">
+            <div class="phase-meta">
+              <span class="phase-tag emerald">▲ RATIFIED GATE</span>
+              <div class="phase-title">Gate G0: Determinism Exam</div>
+              <span style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">Report: VER-G0</span>
             </div>
-            <div class="wbs-node-body" id="wbs-p1a">
-              <!-- Level 2: Gate G1a -->
-              <div style="margin-bottom: 12px; padding: 10px 14px; background: rgba(0, 240, 255, 0.05); border-left: 3px solid var(--cyan); border-radius: 6px;">
-                <strong style="color: #ffffff; font-size: 0.88rem;">Level 2: Gate G1a (The Dynasty & Demography Crucible)</strong>
-                <p style="font-size: 0.8rem; color: var(--slate-300); margin-top: 4px;">
-                  10,000-person Kingdom fixture world simulates 1,000 years in &lt;= 60 seconds with bitwise determinism and zero orphan entities.
-                </p>
+            <div class="phase-body">
+              <div class="phase-plain-text">
+                The brutal checkpoint is passed! 1,000 simulated years run across different computers with 100% bitwise parity down to the last single bit.
               </div>
-
-              <!-- Level 3: Complexity Rungs -->
-              <div style="margin-bottom: 12px; padding: 10px 14px; background: rgba(168, 85, 247, 0.05); border-left: 3px solid var(--violet); border-radius: 6px;">
-                <strong style="color: #ffffff; font-size: 0.88rem;">Level 3: Complexity Rung Progression (Rung 0 → Rung 2)</strong>
-                <p style="font-size: 0.8rem; color: var(--slate-300); margin-top: 4px;">
-                  Rung 0 Solo (1 hermit, 64x64 valley) ✓ → Rung 1 Household (5 persons, marriage & birth) ✓ → Rung 2 Hamlet (60 persons, jobs & barter) ✓.
-                </p>
-              </div>
-
-              <!-- Level 4: Waves in Phase 1a -->
-              <div style="display: flex; flex-direction: column; gap: 8px;">
-                <strong style="color: var(--slate-400); font-size: 0.82rem; text-transform: uppercase; font-family: var(--font-mono);">Level 4: Active & Upcoming Waves:</strong>
-                
-                <!-- Wave 5 -->
-                <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px;">
-                  <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-weight: 700; color: #ffffff; font-size: 0.9rem;">Wave 5: Mortality & Births (Closing)</span>
-                    <span class="status-pill active" style="font-size: 0.7rem;">90% Complete</span>
-                  </div>
-                  <p style="font-size: 0.8rem; color: var(--slate-300); margin-top: 4px;">
-                    Sprints: <strong>SPR-015</strong> (M2 Births, PR #107 merged on main at <code>8bd963b</code>) · <strong>SPR-016</strong> (M2 F1 Mortality, PR #88 in CI).
-                  </p>
-                </div>
-
-                <!-- Wave 6 -->
-                <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px;">
-                  <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-weight: 700; color: #ffffff; font-size: 0.9rem;">Wave 6: Demography & Space</span>
-                    <span class="status-pill active" style="font-size: 0.7rem;">Stage A In Flight</span>
-                  </div>
-                  <p style="font-size: 0.8rem; color: var(--slate-300); margin-top: 4px;">
-                    Sprints: <strong>SPR-018</strong> (Worldgen Lite v0, PR #126 Stage A ready) · <strong>SPR-019</strong> (Population Synthesis & Dynastic Backfill).
-                  </p>
-                </div>
-
-                <!-- Wave 7 & 8 -->
-                <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px;">
-                  <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-weight: 700; color: #ffffff; font-size: 0.9rem;">Wave 7 & 8: Dynasties & The Crucible</span>
-                    <span class="status-pill locked" style="font-size: 0.7rem;">Queued Post-Wave 6</span>
-                  </div>
-                  <p style="font-size: 0.8rem; color: var(--slate-300); margin-top: 4px;">
-                    Sprints: <strong>SPR-021</strong> (M7 Succession), <strong>SPR-022</strong> (Ruler Exits), <strong>SPR-028</strong> (Validation Harness, PR #125), <strong>SPR-029</strong> (Annals), <strong>SPR-030</strong> (Crucible 60s Run).
-                  </p>
-                </div>
-              </div>
+              <div class="phase-tech-text">Gate Ratified (VER-G0) · Laws 2 & 3 codified into docs/01 §5 · Benches 7 & 8 passed</div>
+            </div>
+            <div class="phase-status-box">
+              <span class="status-pill merged">✓ Gate Passed</span>
+              <span class="drill-toggle-indicator" id="g0-toggle-text">▼ Click for Audit Evidence</span>
             </div>
           </div>
 
-          <!-- WBS NODE 2: Phase 0 Foundations (Merged) -->
-          <div class="wbs-tree-node">
-            <div class="wbs-node-header" onclick="toggleWbs('wbs-p0')">
-              <div style="display: flex; align-items: center; gap: 10px;">
-                <span style="font-size: 1.2rem;">🏛️</span>
-                <div>
-                  <strong style="color: #ffffff; font-size: 0.96rem;">Level 1: Phase 0 — Mathematical Kernel & Purity Foundations</strong>
-                  <span style="font-size: 0.76rem; color: var(--emerald); margin-left: 8px;">Gate G0 Passed (VER-G0)</span>
-                </div>
-              </div>
-              <div style="display: flex; align-items: center; gap: 10px;">
-                <span class="status-pill merged" style="font-size: 0.72rem;">10/10 SPRINTS MERGED</span>
-                <span id="wbs-p0-icon" style="color: var(--emerald); font-weight: 700;">▶</span>
+          <div class="tree-drilldown-drawer" id="g0-drawer" style="display: none;">
+            <div class="tree-sublevel-block gate-block">
+              <h5 style="color: var(--emerald); margin-bottom: 6px;">Gate G0 Verification Evidence (VER-G0)</h5>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; font-size: 0.82rem;">
+                <div>• Cross-Machine Parity: <strong>1,000y SHA match (8e723abdf1262be8)</strong></div>
+                <div>• Zero Floats Denied: <strong>Clippy AST purity lint verified</strong></div>
+                <div>• Heap Allocation: <strong>0 bytes allocated in steady state</strong></div>
+                <div>• Automated CI Gates: <strong>597 checks green in bin/check_all.sh</strong></div>
               </div>
             </div>
-            <div class="wbs-node-body" id="wbs-p0" style="display: none;">
-              <p style="font-size: 0.82rem; color: var(--slate-300);">
-                Phase 0 delivered the bitwise deterministic simulation kernel across SPR-001 through SPR-010. Zero floating-point arithmetic in Plane A, counter PRNGs, Parquet streaming, and automated bisect verification. Formally certified at Gate G0 by the Director.
+          </div>
+        </div>
+
+        <!-- ======================================================== -->
+        <!-- 2. PHASE 1A: BLOODLINES (ACTIVE NOW / IN PROGRESS)       -->
+        <!-- ======================================================== -->
+        <div class="phase-node-wrapper" data-category="active" data-phase="p1a" id="wrapper-p1a">
+          <div class="phase-card active-phase" onclick="toggleTreeDrilldown('p1a')">
+            <div class="phase-meta">
+              <span class="phase-tag cyan">● ACTIVE NOW</span>
+              <div class="phase-title">Phase 1a: Bloodlines</div>
+              <span style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">Rungs 0–2 (1 to 60 people)</span>
+            </div>
+            <div class="phase-body">
+              <div class="phase-plain-text">
+                Spawning the first actual human beings! Solo lives & dies, demographic births, marriage pairing, and village settlement.
+              </div>
+              <div class="phase-tech-text">
+                Wave 4 Landed (SPR-015/027/033a/038a/041) · Wave 5 in Flight (SPR-016 PR #88) · Wave 6 in Flight (SPR-018 PR #126 & SPR-028 PR #125)
+              </div>
+            </div>
+            <div class="phase-status-box">
+              <span class="status-pill active">In Progress (88%)</span>
+              <span class="drill-toggle-indicator" id="p1a-toggle-text">▼ Click to Drill Down (Tasks & Waves)</span>
+            </div>
+          </div>
+
+          <!-- Phase 1a Drilldown Drawer -->
+          <div class="tree-drilldown-drawer" id="p1a-drawer" style="display: block;">
+            
+            <!-- Level 2: Gate G1a Target -->
+            <div class="tree-sublevel-block gate-block" style="border-left-color: var(--cyan); background: rgba(0, 240, 255, 0.04);">
+              <div class="tree-sublevel-header">
+                <span class="phase-tag cyan">LEVEL 2: TARGET GATE G1A — DYNASTY & DEMOGRAPHY CRUCIBLE</span>
+                <span class="status-pill active" style="border-color: var(--cyan); color: var(--cyan);">CRUCIBLE EXAM IN SIGHT</span>
+              </div>
+              <p style="font-size: 0.84rem; color: var(--slate-300); margin-top: 4px;">
+                10,000-person Kingdom fixture simulates 1,000 years in &le; 60 seconds with bitwise determinism, 5-generation dynastic trees, and zero orphan entities.
+              </p>
+            </div>
+
+            <!-- Level 3: Complexity Rungs -->
+            <div class="tree-sublevel-block rung-block" style="border-left-color: var(--violet); background: rgba(168, 85, 247, 0.04);">
+              <div class="tree-sublevel-header">
+                <span class="phase-tag violet">LEVEL 3: COMPLEXITY RUNGS (SCALE & ENVELOPE)</span>
+                <span style="font-size: 0.76rem; color: var(--violet); font-family: var(--font-mono);">Rungs 0 & 1 Complete · Rung 2 Active Target</span>
+              </div>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 8px;">
+                <div style="background: rgba(15, 23, 42, 0.7); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-subtle);">
+                  <strong style="color: var(--emerald); font-size: 0.82rem;">Rung 0: Solo (1 Person)</strong>
+                  <div style="font-size: 0.75rem; color: var(--slate-400);">Chopping wood, aging & dying at midnight. &gt;10k ticks/sec ✓</div>
+                </div>
+                <div style="background: rgba(15, 23, 42, 0.7); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-subtle);">
+                  <strong style="color: var(--emerald); font-size: 0.82rem;">Rung 1: Household (~5 Persons)</strong>
+                  <div style="font-size: 0.75rem; color: var(--slate-400);">Kinship DAG, births, marriage pairing & farm inheritance ✓</div>
+                </div>
+                <div style="background: rgba(15, 23, 42, 0.7); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-active);">
+                  <strong style="color: var(--cyan); font-size: 0.82rem;">Rung 2: Hamlet (~60 Persons)</strong>
+                  <div style="font-size: 0.75rem; color: var(--cyan);">Specialized jobs, barter economy, world stream live output ⚡</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Level 4 & 5: Waves & Sprints -->
+            <div style="margin-top: 16px;">
+              
+              <!-- WAVE 5: ACTIVE MORTALITY & BIRTHS (CRITICAL IN FLIGHT) -->
+              <div class="tree-wave-container" id="node-wave-5">
+                <div class="tree-wave-header">
+                  <div>
+                    <span class="phase-tag amber" style="font-size: 0.75rem;">WAVE 5 (CLOSING)</span>
+                    <h5 style="color: #ffffff; font-size: 1.05rem; display: inline-block; margin-left: 8px;">Mortality Schedules & Household Dissolution</h5>
+                  </div>
+                  <span class="status-pill active" style="border-color: var(--crimson); color: var(--crimson);">1 Blocker (PR #88 Check 89)</span>
+                </div>
+
+                <div class="tree-sprint-list">
+                  
+                  <!-- SPR-016 (PR #88) -->
+                  <div class="tree-sprint-card blocked" id="node-spr-016">
+                    <div class="tree-sprint-card-header">
+                      <div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                          <span class="sprint-id" style="color: var(--crimson);">SPR-016</span>
+                          <span class="branch-pill">sprint/SPR-016-mortality-f1</span>
+                          <span class="sha-pill">c1186e1</span>
+                        </div>
+                        <div class="sprint-name">Stage 3 F1 Mortality & Household Dissolution</div>
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 8px;">
+                        <span class="ci-check-badge failure">Check 89 Fail</span>
+                        <a href="https://github.com/BigRigVibeCoder/Rehoboam/pull/88" target="_blank" class="pr-link-pill">PR #88 ↗</a>
+                      </div>
+                    </div>
+                    <p style="font-size: 0.82rem; color: var(--slate-300); margin-top: 6px;">
+                      Age-stratified Gompertz mortality curves and household dissolution when the head of household dies.
+                    </p>
+
+                    <!-- Blocker diagnostic pill -->
+                    <div style="margin-top: 8px; background: rgba(239, 68, 68, 0.12); border-left: 3px solid var(--crimson); padding: 8px 12px; border-radius: 4px;">
+                      <strong style="color: var(--crimson); font-size: 0.8rem;">🚨 Blocker Action Item (Task T-06):</strong>
+                      <span style="font-size: 0.78rem; color: #ffffff;">Check 89 null binomial band assertion failed in <code>crates/rh-core/src/systems/m2_system.rs:442,452</code>. Work order <code>INBOX.md</code> contains the exact 2-line patch. Applying it turns PR #88 100% green!</span>
+                    </div>
+
+                    <!-- Granular Tasks for SPR-016 -->
+                    <div class="tree-tasks-container">
+                      <div class="tree-tasks-header" onclick="toggleTaskDrawer('tasks-drawer-016')">
+                        <span>📋 Level 6: Tasks (5/6 Completed · 83%)</span>
+                        <span id="tasks-drawer-016-icon">▼</span>
+                      </div>
+                      <div class="tree-tasks-drawer" id="tasks-drawer-016" style="display: block;">
+                        <div class="tree-task-row done">
+                          <span class="task-id-badge" style="color: var(--emerald);">T-01</span>
+                          <div class="tree-task-info">
+                            <strong>Fixed-Point Pure Exp/Ln Math</strong>
+                            <p>Integer lookup polynomials in rh-core math without floating point drift.</p>
+                          </div>
+                          <span class="ci-check-badge success">✓ DONE</span>
+                        </div>
+                        <div class="tree-task-row done">
+                          <span class="task-id-badge" style="color: var(--emerald);">T-02</span>
+                          <div class="tree-task-info">
+                            <strong>Mortality Schedule & YAML Registry Bindings</strong>
+                            <p>specs/systems/m2_mortality_table.yaml loaded with zero heap fragmentation.</p>
+                          </div>
+                          <span class="ci-check-badge success">✓ DONE</span>
+                        </div>
+                        <div class="tree-task-row done">
+                          <span class="task-id-badge" style="color: var(--emerald);">T-03</span>
+                          <div class="tree-task-info">
+                            <strong>Bernoulli Mortality Trials at Midnight Drain</strong>
+                            <p>ChaCha8 PRNG streams sample mortality hazard curves at day boundaries.</p>
+                          </div>
+                          <span class="ci-check-badge success">✓ DONE</span>
+                        </div>
+                        <div class="tree-task-row done">
+                          <span class="task-id-badge" style="color: var(--emerald);">T-04</span>
+                          <div class="tree-task-info">
+                            <strong>H4 Household Dissolution Cascade</strong>
+                            <p>Clean domestic household cleanup without orphan pointers when patriarch dies.</p>
+                          </div>
+                          <span class="ci-check-badge success">✓ DONE</span>
+                        </div>
+                        <div class="tree-task-row done">
+                          <span class="task-id-badge" style="color: var(--emerald);">T-05</span>
+                          <div class="tree-task-info">
+                            <strong>Deterministic Agenda Tie-Breaking</strong>
+                            <p>Strict PersonId sorting for concurrent death events (V-DET-14 replay pass).</p>
+                          </div>
+                          <span class="ci-check-badge success">✓ DONE</span>
+                        </div>
+                        <div class="tree-task-row blocked">
+                          <span class="task-id-badge" style="color: var(--crimson);">T-06</span>
+                          <div class="tree-task-info">
+                            <strong style="color: var(--crimson);">Fix CI Check 89 (Poisson-Binomial Bounds Check)</strong>
+                            <p><strong>Deliverable:</strong> crates/rh-core/src/systems/m2_system.rs:442,452. Guard zero hazard edge in test harness.</p>
+                          </div>
+                          <span class="ci-check-badge failure">⛔ BLOCKED (ACTION QUEUED)</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- SPR-021 (Wave 5 Partner) -->
+                  <div class="tree-sprint-card ready">
+                    <div class="tree-sprint-card-header">
+                      <div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                          <span class="sprint-id" style="color: var(--violet);">SPR-021</span>
+                          <span class="branch-pill">sprint/SPR-021-marriage-f1</span>
+                        </div>
+                        <div class="sprint-name">Marriage & Dynastic Kinship Networks</div>
+                      </div>
+                      <span class="status-pill active" style="border-color: var(--violet); color: var(--violet);">📋 READY (D58 RATIFIED)</span>
+                    </div>
+                    <p style="font-size: 0.82rem; color: var(--slate-300); margin-top: 6px;">
+                      Courtship pairing, dowry transfers, pedigree DAG, and bilateral consanguinity check. Dispatches immediately once PR #88 lands.
+                    </p>
+                  </div>
+
+                </div>
+              </div>
+
+              <!-- WAVE 6: DEMOGRAPHY, SPACE & SPECTATOR (IN FLIGHT) -->
+              <div class="tree-wave-container" id="node-wave-6">
+                <div class="tree-wave-header">
+                  <div>
+                    <span class="phase-tag cyan" style="font-size: 0.75rem;">WAVE 6 (IN FLIGHT)</span>
+                    <h5 style="color: #ffffff; font-size: 1.05rem; display: inline-block; margin-left: 8px;">Space, Settlement Migration & 3D Spectator</h5>
+                  </div>
+                  <span class="status-pill active" style="border-color: var(--cyan); color: var(--cyan);">2 PRs Active (#126 & #125)</span>
+                </div>
+
+                <div class="tree-sprint-list">
+                  
+                  <!-- SPR-018 (PR #126) -->
+                  <div class="tree-sprint-card in-progress" id="node-spr-018">
+                    <div class="tree-sprint-card-header">
+                      <div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                          <span class="sprint-id" style="color: var(--cyan);">SPR-018</span>
+                          <span class="branch-pill">sprint/SPR-018-worldgen-lite</span>
+                          <span class="sha-pill">dc84ba6</span>
+                        </div>
+                        <div class="sprint-name">Stage A Worldgen Lite (100-Year Settlement Grid)</div>
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 8px;">
+                        <span class="ci-check-badge running">10/10 Goldens Pass</span>
+                        <a href="https://github.com/BigRigVibeCoder/Rehoboam/pull/126" target="_blank" class="pr-link-pill">PR #126 ↗</a>
+                      </div>
+                    </div>
+                    <p style="font-size: 0.82rem; color: var(--slate-300); margin-top: 6px;">
+                      M1.regions spatial elevation raster, settlement founding, and pioneer migration. Stage A complete with all golden cases passing!
+                    </p>
+
+                    <!-- Tasks for SPR-018 -->
+                    <div class="tree-tasks-container">
+                      <div class="tree-tasks-header" onclick="toggleTaskDrawer('tasks-drawer-018')">
+                        <span>📋 Level 6: Tasks (3/4 Completed · 75%)</span>
+                        <span id="tasks-drawer-018-icon">▼</span>
+                      </div>
+                      <div class="tree-tasks-drawer" id="tasks-drawer-018" style="display: block;">
+                        <div class="tree-task-row done">
+                          <span class="task-id-badge" style="color: var(--emerald);">T-01</span>
+                          <div class="tree-task-info">
+                            <strong>M1.regions Spatial Tile Grid</strong>
+                            <p>crates/rh-worldgen/src/regions.rs arable parcel partition.</p>
+                          </div>
+                          <span class="ci-check-badge success">✓ DONE</span>
+                        </div>
+                        <div class="tree-task-row done">
+                          <span class="task-id-badge" style="color: var(--emerald);">T-02</span>
+                          <div class="tree-task-info">
+                            <strong>S3 Stub Terrain & Elevation Heightfields</strong>
+                            <p>Procedural simplex elevation grid with river and drainage outlets.</p>
+                          </div>
+                          <span class="ci-check-badge success">✓ DONE</span>
+                        </div>
+                        <div class="tree-task-row done">
+                          <span class="task-id-badge" style="color: var(--emerald);">T-03</span>
+                          <div class="tree-task-info">
+                            <strong>S3.migration Regional Settlement Founding</strong>
+                            <p>Founding settlement logic verified across all 10 golden test cases.</p>
+                          </div>
+                          <span class="ci-check-badge success">✓ DONE</span>
+                        </div>
+                        <div class="tree-task-row in-progress">
+                          <span class="task-id-badge" style="color: var(--cyan);">T-04</span>
+                          <div class="tree-task-info">
+                            <strong>Core CI Fast Check Lint Fix</strong>
+                            <p>Trivial check script lint fix to satisfy bin/check_all.sh before merge.</p>
+                          </div>
+                          <span class="ci-check-badge running">⚡ IN REVIEW</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- SPR-028 (PR #125) -->
+                  <div class="tree-sprint-card in-progress" id="node-spr-028">
+                    <div class="tree-sprint-card-header">
+                      <div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                          <span class="sprint-id" style="color: var(--violet);">SPR-028</span>
+                          <span class="branch-pill">sprint/SPR-028-ensembles</span>
+                          <span class="sha-pill">534b586</span>
+                        </div>
+                        <div class="sprint-name">Task T-03 Monte Carlo Ensembles & Gate G1a</div>
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 8px;">
+                        <span class="ci-check-badge success">Smoke Passed (5m 12s)</span>
+                        <a href="https://github.com/BigRigVibeCoder/Rehoboam/pull/125" target="_blank" class="pr-link-pill">PR #125 ↗</a>
+                      </div>
+                    </div>
+                    <p style="font-size: 0.82rem; color: var(--slate-300); margin-top: 6px;">
+                      Runs 100 seeds in parallel to verify population survival curves. Smoke run passed in 5m 12s. Awaiting golden CI job re-trigger.
+                    </p>
+
+                    <!-- Tasks for SPR-028 -->
+                    <div class="tree-tasks-container">
+                      <div class="tree-tasks-header" onclick="toggleTaskDrawer('tasks-drawer-028')">
+                        <span>📋 Level 6: Tasks (3/4 Completed · 75%)</span>
+                        <span id="tasks-drawer-028-icon">▼</span>
+                      </div>
+                      <div class="tree-tasks-drawer" id="tasks-drawer-028" style="display: block;">
+                        <div class="tree-task-row done">
+                          <span class="task-id-badge" style="color: var(--emerald);">T-01</span>
+                          <div class="tree-task-info">
+                            <strong>Calibration Test Harness (crates/rh-test)</strong>
+                            <p>Modular test crate with headless multi-instance execution (on main).</p>
+                          </div>
+                          <span class="ci-check-badge success">✓ ON MAIN</span>
+                        </div>
+                        <div class="tree-task-row done">
+                          <span class="task-id-badge" style="color: var(--emerald);">T-02</span>
+                          <div class="tree-task-info">
+                            <strong>Baseline Calibration Parameters (calib_v0.yaml)</strong>
+                            <p>Empirical target bounds for life expectancy and household sizes (on main).</p>
+                          </div>
+                          <span class="ci-check-badge success">✓ ON MAIN</span>
+                        </div>
+                        <div class="tree-task-row done">
+                          <span class="task-id-badge" style="color: var(--emerald);">T-03</span>
+                          <div class="tree-task-info">
+                            <strong>Monte Carlo Ensembles & Gate G1a Check</strong>
+                            <p>Multi-seed runner verifying population trajectory bands across 100 seeds.</p>
+                          </div>
+                          <span class="ci-check-badge success">✓ DONE</span>
+                        </div>
+                        <div class="tree-task-row in-progress">
+                          <span class="task-id-badge" style="color: var(--violet);">T-04</span>
+                          <div class="tree-task-info">
+                            <strong>Golden Artifact Sweep Re-trigger</strong>
+                            <p>Re-run cancelled golden workflow on GitHub Actions for Gate G1a.</p>
+                          </div>
+                          <span class="ci-check-badge running">⚡ IN PROGRESS</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Wave 6 Sprints Queued -->
+                  <div class="tree-sprint-pill-card queued" style="border: 1px dashed var(--violet);">
+                    <div class="tree-sprint-top">
+                      <strong style="color: var(--violet);">SPR-022: Economic Foundation</strong>
+                      <span class="status-pill active" style="font-size: 0.7rem; border-color: var(--violet); color: var(--violet);">D59 RATIFIED</span>
+                    </div>
+                    <p>Cadastral plot yields, seasonal weather impacts, and feudal tithes. Queued for Wave 6.</p>
+                  </div>
+
+                  <div class="tree-sprint-pill-card queued" style="border: 1px dashed var(--violet);">
+                    <div class="tree-sprint-top">
+                      <strong style="color: var(--violet);">SPR-030: Family Annals v1</strong>
+                      <span class="status-pill active" style="font-size: 0.7rem; border-color: var(--violet); color: var(--violet);">D61 RATIFIED</span>
+                    </div>
+                    <p>Generates English prose history directly from simulation event traces. Queued for Wave 6.</p>
+                  </div>
+
+                  <div class="tree-sprint-pill-card queued" style="border: 1px dashed var(--violet);">
+                    <div class="tree-sprint-top">
+                      <strong style="color: var(--violet);">SPR-033b: Bevy Viewer Client</strong>
+                      <span class="status-pill active" style="font-size: 0.7rem; border-color: var(--violet); color: var(--violet);">D63 RATIFIED</span>
+                    </div>
+                    <p>Connects rh-view-core into Bevy 0.20 for real-time 3D voxel terrain visualization.</p>
+                  </div>
+
+                </div>
+              </div>
+
+              <!-- WAVE 4: LANDED ON MAIN (PAST MERGED IN PHASE 1A) -->
+              <div class="tree-wave-container merged-wave" id="node-wave-4">
+                <div class="tree-wave-header">
+                  <div>
+                    <span class="phase-tag emerald" style="font-size: 0.75rem;">WAVE 4 (COMPLETED & MERGED)</span>
+                    <h5 style="color: #ffffff; font-size: 1.05rem; display: inline-block; margin-left: 8px;">Demography Foundations & Viewer Lane Stage A</h5>
+                  </div>
+                  <span class="status-pill merged">5/5 Sprints Merged on Main</span>
+                </div>
+
+                <div class="tree-sprints-grid" style="margin-top: 8px;">
+                  <div class="tree-sprint-pill-card merged">
+                    <div class="tree-sprint-top">
+                      <strong>SPR-015: Births & Kinship</strong>
+                      <span class="status-pill merged">PR #107 Merged</span>
+                    </div>
+                    <p>M2 demography births, kinship DAG, household splits. 100% check_all pass.</p>
+                  </div>
+                  <div class="tree-sprint-pill-card merged">
+                    <div class="tree-sprint-top">
+                      <strong>SPR-027: Stream Materializer</strong>
+                      <span class="status-pill merged">PR #123 Merged</span>
+                    </div>
+                    <p>Arrow/Parquet dumps to live control.sock Unix sockets for 3D viewer.</p>
+                  </div>
+                  <div class="tree-sprint-pill-card merged">
+                    <div class="tree-sprint-top">
+                      <strong>SPR-033a: Bevy Viewer Core</strong>
+                      <span class="status-pill merged">PR #111 Merged</span>
+                    </div>
+                    <p>rh-view-core crate (3,164 LOC), 62^3 chunk meshing arithmetic, terrain v0.</p>
+                  </div>
+                  <div class="tree-sprint-pill-card merged">
+                    <div class="tree-sprint-top">
+                      <strong>SPR-038a: Cost Model</strong>
+                      <span class="status-pill merged">PR #112 Merged</span>
+                    </div>
+                    <p>Per-instant cost model, positional compaction, memory footprint bounds.</p>
+                  </div>
+                  <div class="tree-sprint-pill-card merged">
+                    <div class="tree-sprint-top">
+                      <strong>SPR-041: Multi-Seed Verification</strong>
+                      <span class="status-pill merged">PR #124 Merged</span>
+                    </div>
+                    <p>Nightly 100-seed sweeps, error attribution, and CI failure triage.</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- WAVES 1..3: WALKING SKELETONS (MERGED) -->
+              <div class="tree-wave-container merged-wave" id="node-wave-1-3">
+                <div class="tree-wave-header">
+                  <div>
+                    <span class="phase-tag emerald" style="font-size: 0.75rem;">WAVES 1..3 (COMPLETED & MERGED)</span>
+                    <h5 style="color: #ffffff; font-size: 1.05rem; display: inline-block; margin-left: 8px;">Walking Skeletons & World Stream v0/v1</h5>
+                  </div>
+                  <span class="status-pill merged">7 Sprints Merged</span>
+                </div>
+                <div class="tree-sprints-grid" style="margin-top: 8px;">
+                  <div class="tree-sprint-pill-card merged">
+                    <strong>SPR-011: Engine Prerequisites</strong>
+                    <p>AST purity lints, prob32 types, life_course logs.</p>
+                  </div>
+                  <div class="tree-sprint-pill-card merged">
+                    <strong>SPR-012: Solo Lives & Dies</strong>
+                    <p>Simulated world 'solo', aging/extinction golden ladder.</p>
+                  </div>
+                  <div class="tree-sprint-pill-card merged">
+                    <strong>SPR-013: World Stream v0</strong>
+                    <p>rh-stream daemon, Parquet chronicles, rh-sifter v0.</p>
+                  </div>
+                  <div class="tree-sprint-pill-card merged">
+                    <strong>SPR-014: Lifecycle Queues</strong>
+                    <p>Dead-person drop handlers, mortality drain queues.</p>
+                  </div>
+                  <div class="tree-sprint-pill-card merged">
+                    <strong>SPR-020: Event Envelopes</strong>
+                    <p>9 causal edge kinds, roles, anchored emotional snapshots.</p>
+                  </div>
+                  <div class="tree-sprint-pill-card merged">
+                    <strong>SPR-026: Wire Protocol v1</strong>
+                    <p>Zero-overhead edge socket streaming canonical text lines.</p>
+                  </div>
+                  <div class="tree-sprint-pill-card merged">
+                    <strong>SPR-019: Population Synthesis</strong>
+                    <p>Synthesizes anonymous founders, dynastic back-fill.</p>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+
+        <!-- GATE G1A CARD (ACTIVE TARGET CHECKPOINT) -->
+        <div class="phase-node-wrapper" data-category="active" data-phase="g1a" id="wrapper-g1a">
+          <div class="phase-card gate-card" onclick="toggleTreeDrilldown('g1a')" style="border-left-color: var(--amber);">
+            <div class="phase-meta">
+              <span class="phase-tag amber">▲ CHECKPOINT EXAM</span>
+              <div class="phase-title">Gate G1a: Dynasty Exam</div>
+              <span style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">Report: VER-G1a</span>
+            </div>
+            <div class="phase-body">
+              <div class="phase-plain-text">
+                Does a dynasty live, die, and pass down bloodlines over 5 generations without exploding in size or freezing into grief loops? Does the chronicle read like real history?
+              </div>
+              <div class="phase-tech-text">Verified against Alfani inequality & Coale-Demeny demography data · Pre-requisite: SPR-016 & SPR-028 Land</div>
+            </div>
+            <div class="phase-status-box">
+              <span class="status-pill active" style="border-color: var(--amber); color: var(--amber);">In Flight</span>
+              <span class="drill-toggle-indicator" id="g1a-toggle-text">▼ Click for Acceptance Criteria</span>
+            </div>
+          </div>
+
+          <div class="tree-drilldown-drawer" id="g1a-drawer" style="display: none;">
+            <div class="tree-sublevel-block gate-block" style="border-left-color: var(--amber);">
+              <h5 style="color: var(--amber); margin-bottom: 6px;">Gate G1a Crucible Acceptance Criteria</h5>
+              <div style="font-size: 0.84rem; color: var(--slate-300); line-height: 1.5;">
+                • <strong>Dynastic Survival:</strong> 5-generation lineages hold without premature extinction (validated by D56 & Probe B08-01)<br>
+                • <strong>Crucible Speed:</strong> 10,000-person Kingdom runs 1,000 years in &le; 60 seconds on reference ThinkPad P51<br>
+                • <strong>Zero Orphans:</strong> All dead actors drop cleanly from agenda, household DAGs, and queues (V-INV-15)<br>
+                • <strong>Human-Readable Chronicles:</strong> Family history generated across 3 seeds reads as authentic history (SPR-030)
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ======================================================== -->
+        <!-- 3. PHASE 1B: LEGENDS (NEAR FUTURE / QUEUED)              -->
+        <!-- ======================================================== -->
+        <div class="phase-node-wrapper" data-category="future" data-phase="p1b" id="wrapper-p1b">
+          <div class="phase-card" onclick="toggleTreeDrilldown('p1b')">
+            <div class="phase-meta">
+              <span class="phase-tag slate">○ QUEUED</span>
+              <div class="phase-title">Phase 1b: Legends</div>
+              <span style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">Rungs 3–4 (Village to 50k Kingdom)</span>
+            </div>
+            <div class="phase-body">
+              <div class="phase-plain-text">
+                The full medieval sandbox. 50,000 citizens, cursed holy relics, blood oaths, secret plots traveling by road, and dynastic politics.
+              </div>
+              <div class="phase-tech-text">Target: Gate G1b · Features Relic Corruption Tensor & Road Secret Graph</div>
+            </div>
+            <div class="phase-status-box">
+              <span class="status-pill locked">Queued</span>
+              <span class="drill-toggle-indicator" id="p1b-toggle-text">▼ Click to Drill Down (Upcoming)</span>
+            </div>
+          </div>
+
+          <div class="tree-drilldown-drawer" id="p1b-drawer" style="display: none;">
+            
+            <!-- Level 2: Gate G1b -->
+            <div class="tree-sublevel-block gate-block" style="border-left-color: var(--slate-400);">
+              <div class="tree-sublevel-header">
+                <span class="phase-tag slate">LEVEL 2: GATE G1B — KINGDOM SCALE EXAM</span>
+                <span class="status-pill locked">LOCKED</span>
+              </div>
+              <p style="font-size: 0.84rem; color: var(--slate-300); margin-top: 4px;">
+                50,000 citizens run at &gt;60 ticks/second with O(1) heap allocation per agent. Taagepera historical empire lifespans validated.
+              </p>
+            </div>
+
+            <!-- Level 3: Rungs 3 & 4 -->
+            <div class="tree-sublevel-block rung-block">
+              <div class="tree-sublevel-header">
+                <span class="phase-tag violet">LEVEL 3: COMPLEXITY RUNGS 3 & 4</span>
+              </div>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-top: 6px;">
+                <div style="background: rgba(15, 23, 42, 0.7); padding: 8px 12px; border-radius: 8px;">
+                  <strong style="color: var(--violet); font-size: 0.82rem;">Rung 3: The Village & Priests (~1,000 Pop)</strong>
+                  <div style="font-size: 0.75rem; color: var(--slate-400);">Holy relics, vows, taxation, market trade, and criminal undergrounds.</div>
+                </div>
+                <div style="background: rgba(15, 23, 42, 0.7); padding: 8px 12px; border-radius: 8px;">
+                  <strong style="color: var(--amber); font-size: 0.82rem;">Rung 4: The Medieval Kingdom (10k–50k Pop)</strong>
+                  <div style="font-size: 0.75rem; color: var(--slate-400);">50 landed fiefs, dynastic succession wars, courier secret graphs.</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Upcoming Sprints -->
+            <div style="margin-top: 12px;">
+              <strong style="color: var(--slate-400); font-size: 0.78rem; text-transform: uppercase; font-family: var(--font-mono);">
+                Upcoming Phase 1b Sprints (Waves 7 & 8):
+              </strong>
+              <div class="tree-sprints-grid" style="margin-top: 6px;">
+                <div class="tree-sprint-pill-card queued">
+                  <strong>SPR-031: Succession Crises & Interregnums</strong>
+                  <p>Ruling K2 vassal cascades, claimant voiding, and crown disputes.</p>
+                </div>
+                <div class="tree-sprint-pill-card queued">
+                  <strong>SPR-032: Feudal Land Tenure & Cadets</strong>
+                  <p>Age-35 noble demotion to bound living aristocracy to ~98 nobles.</p>
+                </div>
+                <div class="tree-sprint-pill-card queued">
+                  <strong>SPR-034: Stream Ingestion Grammar</strong>
+                  <p>Plane B procedural hydration of timber frames, thatch & stone keeps.</p>
+                </div>
+                <div class="tree-sprint-pill-card queued">
+                  <strong>SPR-035: Timeline Scrubber</strong>
+                  <p>&lt;250ms jump to 10-year Arrow keyframes + journal replay.</p>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- GATE G1B CARD -->
+        <div class="phase-node-wrapper" data-category="future" data-phase="g1b" id="wrapper-g1b">
+          <div class="phase-card gate-card" onclick="toggleTreeDrilldown('g1b')">
+            <div class="phase-meta">
+              <span class="phase-tag slate">▲ CHECKPOINT EXAM</span>
+              <div class="phase-title">Gate G1b: Kingdom Exam</div>
+              <span style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">Report: VER-G1b</span>
+            </div>
+            <div class="phase-body">
+              <div class="phase-plain-text">
+                Can a 50,000-person kingdom run at 60 ticks per second without crashing, memory leaks, or running out of RAM?
+              </div>
+              <div class="phase-tech-text">Coupling sweeps alpha in [0, 1] · Taagepera empire lifespans validated</div>
+            </div>
+            <div class="phase-status-box">
+              <span class="status-pill locked">Locked</span>
+              <span class="drill-toggle-indicator" id="g1b-toggle-text">▼ Click for Details</span>
+            </div>
+          </div>
+          <div class="tree-drilldown-drawer" id="g1b-drawer" style="display: none;">
+            <div class="tree-sublevel-block gate-block">
+              <p style="font-size: 0.84rem; color: var(--slate-300);">
+                Gate G1b benchmarks the 50,000-citizen feudal simulation on server-class hardware (AMD Genoa 16-core). Requires zero heap leaks across 10,000 years.
               </p>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- Director D62 3-Tier Execution Priority Framework -->
-      <div style="background: linear-gradient(135deg, rgba(0, 240, 255, 0.08) 0%, rgba(168, 85, 247, 0.08) 100%); border: 1px solid var(--border-active); border-radius: 16px; padding: 24px; margin-bottom: 28px; box-shadow: 0 0 30px rgba(0, 240, 255, 0.1);">
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
-          <div>
-            <span class="phase-tag cyan" style="font-size: 0.82rem;">OFFICIAL GOVERNING RULING D62 (2026-10-18)</span>
-            <h4 style="font-size: 1.35rem; color: #ffffff; margin-top: 6px;">The Director's Ironclad 3-Tier Execution Hierarchy</h4>
-            <p style="font-size: 0.88rem; color: var(--slate-300); margin-top: 4px;">
-              Zero ambiguity between the Director, Red Team, and Architect. Contention rule: <strong>Priority 1 wins unconditionally</strong> in all CI minutes, review time, and merge queues.
-            </p>
-          </div>
-          <span class="status-pill active" style="font-size: 0.85rem; padding: 6px 16px; border-color: var(--cyan); color: var(--cyan);">Enshrined on Main</span>
-        </div>
-
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 16px;">
-          <!-- Tier 1 -->
-          <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; padding: 18px; position: relative; overflow: hidden;">
-            <div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--emerald);"></div>
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-              <span style="font-family: var(--font-mono); font-size: 0.78rem; font-weight: 700; color: var(--emerald); letter-spacing: 1px;">PRIORITY 1</span>
-              <span class="status-pill merged" style="font-size: 0.7rem;">In Active Flight</span>
+        <!-- ======================================================== -->
+        <!-- 4. PHASE 2: SAGAS & AUDIO (FUTURE HORIZON)               -->
+        <!-- ======================================================== -->
+        <div class="phase-node-wrapper" data-category="future" data-phase="p2" id="wrapper-p2">
+          <div class="phase-card" onclick="toggleTreeDrilldown('p2')">
+            <div class="phase-meta">
+              <span class="phase-tag violet">★ THE REVOLUTION</span>
+              <div class="phase-title">Phase 2: Sagas & Audio v0</div>
+              <span style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">The Story Sifter & Time-Machine</span>
             </div>
-            <h5 style="color: #ffffff; font-size: 1.05rem; margin-bottom: 6px;">Core Engine to Minimum Viable State</h5>
-            <p style="font-size: 0.82rem; color: var(--slate-300); line-height: 1.45;">
-              Phase 1a & 1b: M7 dynastic succession, M2 real demography, T1.minds stress & mental breaks, and raw Apache Arrow World Stream sink. Family Annals (SPR-029) remain in P1 (G1a requires reading family history of 3 seeds).
-            </p>
-            <div style="margin-top: 10px; font-family: var(--font-mono); font-size: 0.72rem; color: var(--emerald);">
-              G1a Gate · Kingdom 10k in 60s · Determinism Invariant
+            <div class="phase-body">
+              <div class="phase-plain-text">
+                The story finder. A program that searches through millions of boring farm records to discover epic 30-year revenge sagas, plus a keyboard Time-Machine and audio exporter.
+              </div>
+              <div class="phase-tech-text">Target: Gate G2 · Proven sub-millisecond query in Prototype 8</div>
+            </div>
+            <div class="phase-status-box">
+              <span class="status-pill locked">Locked</span>
+              <span class="drill-toggle-indicator" id="p2-toggle-text">▼ Click for Horizon Details</span>
             </div>
           </div>
 
-          <!-- Tier 2 -->
-          <div style="background: rgba(0, 240, 255, 0.08); border: 1px solid rgba(0, 240, 255, 0.3); border-radius: 12px; padding: 18px; position: relative; overflow: hidden;">
-            <div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--cyan);"></div>
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-              <span style="font-family: var(--font-mono); font-size: 0.78rem; font-weight: 700; color: var(--cyan); letter-spacing: 1px;">PRIORITY 2</span>
-              <span class="status-pill active" style="font-size: 0.7rem;">Commissioned Now</span>
+          <div class="tree-drilldown-drawer" id="p2-drawer" style="display: none;">
+            <div class="tree-sublevel-block gate-block" style="border-left-color: var(--violet);">
+              <h5 style="color: var(--violet); margin-bottom: 6px;">Level 2: Gate G2 (The Big Thesis Exam)</h5>
+              <p style="font-size: 0.84rem; color: var(--slate-300);">
+                Does a real human being enjoy reading or listening to the generated sagas? Blind-tested against a boring, ablated control world.
+              </p>
             </div>
-            <h5 style="color: #ffffff; font-size: 1.05rem; margin-bottom: 6px;">Personal 3D Voxel Viewer (rh-view)</h5>
-            <p style="font-size: 0.82rem; color: var(--slate-300); line-height: 1.45;">
-              Native Bevy (D51) over SSH-tunneled Unix domain socket to P51 laptop. 0.35m default micro-voxels with LOD fallback. <strong>Client-side watched-history cache</strong> gives instant (&lt;16ms) timeline scrubbing. Starts upon SPR-026 merge! Sagas & audio wait.
-            </p>
-            <div style="margin-top: 10px; font-family: var(--font-mono); font-size: 0.72rem; color: var(--cyan);">
-              PRJ-003 · SPR-033 Spike · &gt;=60 FPS on Quadro M2200
-            </div>
-          </div>
-
-          <!-- Tier 3 -->
-          <div style="background: rgba(168, 85, 247, 0.08); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 12px; padding: 18px; position: relative; overflow: hidden;">
-            <div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--violet);"></div>
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-              <span style="font-family: var(--font-mono); font-size: 0.78rem; font-weight: 700; color: var(--violet); letter-spacing: 1px;">PRIORITY 3</span>
-              <span class="status-pill locked" style="font-size: 0.7rem;">After Gate G2</span>
-            </div>
-            <h5 style="color: #ffffff; font-size: 1.05rem; margin-bottom: 6px;">4-Epoch Progressive Historical Expansion</h5>
-            <p style="font-size: 0.82rem; color: var(--slate-300); line-height: 1.45;">
-              Continuous state vectors (ADR-0027): E1 Feudal (1000–1500) → E2 Gunpowder/Sail (1500–1750) → E3 Steam & Industry (1750–1900) → E4 Industrial War (1900–1945). 1M citizen scaling remains an empirical target measured via G1a & SPR-030.
-            </p>
-            <div style="margin-top: 10px; font-family: var(--font-mono); font-size: 0.72rem; color: var(--violet);">
-              Era Packs E2–E4 · Adjutant Genoa Cloud Beast
+            <div class="tree-sprints-grid" style="margin-top: 8px;">
+              <div class="tree-sprint-pill-card queued">
+                <strong>rh-sifter Crate: DuckDB DAG Mining</strong>
+                <p>Scans 100,000 raw Parquet events in 0.487 ms using two-stage causal discovery.</p>
+              </div>
+              <div class="tree-sprint-pill-card queued">
+                <strong>rh-tui: Keyboard Time-Machine</strong>
+                <p>Scrub backward and forward through history with instantaneous Arrow keyframe seek.</p>
+              </div>
+              <div class="tree-sprint-pill-card queued">
+                <strong>Offline Audio Exporter v0</strong>
+                <p>Synthesizes voice narration of historical legends directly from causal events.</p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div class="roadmap-timeline">
-
-        <!-- Phase 0 -->
-        <div class="phase-card" onclick="openModal('p0')">
-          <div class="phase-meta">
-            <span class="phase-tag emerald">✓ 100% MERGED</span>
-            <div class="phase-title">Phase 0: Foundations</div>
-            <span style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">Sprints SPR-001 to SPR-010</span>
-          </div>
-          <div class="phase-body">
-            <div class="phase-plain-text" data-plain="The core engine block is built and certified: perfectly fair dice, fixed-point math with zero decimal bugs, universal simulation clock, and black-box event recorder." data-arch="Bitwise deterministic kernel, split PRNG streams, monotonic agenda, Arrow/Parquet event journal, Q8_8/Q16_16 fixed-point math.">
-              The core engine block is built and certified: perfectly fair dice, fixed-point math with zero decimal bugs, universal simulation clock, and black-box event recorder.
+        <!-- GATE G2 CARD -->
+        <div class="phase-node-wrapper" data-category="future" data-phase="g2" id="wrapper-g2">
+          <div class="phase-card gate-card" onclick="toggleTreeDrilldown('g2')">
+            <div class="phase-meta">
+              <span class="phase-tag violet">▲ THESIS GATE</span>
+              <div class="phase-title">Gate G2: The Big Thesis Exam</div>
+              <span style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">Report: VER-G2</span>
             </div>
-            <div class="phase-tech-text">10/10 Sprints Merged · Complete Kernel Verification Passed</div>
+            <div class="phase-body">
+              <div class="phase-plain-text">
+                The Ultimate Question: Does a real human being enjoy reading or listening to the generated sagas? Blind-tested against a boring, ablated control world.
+              </div>
+              <div class="phase-tech-text">Pivot rule: 3 consecutive human enjoyment failures triggers architectural pivot</div>
+            </div>
+            <div class="phase-status-box">
+              <span class="status-pill locked">Locked</span>
+              <span class="drill-toggle-indicator" id="g2-toggle-text">▼ Click for Details</span>
+            </div>
           </div>
-          <div class="phase-status-box">
-            <span class="status-pill merged">100% Merged</span>
-            <span style="font-size: 0.72rem; color: var(--slate-400);">Click for details →</span>
+          <div class="tree-drilldown-drawer" id="g2-drawer" style="display: none;">
+            <div class="tree-sublevel-block gate-block">
+              <p style="font-size: 0.84rem; color: var(--slate-300);">
+                Pre-registered evaluation protocol: judges rate generated chronicles vs ablated non-causal logs on drama, coherence, and memorability.
+              </p>
+            </div>
           </div>
         </div>
 
-        <!-- Gate G0 -->
-        <div class="phase-card gate-card" onclick="openModal('g0')" style="border-left-color: var(--emerald);">
-          <div class="phase-meta">
-            <span class="phase-tag emerald">▲ RATIFIED GATE</span>
-            <div class="phase-title">Gate G0: Determinism Exam</div>
-            <span style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">Report: VER-G0</span>
-          </div>
-          <div class="phase-body">
-            <div class="phase-plain-text" data-plain="The brutal checkpoint is passed! 1,000 simulated years run across different computers with 100% bitwise parity down to the last single bit." data-arch="Bitwise cross-machine and multi-thread hash parity (V-DET-01/02), keyframe round-trip, golden vectors, automated bisect tool, CI <= 15 min.">
-              The brutal checkpoint is passed! 1,000 simulated years run across different computers with 100% bitwise parity down to the last single bit.
+        <!-- ======================================================== -->
+        <!-- 5. PHASES 3–5: FUTURE ROADMAP (LONG TERM)                -->
+        <!-- ======================================================== -->
+        <div class="phase-node-wrapper" data-category="future" data-phase="p3" id="wrapper-p3">
+          <div class="phase-card" onclick="toggleTreeDrilldown('p3')">
+            <div class="phase-meta">
+              <span class="phase-tag slate">○ FUTURE PHASES</span>
+              <div class="phase-title">Phases 3–5: Visuals & Drama</div>
+              <span style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">P3 Illustrated · P4 Depth · P5 2D</span>
             </div>
-            <div class="phase-tech-text">Gate Ratified (VER-G0) · Laws 2 & 3 codified into docs/01 §5 · Benches 7 & 8 passed</div>
+            <div class="phase-body">
+              <div class="phase-plain-text">
+                AI Graphic Novel reader, multi-voice audio drama, full plagues, religions, holy wars, and a retro 2D living pixel-art world map.
+              </div>
+              <div class="phase-tech-text">Pure 2D & Audio focus · All custom 3D/VR bloat cut per ADR-0035</div>
+            </div>
+            <div class="phase-status-box">
+              <span class="status-pill locked">Future</span>
+              <span class="drill-toggle-indicator" id="p3-toggle-text">▼ Click for Details</span>
+            </div>
           </div>
-          <div class="phase-status-box">
-            <span class="status-pill merged">✓ Gate Passed</span>
-            <span style="font-size: 0.72rem; color: var(--slate-400);">Click for details →</span>
+          <div class="tree-drilldown-drawer" id="p3-drawer" style="display: none;">
+            <div class="tree-sprints-grid" style="margin-top: 8px;">
+              <div class="tree-sprint-pill-card queued">
+                <strong>Phase 3: Illustrated Chronicles</strong>
+                <p>AI Graphic Novel layout engine generating paneled comic pages from causal trees.</p>
+              </div>
+              <div class="tree-sprint-pill-card queued">
+                <strong>Phase 4: Deep Epistemics & Contagion</strong>
+                <p>Rumor transmission across road graphs, church heresy, and multi-century plagues.</p>
+              </div>
+              <div class="tree-sprint-pill-card queued">
+                <strong>Phase 5: 2D Living Pixel Diorama</strong>
+                <p>Retro diorama client allowing the Director to observe the living world in real-time.</p>
+              </div>
+            </div>
           </div>
         </div>
 
-        <!-- Phase 1a -->
-        <div class="phase-card active-phase" onclick="openModal('p1a')">
-          <div class="phase-meta">
-            <span class="phase-tag cyan">● ACTIVE NOW</span>
-            <div class="phase-title">Phase 1a: Bloodlines</div>
-            <span style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">Rungs 0–2 (1 to 60 people)</span>
-          </div>
-          <div class="phase-body">
-            <div class="phase-plain-text" data-plain="Spawning the first actual human beings! Solo lived and died (SPR-012 merged); World Stream live recorder active (SPR-013, 026 merged); Wave 4 lifecycle queues & envelope merged (SPR-014, 020); Bevy voxel viewer core merged (SPR-033a / PR #111); SPR-015 demography births ready (PR #107); SPR-027 stream materializer in CI (PR #123)." data-arch="Rungs 0-2 (solo, household, hamlet); M2 demography; M7 succession; minds v0 with stress & mental breaks; cinematic event envelope; World Stream v1. SPR-011..014, 019, 020, 026 merged.">
-              Spawning the first actual human beings! Solo lived and died (SPR-012 merged); World Stream live recorder active (SPR-013, 026 merged); Wave 4 lifecycle queues & envelope merged (SPR-014, 020); Bevy voxel viewer core merged (SPR-033a / PR #111); SPR-015 demography births ready (PR #107); SPR-027 stream materializer in CI (PR #123).
-            </div>
-            <div class="phase-tech-text">SPR-011..014, 019, 020, 026 Merged · SPR-015 Ready (PR #107) · SPR-027 In CI (PR #123) · SPR-033a Merged (PR #111) · D58–D64 Ratified</div>
-          </div>
-          <div class="phase-status-box">
-            <span class="status-pill active">In Progress</span>
-            <span style="font-size: 0.72rem; color: var(--slate-400);">Click for details →</span>
-          </div>
-        </div>
-
-        <!-- Gate G1a -->
-        <div class="phase-card gate-card" onclick="openModal('g1a')">
-          <div class="phase-meta">
-            <span class="phase-tag slate">▲ CHECKPOINT EXAM</span>
-            <div class="phase-title">Gate G1a: Dynasty Exam</div>
-            <span style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">Report: VER-G1a</span>
-          </div>
-          <div class="phase-body">
-            <div class="phase-plain-text" data-plain="Does a dynasty live, die, and pass down bloodlines over 5 generations without exploding in size or freezing into grief loops? Does the chronicle read like real history?" data-arch="Deterministic succession settlement; Chronicle writer templates; no orphan entities; generational grief damping validated.">
-              Does a dynasty live, die, and pass down bloodlines over 5 generations without exploding in size or freezing into grief loops? Does the chronicle read like real history?
-            </div>
-            <div class="phase-tech-text">Verified against Alfani inequality & Coale-Demeny demography data</div>
-          </div>
-          <div class="phase-status-box">
-            <span class="status-pill locked">Locked</span>
-          </div>
-        </div>
-
-        <!-- Phase 1b -->
-        <div class="phase-card" onclick="openModal('p1b')">
-          <div class="phase-meta">
-            <span class="phase-tag slate">○ QUEUED</span>
-            <div class="phase-title">Phase 1b: Legends</div>
-            <span style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">Rungs 3–4 (Village to 50k Kingdom)</span>
-          </div>
-          <div class="phase-body">
-            <div class="phase-plain-text" data-plain="The full medieval sandbox. 50,000 citizens, cursed holy relics, blood oaths, secret plots traveling by road, and dynastic politics." data-arch="Rungs 3-4 (village, kingdom 10k-50k); S6 artifacts; S7 vows; mythic catalysts; secrets v0; M3 harvest F0/F1, M4 F0, M6 polity-lite.">
-              The full medieval sandbox. 50,000 citizens, cursed holy relics, blood oaths, secret plots traveling by road, and dynastic politics.
-            </div>
-            <div class="phase-tech-text">Target: Gate G1b · Features Relic Corruption Tensor & Road Secret Graph</div>
-          </div>
-          <div class="phase-status-box">
-            <span class="status-pill locked">Locked</span>
-          </div>
-        </div>
-
-        <!-- Gate G1b -->
-        <div class="phase-card gate-card" onclick="openModal('g1b')">
-          <div class="phase-meta">
-            <span class="phase-tag slate">▲ CHECKPOINT EXAM</span>
-            <div class="phase-title">Gate G1b: Kingdom Exam</div>
-            <span style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">Report: VER-G1b</span>
-          </div>
-          <div class="phase-body">
-            <div class="phase-plain-text" data-plain="Can a 50,000-person kingdom run at 60 ticks per second without crashing, memory leaks, or running out of RAM?" data-arch="Plausibility bands hold; V-SF-22/23 coupling sweeps pass; O(1) heap per agent; Taagepera empire lifespans validated.">
-              Can a 50,000-person kingdom run at 60 ticks per second without crashing, memory leaks, or running out of RAM?
-            </div>
-            <div class="phase-tech-text">Coupling sweeps alpha in [0, 1]</div>
-          </div>
-          <div class="phase-status-box">
-            <span class="status-pill locked">Locked</span>
-          </div>
-        </div>
-
-        <!-- Phase 2 -->
-        <div class="phase-card" onclick="openModal('p2')">
-          <div class="phase-meta">
-            <span class="phase-tag violet">★ THE REVOLUTION</span>
-            <div class="phase-title">Phase 2: Sagas & Audio v0</div>
-            <span style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">The Story Sifter & Time-Machine</span>
-          </div>
-          <div class="phase-body">
-            <div class="phase-plain-text" data-plain="The story finder. A program that searches through millions of boring farm records to discover epic 30-year revenge sagas, plus a keyboard Time-Machine and audio exporter." data-arch="Plane C rh-sifter, DAG story pattern packs, keyboard Time-Machine (rh-tui), offline audio exporter v0, pre-registered G2 protocol.">
-              The story finder. A program that searches through millions of boring farm records to discover epic 30-year revenge sagas, plus a keyboard Time-Machine and audio exporter.
-            </div>
-            <div class="phase-tech-text">Target: Gate G2 · Proven sub-millisecond query in Prototype 8</div>
-          </div>
-          <div class="phase-status-box">
-            <span class="status-pill locked">Locked</span>
-          </div>
-        </div>
-
-        <!-- Gate G2 -->
-        <div class="phase-card gate-card" onclick="openModal('g2')">
-          <div class="phase-meta">
-            <span class="phase-tag violet">▲ THESIS GATE</span>
-            <div class="phase-title">Gate G2: The Big Thesis Exam</div>
-            <span style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">Report: VER-G2</span>
-          </div>
-          <div class="phase-body">
-            <div class="phase-plain-text" data-plain="The Ultimate Question: Does a real human being enjoy reading or listening to the generated sagas? Blind-tested against a boring, ablated control world." data-arch="Pre-registered rating of sagas against coupling-ablated control; saga-mechanics ablation reported; kill/pivot rule applies.">
-              The Ultimate Question: Does a real human being enjoy reading or listening to the generated sagas? Blind-tested against a boring, ablated control world.
-            </div>
-            <div class="phase-tech-text">Pivot rule: 3 failures triggers pivot</div>
-          </div>
-          <div class="phase-status-box">
-            <span class="status-pill locked">Locked</span>
-          </div>
-        </div>
-
-        <!-- Phase 3, 4, 5 Summary -->
-        <div class="phase-card" onclick="openModal('p3')">
-          <div class="phase-meta">
-            <span class="phase-tag slate">○ FUTURE PHASES</span>
-            <div class="phase-title">Phases 3–5: Visuals & Drama</div>
-            <span style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">P3 Illustrated · P4 Depth · P5 2D</span>
-          </div>
-          <div class="phase-body">
-            <div class="phase-plain-text" data-plain="AI Graphic Novel reader, multi-voice audio drama, full plagues, religions, holy wars, and a retro 2D living pixel-art world map." data-arch="Narrative compiler, audio drama, Graphic Chronicle with causal timeline, full epistemics, contagion, war, 2D Kenney CC0 diorama.">
-              AI Graphic Novel reader, multi-voice audio drama, full plagues, religions, holy wars, and a retro 2D living pixel-art world map.
-            </div>
-            <div class="phase-tech-text">All custom 3D/VR cut per ADR-0035; pure 2D & Audio focus</div>
-          </div>
-          <div class="phase-status-box">
-            <span class="status-pill locked">Future</span>
-          </div>
-        </div>
-
-      </div>
-    </section>
-
-    <!-- TAB 2: LIVE SPRINTS -->
-        <!-- TAB 2: LIVE SPRINTS & GRANULAR TASKS -->
-    <section id="tab-sprints" class="tab-content">
-      <div class="section-header">
-        <div>
-          <h3>🏃 Sprint & Task Breakdown (Lowest WBS Level)</h3>
-          <p>Complete project tracking from Sprint scope down to granular Tasks (T-01, T-02...). Drill into PRs, code deliverables, blockers, and assigned agent roles.</p>
-        </div>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <button class="filter-pill active" onclick="filterSprintView('all', this)">All Sprints</button>
-          <button class="filter-pill" onclick="filterSprintView('inflight', this)" style="border-color: var(--amber); color: var(--amber);">⚡ In Flight (PRs #88, #125, #126)</button>
-          <button class="filter-pill" onclick="filterSprintView('wave5', this)" style="border-color: var(--violet); color: var(--violet);">⏳ Wave 5/6 Queued</button>
-          <button class="filter-pill" onclick="filterSprintView('phase1a-merged', this)" style="border-color: var(--cyan); color: var(--cyan);">✓ Wave 4 / 1a Merged</button>
-          <button class="filter-pill" onclick="filterSprintView('phase0', this)" style="border-color: var(--emerald); color: var(--emerald);">✓ Phase 0 Kernel</button>
-        </div>
-      </div>
-
-      <!-- ============================================================ -->
-      <!-- SECTION 1: IN FLIGHT SPRINTS & GRANULAR TASKS (ACTIVE WORK)  -->
-      <!-- ============================================================ -->
-      <div class="sprint-group-wrapper" data-group="inflight">
-        <div style="margin: 20px 0 12px 0; display: flex; justify-content: space-between; align-items: center;">
-          <span class="phase-tag amber" style="font-size: 0.85rem; padding: 4px 14px;">⚡ ACTIVE SPRINTS IN FLIGHT (WAVE 4 FINISH LINE · 3 PRS OPEN)</span>
-          <span style="font-family: var(--font-mono); font-size: 0.78rem; color: var(--slate-400);">Click "View Tasks" on any sprint card to drill down into T-01..T-NN</span>
-        </div>
-
-        <div class="sprints-grid" style="margin-bottom: 28px;">
-
-          <!-- SPR-016: MORTALITY F1 (PR #88) -->
-          <div class="sprint-card" style="border: 1px solid var(--crimson); background: rgba(239, 68, 68, 0.04); box-shadow: 0 0 20px rgba(239, 68, 68, 0.1);">
-            <div class="sprint-card-header">
-              <div>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <span class="sprint-id" style="color: var(--crimson); font-weight: 900;">SPR-016</span>
-                  <span class="branch-pill" style="font-size: 0.72rem; padding: 2px 6px;">sprint/SPR-016-mortality-f1</span>
-                </div>
-                <div class="sprint-name" style="margin-top: 4px;">Stage 3 F1 Mortality & Household Dissolution</div>
-              </div>
-              <span class="ci-check-badge failure" style="font-size: 0.8rem; padding: 4px 10px;">PR #88 · BLOCKED CI</span>
-            </div>
-
-            <div class="sprint-desc" data-plain="Adds mortality hazard curves and dissolves empty households when the head dies. Blocked on CI Check 89: null binomial band in m2_system.rs." data-arch="M2 demography mortality schedule, Bernoulli trials, H4 household dissolution, Check 89 fix pending.">
-              Adds mortality hazard curves and dissolves empty households when the head dies. Blocked on CI Check 89: null binomial band in <code>m2_system.rs</code>.
-            </div>
-
-            <!-- Task Progress Bar -->
-            <div style="margin: 12px 0 6px 0;">
-              <div style="display: flex; justify-content: space-between; font-size: 0.76rem; font-family: var(--font-mono); margin-bottom: 4px;">
-                <span style="color: var(--slate-300);">Task Completion: 5 / 6 Tasks Done (83%)</span>
-                <span style="color: var(--crimson); font-weight: 700;">1 Blocker (T-06)</span>
-              </div>
-              <div style="background: rgba(255,255,255,0.06); height: 6px; border-radius: 3px; overflow: hidden;">
-                <div style="width: 83%; height: 100%; background: linear-gradient(90deg, var(--emerald) 0%, var(--amber) 70%, var(--crimson) 100%);"></div>
-              </div>
-            </div>
-
-            <!-- Toggle Task Drawer -->
-            <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center;">
-              <button onclick="toggleTaskAccordion('tasks-spr-016')" style="background: rgba(0, 240, 255, 0.08); border: 1px solid var(--border-active); color: var(--cyan); padding: 5px 12px; border-radius: 6px; font-size: 0.78rem; font-family: var(--font-mono); cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                <span id="tasks-spr-016-icon">▼</span> Drill Down to Tasks (T-01..T-06)
-              </button>
-              <a href="https://github.com/BigRigVibeCoder/Rehoboam/pull/88" target="_blank" style="font-size: 0.78rem; color: var(--cyan); text-decoration: none;">GitHub PR #88 ↗</a>
-            </div>
-
-            <!-- Granular Task List Drawer -->
-            <div id="tasks-spr-016" class="task-cards-list" style="margin-top: 12px;">
-              
-              <div class="task-card task-done">
-                <div class="task-top-row">
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="task-id-badge" style="background: rgba(16, 185, 129, 0.15); color: var(--emerald);">T-01</span>
-                    <span class="task-title">Fixed-Point Pure Exp/Ln Math</span>
-                  </div>
-                  <span class="ci-check-badge success">✓ DONE</span>
-                </div>
-                <div class="task-plain-desc">Implemented fast bit-exact transcendental approximations using integer lookup polynomials so mortality rate calculation never uses floating point drift.</div>
-                <div class="task-meta-row">
-                  <span>Role: AGT-002-CORE</span>
-                  <span>Deliverable: crates/rh-core/src/math/fixed_transcendental.rs</span>
-                  <span style="color: var(--emerald);">Tests: 18 unit tests passing</span>
-                </div>
-              </div>
-
-              <div class="task-card task-done">
-                <div class="task-top-row">
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="task-id-badge" style="background: rgba(16, 185, 129, 0.15); color: var(--emerald);">T-02</span>
-                    <span class="task-title">Mortality Schedule & YAML Registry Bindings</span>
-                  </div>
-                  <span class="ci-check-badge success">✓ DONE</span>
-                </div>
-                <div class="task-plain-desc">Loaded age-stratified annual mortality schedules from YAML rulebook into Plane A static memory with zero heap allocations at runtime.</div>
-                <div class="task-meta-row">
-                  <span>Role: AGT-002-CORE</span>
-                  <span>Deliverable: specs/systems/m2_mortality_table.yaml</span>
-                  <span style="color: var(--emerald);">Audit: Registry schema validated</span>
-                </div>
-              </div>
-
-              <div class="task-card task-done">
-                <div class="task-top-row">
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="task-id-badge" style="background: rgba(16, 185, 129, 0.15); color: var(--emerald);">T-03</span>
-                    <span class="task-title">Bernoulli Mortality Trials at Midnight Drain</span>
-                  </div>
-                  <span class="ci-check-badge success">✓ DONE</span>
-                </div>
-                <div class="task-plain-desc">Integrated ChaCha8 PRNG streams with the mortality schedule to sample death events for every living person at day boundaries.</div>
-                <div class="task-meta-row">
-                  <span>Role: AGT-002-CORE</span>
-                  <span>Deliverable: crates/rh-core/src/systems/m2_system.rs</span>
-                  <span style="color: var(--emerald);">Determinism: Hash-locked across 1,000 steps</span>
-                </div>
-              </div>
-
-              <div class="task-card task-done">
-                <div class="task-top-row">
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="task-id-badge" style="background: rgba(16, 185, 129, 0.15); color: var(--emerald);">T-04</span>
-                    <span class="task-title">H4 Household Dissolution Cascade</span>
-                  </div>
-                  <span class="ci-check-badge success">✓ DONE</span>
-                </div>
-                <div class="task-plain-desc">When the head of household dies and no legal adult heirs remain, clean up and dissolve the domestic household unit without leaving orphan references.</div>
-                <div class="task-meta-row">
-                  <span>Role: AGT-002-CORE</span>
-                  <span>Deliverable: crates/rh-core/src/entities/household.rs</span>
-                  <span style="color: var(--emerald);">Invariants: Zero dangling pointers</span>
-                </div>
-              </div>
-
-              <div class="task-card task-done">
-                <div class="task-top-row">
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="task-id-badge" style="background: rgba(16, 185, 129, 0.15); color: var(--emerald);">T-05</span>
-                    <span class="task-title">Deterministic Agenda Tie-Breaking</span>
-                  </div>
-                  <span class="ci-check-badge success">✓ DONE</span>
-                </div>
-                <div class="task-plain-desc">Ensured multiple deaths on the exact same tick resolve in strictly sorted order by PersonId, preventing thread non-determinism.</div>
-                <div class="task-meta-row">
-                  <span>Role: AGT-003-DET</span>
-                  <span>Deliverable: crates/rh-core/src/agenda.rs</span>
-                  <span style="color: var(--emerald);">Test: V-DET-14 replay match</span>
-                </div>
-              </div>
-
-              <div class="task-card task-blocked">
-                <div class="task-top-row">
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="task-id-badge" style="background: rgba(239, 68, 68, 0.15); color: var(--crimson);">T-06</span>
-                    <span class="task-title">Fix CI Check 89 (Null Binomial Band Bounds Check)</span>
-                  </div>
-                  <span class="ci-check-badge failure">⛔ BLOCKED (ACTION ITEM)</span>
-                </div>
-                <div class="task-plain-desc"><strong>Immediate Fix:</strong> In <code>crates/rh-core/src/systems/m2_system.rs:442,452</code>, guard against zero/edge hazard rates in the Poisson-binomial test harness. The 2-line patch is ready in <code>INBOX.md</code>. Once committed, PR #88 CI turns 100% green!</div>
-                <div class="task-meta-row">
-                  <span>Role: AGT-002-CORE</span>
-                  <span>Deliverable: crates/rh-core/src/systems/m2_system.rs:442,452</span>
-                  <span style="color: var(--crimson); font-weight: 700;">Blocked by: Check 89 Golden Assertion</span>
-                </div>
-              </div>
-
-            </div>
-          </div>
-
-          <!-- SPR-018: WORLDGEN LITE (PR #126) -->
-          <div class="sprint-card" style="border: 1px solid var(--cyan); background: rgba(0, 240, 255, 0.04); box-shadow: 0 0 20px rgba(0, 240, 255, 0.1);">
-            <div class="sprint-card-header">
-              <div>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <span class="sprint-id" style="color: var(--cyan); font-weight: 900;">SPR-018</span>
-                  <span class="branch-pill" style="font-size: 0.72rem; padding: 2px 6px;">sprint/SPR-018-worldgen-lite</span>
-                </div>
-                <div class="sprint-name" style="margin-top: 4px;">Stage A Worldgen Lite (100-Year Settlement Grid)</div>
-              </div>
-              <span class="ci-check-badge running" style="font-size: 0.8rem; padding: 4px 10px;">PR #126 · IN REVIEW</span>
-            </div>
-
-            <div class="sprint-desc" data-plain="Generates terrain, founding settlements, and regional migration. 10/10 golden cases pass! Core CI fast check needs trivial fix." data-arch="rh-worldgen crate, M1 regions grid, S3 migration stub, 10/10 golden fixtures passing.">
-              Generates terrain, founding settlements, and regional migration. <strong>10/10 golden cases pass!</strong> Core CI fast check script lint needs trivial fix.
-            </div>
-
-            <!-- Task Progress Bar -->
-            <div style="margin: 12px 0 6px 0;">
-              <div style="display: flex; justify-content: space-between; font-size: 0.76rem; font-family: var(--font-mono); margin-bottom: 4px;">
-                <span style="color: var(--slate-300);">Task Completion: 3 / 4 Tasks Done (75%)</span>
-                <span style="color: var(--cyan); font-weight: 700;">1 Quick Fix Remaining</span>
-              </div>
-              <div style="background: rgba(255,255,255,0.06); height: 6px; border-radius: 3px; overflow: hidden;">
-                <div style="width: 75%; height: 100%; background: linear-gradient(90deg, var(--cyan) 0%, var(--emerald) 100%);"></div>
-              </div>
-            </div>
-
-            <!-- Toggle Task Drawer -->
-            <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center;">
-              <button onclick="toggleTaskAccordion('tasks-spr-018')" style="background: rgba(0, 240, 255, 0.08); border: 1px solid var(--border-active); color: var(--cyan); padding: 5px 12px; border-radius: 6px; font-size: 0.78rem; font-family: var(--font-mono); cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                <span id="tasks-spr-018-icon">▼</span> Drill Down to Tasks (T-01..T-04)
-              </button>
-              <a href="https://github.com/BigRigVibeCoder/Rehoboam/pull/126" target="_blank" style="font-size: 0.78rem; color: var(--cyan); text-decoration: none;">GitHub PR #126 ↗</a>
-            </div>
-
-            <!-- Granular Task List Drawer -->
-            <div id="tasks-spr-018" class="task-cards-list" style="margin-top: 12px;">
-              
-              <div class="task-card task-done">
-                <div class="task-top-row">
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="task-id-badge" style="background: rgba(16, 185, 129, 0.15); color: var(--emerald);">T-01</span>
-                    <span class="task-title">M1.regions Spatial Tile Grid</span>
-                  </div>
-                  <span class="ci-check-badge success">✓ DONE</span>
-                </div>
-                <div class="task-plain-desc">Built 2D hexagonal/square regional spatial partitions dividing the world into arable parcels, water bodies, and settlement centers.</div>
-                <div class="task-meta-row">
-                  <span>Role: AGT-002-CORE</span>
-                  <span>Deliverable: crates/rh-worldgen/src/regions.rs</span>
-                  <span style="color: var(--emerald);">Memory: Zero heap fragmentation</span>
-                </div>
-              </div>
-
-              <div class="task-card task-done">
-                <div class="task-top-row">
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="task-id-badge" style="background: rgba(16, 185, 129, 0.15); color: var(--emerald);">T-02</span>
-                    <span class="task-title">S3 Stub Terrain & Water Heightfields</span>
-                  </div>
-                  <span class="ci-check-badge success">✓ DONE</span>
-                </div>
-                <div class="task-plain-desc">Deterministic procedural terrain generation giving each settlement realistic elevation, river access, and defensible borders.</div>
-                <div class="task-meta-row">
-                  <span>Role: AGT-002-CORE</span>
-                  <span>Deliverable: crates/rh-worldgen/src/terrain.rs</span>
-                  <span style="color: var(--emerald);">Noise: Pure integer simplex hash</span>
-                </div>
-              </div>
-
-              <div class="task-card task-done">
-                <div class="task-top-row">
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="task-id-badge" style="background: rgba(16, 185, 129, 0.15); color: var(--emerald);">T-03</span>
-                    <span class="task-title">S3.migration Regional Settlement Founding</span>
-                  </div>
-                  <span class="ci-check-badge success">✓ DONE</span>
-                </div>
-                <div class="task-plain-desc">Initial pioneer settlement founding logic. Validated across 10 golden test cases without cross-platform drift.</div>
-                <div class="task-meta-row">
-                  <span>Role: AGT-002-CORE</span>
-                  <span>Deliverable: crates/rh-worldgen/src/migration.rs</span>
-                  <span style="color: var(--emerald);">Goldens: 10/10 Goldens Passing</span>
-                </div>
-              </div>
-
-              <div class="task-card task-inprogress">
-                <div class="task-top-row">
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="task-id-badge" style="background: rgba(0, 240, 255, 0.15); color: var(--cyan);">T-04</span>
-                    <span class="task-title">Core CI Fast Check Lint Fix</span>
-                  </div>
-                  <span class="ci-check-badge running">⚡ IN PROGRESS</span>
-                </div>
-                <div class="task-plain-desc">Trivial check script lint fix to satisfy <code>bin/check_all.sh</code> formatting rules before Architect merge.</div>
-                <div class="task-meta-row">
-                  <span>Role: AGT-002-TOOLS</span>
-                  <span>Deliverable: bin/check_all.sh / crates/rh-worldgen</span>
-                  <span style="color: var(--cyan);">ETA: Immediate merge once pushed</span>
-                </div>
-              </div>
-
-            </div>
-          </div>
-
-          <!-- SPR-028: ENSEMBLES & GATE G1A (PR #125) -->
-          <div class="sprint-card" style="border: 1px solid var(--violet); background: rgba(168, 85, 247, 0.04); box-shadow: 0 0 20px rgba(168, 85, 247, 0.1);">
-            <div class="sprint-card-header">
-              <div>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <span class="sprint-id" style="color: var(--violet); font-weight: 900;">SPR-028</span>
-                  <span class="branch-pill" style="font-size: 0.72rem; padding: 2px 6px;">sprint/SPR-028-ensembles</span>
-                </div>
-                <div class="sprint-name" style="margin-top: 4px;">Task T-03 Monte Carlo Ensembles & Gate G1a</div>
-              </div>
-              <span class="ci-check-badge running" style="font-size: 0.8rem; padding: 4px 10px;">PR #125 · SMOKE PASSED</span>
-            </div>
-
-            <div class="sprint-desc" data-plain="Runs 100 seeds in parallel to verify population survival curves. Smoke run passed in 5m 12s. Golden re-run needed." data-arch="rh-test ensemble runner, Gate G1a pass/fail aggregator, 100-seed Monte Carlo harness.">
-              Runs 100 seeds in parallel to verify population survival curves. <strong>Smoke run passed in 5m 12s!</strong> Golden CI job cancelled, needs re-run.
-            </div>
-
-            <!-- Task Progress Bar -->
-            <div style="margin: 12px 0 6px 0;">
-              <div style="display: flex; justify-content: space-between; font-size: 0.76rem; font-family: var(--font-mono); margin-bottom: 4px;">
-                <span style="color: var(--slate-300);">Task Completion: 3 / 4 Tasks Done (75%)</span>
-                <span style="color: var(--violet); font-weight: 700;">Awaiting Golden CI Pass</span>
-              </div>
-              <div style="background: rgba(255,255,255,0.06); height: 6px; border-radius: 3px; overflow: hidden;">
-                <div style="width: 75%; height: 100%; background: linear-gradient(90deg, var(--violet) 0%, var(--emerald) 100%);"></div>
-              </div>
-            </div>
-
-            <!-- Toggle Task Drawer -->
-            <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center;">
-              <button onclick="toggleTaskAccordion('tasks-spr-028')" style="background: rgba(0, 240, 255, 0.08); border: 1px solid var(--border-active); color: var(--cyan); padding: 5px 12px; border-radius: 6px; font-size: 0.78rem; font-family: var(--font-mono); cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                <span id="tasks-spr-028-icon">▼</span> Drill Down to Tasks (T-01..T-04)
-              </button>
-              <a href="https://github.com/BigRigVibeCoder/Rehoboam/pull/125" target="_blank" style="font-size: 0.78rem; color: var(--cyan); text-decoration: none;">GitHub PR #125 ↗</a>
-            </div>
-
-            <!-- Granular Task List Drawer -->
-            <div id="tasks-spr-028" class="task-cards-list" style="margin-top: 12px;">
-              
-              <div class="task-card task-done">
-                <div class="task-top-row">
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="task-id-badge" style="background: rgba(16, 185, 129, 0.15); color: var(--emerald);">T-01</span>
-                    <span class="task-title">Calibration Test Harness (rh-test)</span>
-                  </div>
-                  <span class="ci-check-badge success">✓ DONE (ON MAIN)</span>
-                </div>
-                <div class="task-plain-desc">Built modular test crate providing headless multi-instance execution and memory footprint sampling.</div>
-                <div class="task-meta-row">
-                  <span>Role: AGT-003-DET</span>
-                  <span>Deliverable: crates/rh-test</span>
-                  <span style="color: var(--emerald);">Landed: In PR #124 on main</span>
-                </div>
-              </div>
-
-              <div class="task-card task-done">
-                <div class="task-top-row">
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="task-id-badge" style="background: rgba(16, 185, 129, 0.15); color: var(--emerald);">T-02</span>
-                    <span class="task-title">Baseline Calibration Parameters (calib_v0.yaml)</span>
-                  </div>
-                  <span class="ci-check-badge success">✓ DONE (ON MAIN)</span>
-                </div>
-                <div class="task-plain-desc">Calibrated empirical target bounds for adult life expectancy and household sizes under medieval baseline assumptions.</div>
-                <div class="task-meta-row">
-                  <span>Role: AGT-001</span>
-                  <span>Deliverable: specs/calibration/calib_v0.yaml</span>
-                  <span style="color: var(--emerald);">Landed: In PR #124 on main</span>
-                </div>
-              </div>
-
-              <div class="task-card task-done">
-                <div class="task-top-row">
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="task-id-badge" style="background: rgba(16, 185, 129, 0.15); color: var(--emerald);">T-03</span>
-                    <span class="task-title">Monte Carlo Ensembles & Gate G1a Check</span>
-                  </div>
-                  <span class="ci-check-badge success">✓ DONE</span>
-                </div>
-                <div class="task-plain-desc">Multi-seed runner verifying population trajectory bands (100 seeds). Passed smoke CI job in 5 minutes 12 seconds.</div>
-                <div class="task-meta-row">
-                  <span>Role: AGT-003-DET</span>
-                  <span>Deliverable: crates/rh-test/src/ensemble.rs</span>
-                  <span style="color: var(--emerald);">Smoke CI: Passed (5m 12s)</span>
-                </div>
-              </div>
-
-              <div class="task-card task-inprogress">
-                <div class="task-top-row">
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="task-id-badge" style="background: rgba(168, 85, 247, 0.15); color: var(--violet);">T-04</span>
-                    <span class="task-title">Golden Artifact Sweep & Re-trigger</span>
-                  </div>
-                  <span class="ci-check-badge running">⚡ IN PROGRESS</span>
-                </div>
-                <div class="task-plain-desc">Re-run cancelled golden workflow on GitHub Actions to produce cryptographic verification report for Gate G1a.</div>
-                <div class="task-meta-row">
-                  <span>Role: AGT-003-STAT</span>
-                  <span>Deliverable: artifacts/gate_g1a_report.md</span>
-                  <span style="color: var(--violet);">Action: Re-trigger golden CI</span>
-                </div>
-              </div>
-
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-      <!-- ============================================================ -->
-      <!-- SECTION 2: WAVE 5 & 6 QUEUED SPRINTS (NEXT UP IN FLIGHT)      -->
-      <!-- ============================================================ -->
-      <div class="sprint-group-wrapper" data-group="wave5">
-        <div style="margin: 20px 0 12px 0;">
-          <span class="phase-tag violet" style="font-size: 0.85rem; padding: 4px 14px;">⏳ WAVE 5 & 6 SPRINT QUEUE (UNBLOCKED BY DIRECTOR RULINGS D58–D63)</span>
-        </div>
-
-        <div class="sprints-grid" style="margin-bottom: 28px;">
-
-          <!-- SPR-021 -->
-          <div class="sprint-card" style="border: 1px solid var(--violet); background: rgba(168, 85, 247, 0.03);">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id" style="color: var(--violet);">SPR-021</div>
-                <div class="sprint-name">Marriage & Dynastic Kinship Networks</div>
-              </div>
-              <span class="status-pill active" style="border-color: var(--violet); color: var(--violet);">📋 READY TO START</span>
-            </div>
-            <div class="sprint-desc" data-plain="Implements courtship, dowry transfers, marriage agreements, and multi-generational genealogical trees." data-arch="M2 marriage market, D58 pedigree DAG, bilateral consanguinity check, household merger/split rules.">
-              Implements courtship, dowry transfers, marriage agreements, and multi-generational genealogical trees. Unblocked by Director ruling D58.
-            </div>
-            <div class="sprint-card-footer">
-              <span>Spec: specs/systems/m2_marriage.md</span>
-              <span style="color: var(--violet);">Wave 5 Priority 1</span>
-            </div>
-          </div>
-
-          <!-- SPR-022 -->
-          <div class="sprint-card" style="border: 1px solid var(--violet); background: rgba(168, 85, 247, 0.03);">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id" style="color: var(--violet);">SPR-022</div>
-                <div class="sprint-name">Economic Foundation: Tithes & Grain Stores</div>
-              </div>
-              <span class="status-pill active" style="border-color: var(--violet); color: var(--violet);">📋 READY TO START</span>
-            </div>
-            <div class="sprint-desc" data-plain="Models agricultural harvest yields, communal granary spoilage, and feudal tithe collection using fixed-point pure math." data-arch="E1 agricultural economy, cadastral plot yields, seasonal weather impacts, D59 tithe extraction.">
-              Models agricultural harvest yields, communal granary spoilage, and feudal tithe collection using fixed-point pure math. Unblocked by D59.
-            </div>
-            <div class="sprint-card-footer">
-              <span>Spec: specs/systems/e1_economy.md</span>
-              <span style="color: var(--violet);">Wave 5 Priority 2</span>
-            </div>
-          </div>
-
-          <!-- SPR-030 -->
-          <div class="sprint-card" style="border: 1px solid var(--violet); background: rgba(168, 85, 247, 0.03);">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id" style="color: var(--violet);">SPR-030</div>
-                <div class="sprint-name">Family Annals v1 Chronicle Generator</div>
-              </div>
-              <span class="status-pill active" style="border-color: var(--violet); color: var(--violet);">📋 READY TO START</span>
-            </div>
-            <div class="sprint-desc" data-plain="Generates publication-quality family chronicles and dynastic prose histories directly from simulation event traces." data-arch="rh-annals crate, D61 Markdown chronicle writer, genealogical epitaph compiler, keyframe anchor citations.">
-              Generates publication-quality family chronicles and dynastic prose histories directly from simulation event traces. Unblocked by D61.
-            </div>
-            <div class="sprint-card-footer">
-              <span>Spec: specs/chronicle/annals_v1.md</span>
-              <span style="color: var(--violet);">Wave 6 Priority 1</span>
-            </div>
-          </div>
-
-          <!-- SPR-033b -->
-          <div class="sprint-card" style="border: 1px solid var(--violet); background: rgba(168, 85, 247, 0.03);">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id" style="color: var(--violet);">SPR-033b</div>
-                <div class="sprint-name">Bevy Viewer Client (3D Terrain & Settlements)</div>
-              </div>
-              <span class="status-pill active" style="border-color: var(--violet); color: var(--violet);">📋 READY TO START</span>
-            </div>
-            <div class="sprint-desc" data-plain="Connects the rh-view-core meshing engine into Bevy 0.20 for real-time 3D voxel terrain visualization." data-arch="rh-view-client crate, Bevy 0.20 window bootstrap, Unix socket reader, D63 ThinkPad latency budget &le;250ms.">
-              Connects the <code>rh-view-core</code> meshing engine into Bevy 0.20 for real-time 3D voxel terrain visualization. Unblocked by D63.
-            </div>
-            <div class="sprint-card-footer">
-              <span>Spec: PRJ-003 §6 / D63</span>
-              <span style="color: var(--violet);">Wave 6 Priority 2</span>
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-      <!-- ============================================================ -->
-      <!-- SECTION 3: PHASE 1A MERGED SPRINTS (WAVE 4 & WALKING SKELETON)-->
-      <!-- ============================================================ -->
-      <div class="sprint-group-wrapper" data-group="phase1a-merged">
-        <div style="margin: 20px 0 12px 0;">
-          <span class="phase-tag emerald" style="font-size: 0.85rem; padding: 4px 14px;">✓ PHASE 1A / WAVE 4 MERGED ON MAIN (AUTHORITATIVE ENGINE CODE)</span>
-        </div>
-
-        <div class="sprints-grid" style="margin-bottom: 28px;">
-
-          <!-- SPR-041 -->
-          <div class="sprint-card">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id" style="color: var(--emerald);">SPR-041</div>
-                <div class="sprint-name">Multi-Seed Verification & CI Hardening</div>
-              </div>
-              <span class="status-pill merged">✓ Merged (PR #124)</span>
-            </div>
-            <div class="sprint-desc" data-plain="Nightly multi-seed sweeps across 100 seeds, deterministic error attribution, and CI failure triage." data-arch="nightly.yml 100-seed harness, seed delta bisect, memory threshold monitoring, VER-SPR-041 pass.">
-              Nightly multi-seed sweeps across 100 seeds, deterministic error attribution, and CI failure triage. Merged into main at commit 775f9391!
-            </div>
-            <div class="sprint-card-footer">
-              <span>Commit: 775f9391</span>
-              <span style="color: var(--emerald);">PR #124 Merged</span>
-            </div>
-          </div>
-
-          <!-- SPR-015 -->
-          <div class="sprint-card">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id" style="color: var(--emerald);">SPR-015</div>
-                <div class="sprint-name">Demography Births, Kinship & Households</div>
-              </div>
-              <span class="status-pill merged">✓ Merged (PR #107)</span>
-            </div>
-            <div class="sprint-desc" data-plain="Adds births, marriage pairing, multi-generation kinship trees, and household splits to the live engine." data-arch="M2 demography births, kinship DAG, household formation, V-DET-14 replay invariants, 100% check_all pass.">
-              Adds births, marriage pairing, multi-generation kinship trees, and household splits to the live engine. 100% pass across all CI checks!
-            </div>
-            <div class="sprint-card-footer">
-              <span>Commit: 489f666</span>
-              <span style="color: var(--emerald);">PR #107 Merged</span>
-            </div>
-          </div>
-
-          <!-- SPR-027 -->
-          <div class="sprint-card">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id" style="color: var(--emerald);">SPR-027</div>
-                <div class="sprint-name">World Stream Materializer & control.sock</div>
-              </div>
-              <span class="status-pill merged">✓ Merged (PR #123)</span>
-            </div>
-            <div class="sprint-desc" data-plain="The World Stream Materializer daemon compiles live Arrow/Parquet event dumps to control.sock Unix sockets for the 3D viewer." data-arch="rh-cli materialize daemon, live control.sock, event filters, tail snapshot parity, dual toolchain build.">
-              The World Stream Materializer daemon compiles live Arrow/Parquet event dumps to control.sock Unix sockets with live filtering for the 3D viewer.
-            </div>
-            <div class="sprint-card-footer">
-              <span>Commit: dc2a969</span>
-              <span style="color: var(--emerald);">PR #123 Merged</span>
-            </div>
-          </div>
-
-          <!-- SPR-033a -->
-          <div class="sprint-card">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id" style="color: var(--emerald);">SPR-033a</div>
-                <div class="sprint-name">Bevy Voxel Viewer Core (Stage A)</div>
-              </div>
-              <span class="status-pill merged">✓ Merged (PR #111)</span>
-            </div>
-            <div class="sprint-desc" data-plain="The Bevy-free foundational voxel viewer crate (rh-view-core): 0.35m terrain chunking, meshing arithmetic, and camera projection." data-arch="rh-view-core crate (3,164 LOC), 62^3 chunk meshing arithmetic, terrain v0, headless CI verification, VER-SPR-033a audit pass.">
-              The Bevy-free foundational voxel viewer crate (rh-view-core): 0.35m terrain chunking, meshing arithmetic, and camera projection.
-            </div>
-            <div class="sprint-card-footer">
-              <span>Commit: 5dc9c9b</span>
-              <span style="color: var(--emerald);">PR #111 Merged</span>
-            </div>
-          </div>
-
-          <!-- SPR-038a -->
-          <div class="sprint-card">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id" style="color: var(--emerald);">SPR-038a</div>
-                <div class="sprint-name">Cost Model & Positional Compaction</div>
-              </div>
-              <span class="status-pill merged">✓ Merged (PR #112)</span>
-            </div>
-            <div class="sprint-desc" data-plain="Per-instant cost model, positional compaction, and memory footprint guard for long-running multi-decade kingdom simulations." data-arch="rh-core cost accounting, positional compaction benchmarks, V-PERF-11 allocation limits.">
-              Per-instant cost model, positional compaction, and memory footprint guard for long-running multi-decade kingdom simulations.
-            </div>
-            <div class="sprint-card-footer">
-              <span>Commit: bb78c54</span>
-              <span style="color: var(--emerald);">PR #112 Merged</span>
-            </div>
-          </div>
-
-          <!-- SPR-011 -->
-          <div class="sprint-card">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id" style="color: var(--emerald);">SPR-011</div>
-                <div class="sprint-name">Engine Prerequisites</div>
-              </div>
-              <span class="status-pill merged">✓ Merged (PR #46)</span>
-            </div>
-            <div class="sprint-desc" data-plain="Added strict purity lints banning illegal file I/O in Plane A, 32-bit probability math, and life-course log plumbing." data-arch="rh-core AST purity lints, prob32 types, life_course.* log plumbing, zero heap allocation tick gates.">
-              Added strict purity lints banning illegal file I/O in Plane A, 32-bit probability math, and life-course log plumbing.
-            </div>
-            <div class="sprint-card-footer">
-              <span>Audit: VER-SPR-011</span>
-              <span style="color: var(--emerald);">100% Passed</span>
-            </div>
-          </div>
-
-          <!-- SPR-012 -->
-          <div class="sprint-card">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id" style="color: var(--emerald);">SPR-012</div>
-                <div class="sprint-name">Walking Skeleton B (Solo Lives & Dies)</div>
-              </div>
-              <span class="status-pill merged">✓ Merged (PR #56)</span>
-            </div>
-            <div class="sprint-desc" data-plain="Simulated world 'solo' where Ada lives, ages, and dies at day boundaries with exact mathematical determinism." data-arch="M2 demography slice, rh-cli run solo, deterministic aging/extinction golden ladder, Poisson-binomial q(15) null.">
-              Simulated world 'solo' where Ada lives, ages, and dies at day boundaries with exact mathematical determinism.
-            </div>
-            <div class="sprint-card-footer">
-              <span>Commit: df4a7f4</span>
-              <span style="color: var(--emerald);">Audit: VER-SPR-012 PASS</span>
-            </div>
-          </div>
-
-          <!-- SPR-013 -->
-          <div class="sprint-card">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id" style="color: var(--emerald);">SPR-013</div>
-                <div class="sprint-name">Walking Skeleton C (World Stream v0)</div>
-              </div>
-              <span class="status-pill merged">✓ Merged (PR #64)</span>
-            </div>
-            <div class="sprint-desc" data-plain="Live flight recorder stream (rh-stream) dumping simulation events into Parquet chronicles and local stream viewers." data-arch="rh-stream daemon, Parquet chronicle sealing, rh-sifter v0, channel-C ordering key, canonical text line feed.">
-              Live flight recorder stream (rh-stream) dumping simulation events into Parquet chronicles and local stream viewers.
-            </div>
-            <div class="sprint-card-footer">
-              <span>Commit: e3cb5e8</span>
-              <span style="color: var(--emerald);">Audit: VER-SPR-013 PASS</span>
-            </div>
-          </div>
-
-          <!-- SPR-014 -->
-          <div class="sprint-card">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id" style="color: var(--emerald);">SPR-014</div>
-                <div class="sprint-name">Lifecycle Queues & Mortality Drain</div>
-              </div>
-              <span class="status-pill merged">✓ Merged (PR #77)</span>
-            </div>
-            <div class="sprint-desc" data-plain="Queues commands so dead persons drop gracefully and daily mortality events drain in exact deterministic order." data-arch="rh-contracts v0, dead-person drop, M2 daily drain, ledger row insert default filling.">
-              Queues commands so dead persons drop gracefully and daily mortality events drain in exact deterministic order.
-            </div>
-            <div class="sprint-card-footer">
-              <span>Commit: 28ab29e</span>
-              <span style="color: var(--emerald);">Audit: VER-SPR-014 PASS</span>
-            </div>
-          </div>
-
-          <!-- SPR-020 -->
-          <div class="sprint-card">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id" style="color: var(--emerald);">SPR-020</div>
-                <div class="sprint-name">Cinematic Event Envelope & Roles</div>
-              </div>
-              <span class="status-pill merged">✓ Merged (PR #80)</span>
-            </div>
-            <div class="sprint-desc" data-plain="Adds cinematic tags (roles, anchored emotional snapshots, 9 typed causal edges) so stories become readable." data-arch="specs/chronicle/envelope_v0.md, 9 causal edge kinds (D44), hop-proof origin. C3 baseline move.">
-              Adds cinematic tags (roles, anchored emotional snapshots, 9 typed causal edges) so stories become readable.
-            </div>
-            <div class="sprint-card-footer">
-              <span>Commit: 9c051fe</span>
-              <span style="color: var(--emerald);">Audit: VER-SPR-020 PASS</span>
-            </div>
-          </div>
-
-          <!-- SPR-026 -->
-          <div class="sprint-card">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id" style="color: var(--emerald);">SPR-026</div>
-                <div class="sprint-name">World Stream v1 Wire Protocol</div>
-              </div>
-              <span class="status-pill merged">✓ Merged (PR #87)</span>
-            </div>
-            <div class="sprint-desc" data-plain="Zero-overhead live edge socket streaming canonical text lines directly to visualizers without columnar lag." data-arch="rh-protocol crate, bounded live window (D42), canonical text lines (D43). Client cursors and live resume logic.">
-              Zero-overhead live edge socket streaming canonical text lines directly to visualizers without columnar lag.
-            </div>
-            <div class="sprint-card-footer">
-              <span>Commit: 18b7617</span>
-              <span style="color: var(--emerald);">Audit: VER-SPR-026 PASS</span>
-            </div>
-          </div>
-
-          <!-- SPR-019 -->
-          <div class="sprint-card">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id" style="color: var(--emerald);">SPR-019</div>
-                <div class="sprint-name">Population Synthesis & Dynastic Back-fill</div>
-              </div>
-              <span class="status-pill merged">✓ Merged (PR #62 / #67)</span>
-            </div>
-            <div class="sprint-desc" data-plain="Synthesizes anonymous founders from demographic schedules; back-fills ancestors and multi-generation households." data-arch="Population synthesis v0, dynastic back-fill, manor fixture, stationary age distribution, D46 marginal deferral.">
-              Synthesizes anonymous founders from demographic schedules; back-fills ancestors and multi-generation households.
-            </div>
-            <div class="sprint-card-footer">
-              <span>Commit: ae63eb9</span>
-              <span style="color: var(--emerald);">Audit: REV-SPR-019 PASS</span>
-            </div>
-          </div>
-
-          <!-- SPR-029 -->
-          <div class="sprint-card">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id" style="color: var(--emerald);">SPR-029</div>
-                <div class="sprint-name">Family Annals v0 Templates & Reference</div>
-              </div>
-              <span class="status-pill merged">✓ Merged (PR #69)</span>
-            </div>
-            <div class="sprint-desc" data-plain="Translates raw life-course events into English chronicle prose, with kinship descriptions and keyframe prologues." data-arch="specs/chronicle/annals_v0.md, kinship fallback (D49), V-NAR-05 keyframe row attribution (D50).">
-              Translates raw life-course events into English chronicle prose, with kinship descriptions and keyframe prologues.
-            </div>
-            <div class="sprint-card-footer">
-              <span>PR #69 Merged</span>
-              <span style="color: var(--emerald);">Round 2 Verified</span>
-            </div>
-          </div>
-
-          <!-- INFRA-CI -->
-          <div class="sprint-card">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id" style="color: var(--emerald);">INFRA-CI</div>
-                <div class="sprint-name">CI Minute-Saving Skips & Nightly Hardening</div>
-              </div>
-              <span class="status-pill merged">✓ Merged (PR #70 / #122)</span>
-            </div>
-            <div class="sprint-desc" data-plain="Docs-only PR skips, 90-minute nightly test timeout expansion (PR #122), and clean cargo-deny advisory updates." data-arch=".github/workflows/ci.yml path filters, nightly.yml 90m timeout (PR #122), cargo-deny advisories clean (PR #118).">
-              Docs-only PR skips, 90-minute nightly test timeout expansion (PR #122), and clean cargo-deny advisory updates.
-            </div>
-            <div class="sprint-card-footer">
-              <span>Commits: bcdb0d4 / 8f1464c</span>
-              <span style="color: var(--emerald);">CI Tier 3 Green</span>
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-      <!-- ============================================================ -->
-      <!-- SECTION 4: PHASE 0 DETERMINISM KERNEL (10/10 MERGED)          -->
-      <!-- ============================================================ -->
-      <div class="sprint-group-wrapper" data-group="phase0">
-        <div style="margin: 20px 0 12px 0;">
-          <span class="phase-tag emerald" style="font-size: 0.85rem; padding: 4px 14px;">✓ PHASE 0: DETERMINISM KERNEL (10/10 MERGED · GATE G0 PASSED)</span>
-        </div>
-
-        <div class="sprints-grid">
-          <!-- SPR-001 -->
-          <div class="sprint-card">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id">SPR-001</div>
-                <div class="sprint-name">Repo Bootstrap</div>
-              </div>
-              <span class="status-pill merged">✓ Merged</span>
-            </div>
-            <div class="sprint-desc" data-plain="The skeleton directory layout, Rust workspace setup, and the 149-test fail-fast gate script." data-arch="Repo structure, Cargo workspace, bin/check_all.sh fail-fast pipeline, VER-SPR-001 audit pass.">
-              The skeleton directory layout, Rust workspace setup, and the 149-test fail-fast gate script.
-            </div>
-            <div class="sprint-card-footer">
-              <span>Audit: VER-SPR-001</span>
-              <span style="color: var(--emerald);">100% Passed</span>
-            </div>
-          </div>
-
-          <!-- SPR-002 -->
-          <div class="sprint-card">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id">SPR-002</div>
-                <div class="sprint-name">Deterministic Dice & IDs</div>
-              </div>
-              <span class="status-pill merged">✓ Merged</span>
-            </div>
-            <div class="sprint-desc" data-plain="Fair random number generators (ChaCha8) and unique genealogical IDs so identical seeds produce identical people." data-arch="Genealogical PersonId, SplitMix64/ChaCha8 independent streams, PRNG statistical covariance test (V-DET-20).">
-              Fair random number generators (ChaCha8) and unique genealogical IDs so identical seeds produce identical people.
-            </div>
-            <div class="sprint-card-footer">
-              <span>Audit: VER-SPR-002</span>
-              <span style="color: var(--emerald);">100% Passed</span>
-            </div>
-          </div>
-
-          <!-- SPR-003 -->
-          <div class="sprint-card">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id">SPR-003</div>
-                <div class="sprint-name">Samplers & Float Zone</div>
-              </div>
-              <span class="status-pill merged">✓ Merged</span>
-            </div>
-            <div class="sprint-desc" data-plain="Statistical probability drawers with strict guardrails to prevent illegal floating decimal drift across machines." data-arch="rh-sample, libm::fma exact Transcendental pins, float-zone API gating, binomial/geometric distributions.">
-              Statistical probability drawers with strict guardrails to prevent illegal floating decimal drift across machines.
-            </div>
-            <div class="sprint-card-footer">
-              <span>Audit: VER-SPR-003</span>
-              <span style="color: var(--emerald);">100% Passed</span>
-            </div>
-          </div>
-
-          <!-- SPR-004 -->
-          <div class="sprint-card">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id">SPR-004</div>
-                <div class="sprint-name">Registry Loader</div>
-              </div>
-              <span class="status-pill merged">✓ Merged</span>
-            </div>
-            <div class="sprint-desc" data-plain="The rulebook reader. Reads YAML game definitions and checks them for illegal numbers or broken references." data-arch="rh-manifest, rh-registry, PyYAML parity oracle, schema validator, compile-time specs verification.">
-              The rulebook reader. Reads YAML game definitions and checks them for illegal numbers or broken references.
-            </div>
-            <div class="sprint-card-footer">
-              <span>Audit: VER-SPR-004</span>
-              <span style="color: var(--emerald);">100% Passed</span>
-            </div>
-          </div>
-
-          <!-- SPR-005 -->
-          <div class="sprint-card">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id">SPR-005</div>
-                <div class="sprint-name">Core Time & Scheduler</div>
-              </div>
-              <span class="status-pill merged">✓ Merged</span>
-            </div>
-            <div class="sprint-desc" data-plain="The master clock. Moves simulation time forward across seconds, days, and seasons, scheduling each system." data-arch="rh-core time module, binding-level scheduler, lag types (instant vs deferred), pulse coarseness tie-breakers.">
-              The master clock. Moves simulation time forward across seconds, days, and seasons, scheduling each system.
-            </div>
-            <div class="sprint-card-footer">
-              <span>Audit: VER-SPR-005</span>
-              <span style="color: var(--emerald);">100% Passed</span>
-            </div>
-          </div>
-
-          <!-- SPR-006 -->
-          <div class="sprint-card">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id">SPR-006</div>
-                <div class="sprint-name">Agenda, Events & Invariants</div>
-              </div>
-              <span class="status-pill merged">✓ Merged</span>
-            </div>
-            <div class="sprint-desc" data-plain="Event bus and crash protections. If two things happen at the same millisecond, they resolve in rock-solid deterministic order." data-arch="Agenda min-heap (time, phase, entity, seq), rh-events emission order log, crash artifact poison guards.">
-              Event bus and crash protections. If two things happen at the same millisecond, they resolve in rock-solid deterministic order.
-            </div>
-            <div class="sprint-card-footer">
-              <span>Audit: VER-SPR-006</span>
-              <span style="color: var(--emerald);">100% Passed</span>
-            </div>
-          </div>
-
-          <!-- SPR-007 -->
-          <div class="sprint-card">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id">SPR-007</div>
-                <div class="sprint-name">Save Hashes & Input Journal</div>
-              </div>
-              <span class="status-pill merged">✓ Merged (PR #25)</span>
-            </div>
-            <div class="sprint-desc" data-plain="The save-game system. Creates cryptographically hashed snapshots (keyframes) and records player inputs for replay." data-arch="Plane hash computation, state keyframes, rh-journal input logs, DEF-3b IPC negative length guard.">
-              The save-game system. Creates cryptographically hashed snapshots (keyframes) and records player inputs for replay.
-            </div>
-            <div class="sprint-card-footer">
-              <span>Audit: VER-SPR-007</span>
-              <span style="color: var(--emerald);">100% Passed</span>
-            </div>
-          </div>
-
-          <!-- SPR-008 -->
-          <div class="sprint-card">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id">SPR-008</div>
-                <div class="sprint-name">1,000-Year Golden Replay</div>
-              </div>
-              <span class="status-pill merged">✓ Merged (PR #28)</span>
-            </div>
-            <div class="sprint-desc" data-plain="Runs 1,000 simulated years in a smoke world. Tests hash parity across CPU threads and includes a time-travel bug hunter." data-arch="Golden-run CI, smoke world 1,000 sim-years headless, bisect tool (V-DET-11), multi-thread hash matching.">
-              Runs 1,000 simulated years in a smoke world. Tests hash parity across CPU threads and includes a time-travel bug hunter.
-            </div>
-            <div class="sprint-card-footer">
-              <span>Audit: VER-SPR-008</span>
-              <span style="color: var(--emerald);">100% Passed</span>
-            </div>
-          </div>
-
-          <!-- SPR-009 -->
-          <div class="sprint-card">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id">SPR-009</div>
-                <div class="sprint-name">Wall-Clock Benchmarks</div>
-              </div>
-              <span class="status-pill merged">✓ Merged (PR #29)</span>
-            </div>
-            <div class="sprint-desc" data-plain="Measures engine tick speed and memory footprint. Establishes the final Gate G0 inventory before we spawn humans." data-arch="Bench 7 & 8 baselines, instruction count checks, counting allocator, Gate G0 inventory compilation.">
-              Measures engine tick speed and memory footprint. Establishes the final Gate G0 inventory before we spawn humans.
-            </div>
-            <div class="sprint-card-footer">
-              <span>Audit: VER-SPR-009</span>
-              <span style="color: var(--emerald);">100% Passed</span>
-            </div>
-          </div>
-
-          <!-- SPR-010 -->
-          <div class="sprint-card">
-            <div class="sprint-card-header">
-              <div>
-                <div class="sprint-id">SPR-010</div>
-                <div class="sprint-name">Fixed-Point Pure Math</div>
-              </div>
-              <span class="status-pill merged">✓ Merged</span>
-            </div>
-            <div class="sprint-desc" data-plain="Banned all decimal floats (like 0.1). All money and coordinates use fixed-point integers with banker's rounding so computers never drift." data-arch="Q8_8, Q16_16, Money types, banker's half-to-even rounding, saturating arithmetic, zero float tolerance.">
-              Banned all decimal floats (like 0.1). All money and coordinates use fixed-point integers with banker's rounding so computers never drift.
-            </div>
-            <div class="sprint-card-footer">
-              <span>Audit: VER-SPR-010</span>
-              <span style="color: var(--emerald);">100% Passed</span>
-            </div>
-          </div>
-
-        </div>
       </div>
     </section>
 
@@ -5202,7 +5046,7 @@
       const targetTab = document.getElementById('tab-' + tabId);
       if (targetTab) targetTab.classList.add('active');
 
-      const btn = Array.from(document.querySelectorAll('.nav-tab')).find(b => b.innerText.toLowerCase().includes(tabId));
+      const btn = document.querySelector(`.nav-tab[data-tab="${tabId}"]`);
       if (btn) btn.classList.add('active');
 
       window.scrollTo({ top: 380, behavior: 'smooth' });
@@ -5381,6 +5225,101 @@
         // ========================================================
     // PM 360° INTERACTIVE COMMAND FUNCTIONS
     // ========================================================
+
+    // ========================================================
+    // MASTER TREE DRILL-DOWN LOGIC
+    // ========================================================
+    function toggleTreeDrilldown(id) {
+      const drawer = document.getElementById(id + '-drawer');
+      const toggle = document.getElementById(id + '-toggle-text');
+      if (!drawer) return;
+      const isOpen = drawer.style.display !== 'none';
+      drawer.style.display = isOpen ? 'none' : 'block';
+      if (toggle) {
+        toggle.innerText = isOpen ? '▼ Click to Drill Down' : '▲ Collapse Drill Down';
+      }
+    }
+
+    function toggleTaskDrawer(id) {
+      const el = document.getElementById(id);
+      const icon = document.getElementById(id + '-icon');
+      if (!el) return;
+      const isOpen = el.style.display !== 'none';
+      el.style.display = isOpen ? 'none' : 'block';
+      if (icon) icon.innerText = isOpen ? '▶' : '▼';
+    }
+
+    function expandAllTreeNodes() {
+      document.querySelectorAll('.tree-drilldown-drawer').forEach(d => d.style.display = 'block');
+      document.querySelectorAll('.tree-tasks-drawer').forEach(d => d.style.display = 'block');
+      document.querySelectorAll('.drill-toggle-indicator').forEach(t => t.innerText = '▲ Collapse Drill Down');
+    }
+
+    function collapseAllTreeNodes() {
+      document.querySelectorAll('.tree-drilldown-drawer').forEach(d => d.style.display = 'none');
+      document.querySelectorAll('.tree-tasks-drawer').forEach(d => d.style.display = 'none');
+      document.querySelectorAll('.drill-toggle-indicator').forEach(t => t.innerText = '▼ Click to Drill Down');
+    }
+
+    let currentTreeFilter = 'all';
+
+    function filterMasterTree(cat, btn) {
+      currentTreeFilter = cat;
+      document.querySelectorAll('#tree-filter-pills .filter-pill').forEach(b => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+
+      document.querySelectorAll('.phase-node-wrapper').forEach(node => {
+        const nodeCat = node.getAttribute('data-category') || '';
+        if (cat === 'all') {
+          node.style.display = 'block';
+        } else if (cat === 'active') {
+          node.style.display = (nodeCat === 'active') ? 'block' : 'none';
+          if (nodeCat === 'active') {
+            const drawer = node.querySelector('.tree-drilldown-drawer');
+            if (drawer) drawer.style.display = 'block';
+          }
+        } else if (cat === 'blocked') {
+          node.style.display = (nodeCat === 'active') ? 'block' : 'none';
+          if (nodeCat === 'active') {
+            const drawer = node.querySelector('.tree-drilldown-drawer');
+            if (drawer) drawer.style.display = 'block';
+            revealSprintInTree('node-spr-016');
+          }
+        } else if (cat === 'merged') {
+          node.style.display = (nodeCat === 'merged') ? 'block' : 'none';
+        } else if (cat === 'future') {
+          node.style.display = (nodeCat === 'future') ? 'block' : 'none';
+        }
+      });
+    }
+
+    function searchMasterTree() {
+      const q = document.getElementById('tree-search-input').value.toLowerCase().trim();
+      document.querySelectorAll('.phase-node-wrapper').forEach(node => {
+        const text = node.innerText.toLowerCase();
+        const matches = (q === '') || text.includes(q);
+        node.style.display = matches ? 'block' : 'none';
+        if (matches && q !== '') {
+          const drawer = node.querySelector('.tree-drilldown-drawer');
+          if (drawer) drawer.style.display = 'block';
+        }
+      });
+    }
+
+    function revealSprintInTree(sprintId) {
+      // Ensure parent phase drawer is open
+      const p1aDrawer = document.getElementById('p1a-drawer');
+      if (p1aDrawer) p1aDrawer.style.display = 'block';
+      const spr = document.getElementById(sprintId);
+      if (spr) {
+        spr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        spr.style.boxShadow = '0 0 30px var(--crimson)';
+        setTimeout(() => {
+          spr.style.boxShadow = '';
+        }, 3000);
+      }
+    }
+
     function toggleWbs(id) {
       const el = document.getElementById(id);
       const icon = document.getElementById(id + '-icon');
