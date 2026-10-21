@@ -20,9 +20,9 @@
 | Wave ID | Phase | Spec Target | Domain Crate(s) | Status | Audit Reference |
 |:---|:---|:---|:---|:---|:---|
 | **WAVE-001** | P1a | `SPEC-001`: Demography Births & Spec-Lint Verification | `specs/demography/*`, `crates/rh-sys-demography/*` | `COMPLETED ✅` | `VER-SPEC-001_WaveAudit.md` (PASS) |
-| **WAVE-002** | P1a | `SPEC-002`: Mortality, Succession & Cohort Aging Invariants | `crates/rh-sys-demography/*`, `crates/rh-sys-dynast/*`, `specs/demography/*` | `ACTIVE 🚀 (Contracts Frozen)` | `.spec/active/SPEC-002_mortality_succession.md` |
-| **WAVE-003** | P1a | `SPEC-003`: Minds v0 & Mental Break Invariants | `crates/rh-sys-minds/*`, `specs/minds/*` | `PLANNED` | Pending execution |
-| **WAVE-004** | P1a | `SPEC-004`: Chronicle Writer & Cinematic Event Envelope Integration | `crates/rh-chronicle/*`, `crates/rh-events/*`, `specs/annals/*` | `PLANNED` | Pending execution |
+| **WAVE-002** | P1a | `SPEC-002`: Mortality, Succession & Cohort Aging Invariants | `crates/rh-sys-demography/*`, `crates/rh-sys-dynast/*`, `specs/demography/*` | `COMPLETED ✅` | `VER-SPEC-002_WaveAudit.md` (PASS) |
+| **WAVE-003** | P1a | `SPEC-003`: Minds v0 & Mental Break Invariants | `crates/rh-sys-minds/*`, `specs/minds/*` | `ACTIVE 🚀 (Contracts Frozen)` | `.spec/active/SPEC-003_minds_stress_breaks.md` |
+| **WAVE-004** | P1a | `SPEC-004`: Chronicle Writer & Cinematic Event Envelope Integration | `crates/rh-chronicle/*`, `crates/rh-events/*`, `specs/annals/*` | `QUEUED ⏳ (Replenish Next)` | Pending execution |
 | **WAVE-005** | P1a Cutover | `SPEC-005`: World Stream v1 & Gate G1a Golden Run Verification | `crates/rh-stream/*`, `crates/rh-golden/*`, `python/rehoboam_calib/*` | `PLANNED (Gate G1a)` | Pending Gate G1a |
 | **WAVE-006** | P1b | `SPEC-006`: Artifacts & Mythic Catalysts (`S6.artifacts`) | `crates/rh-sys-artifacts/*`, `specs/artifacts/*` | `PLANNED` | Pending execution |
 | **WAVE-007** | P1b | `SPEC-007`: Vows, Sacred Oaths & Loyalty Invariants (`S7.vows`) | `crates/rh-sys-vows/*`, `specs/vows/*` | `PLANNED` | Pending execution |
@@ -45,9 +45,9 @@
 
 ---
 
-### WAVE-002: Mortality, Succession & Cohort Aging Invariants (`SPEC-002`) — QUEUED ⏳
+### WAVE-002: Mortality, Succession & Cohort Aging Invariants (`SPEC-002`) — COMPLETED ✅
 - **Phase:** P1a Bloodlines
-- **Spec Path:** `.spec/active/SPEC-002_mortality_succession.md` (to be drafted upon replenish trigger)
+- **Spec Path:** `.spec/archive/SPEC-002_mortality_succession.md`
 - **Domain Crates / Specs:** `crates/rh-sys-demography/*`, `crates/rh-sys-dynast/*`, `specs/demography/*`, `specs/dynasty/*`
 - **Frozen Interface Targets:**
   - `ScheduleDeath` drain at Day/`Vital` pulse (`REV-P1a MAJ-4`).
@@ -58,11 +58,11 @@
   ```bash
   python3 -I specs/demography/selftest_m2_f1.py && cargo test -p rh-sys-demography -p rh-sys-dynast
   ```
-- **Acceptance Criteria:** Rungs 0–2 mortality drains complete without event loss; title inheritance passes determinism check.
+- **Audit Artifact:** `.spec/archive/VER-SPEC-002_WaveAudit.md` (Verdict: `PASS`).
 
 ---
 
-### WAVE-003: Minds v0 & Mental Break Invariants (`SPEC-003`) — PLANNED
+### WAVE-003: Minds v0 & Mental Break Invariants (`SPEC-003`) — ACTIVE 🚀
 - **Phase:** P1a Bloodlines
 - **Spec Path:** `.spec/active/SPEC-003_minds_stress_breaks.md`
 - **Domain Crates / Specs:** `crates/rh-sys-minds/*`, `specs/minds/*`
