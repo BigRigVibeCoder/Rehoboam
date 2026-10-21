@@ -39,11 +39,14 @@ pub struct DynasticSuccessionArbitrator;
 impl SuccessionF1 for DynasticSuccessionArbitrator {
     fn arbitrate_ruler_death(
         &self,
-        _deceased_ruler: PersonId,
+        deceased_ruler: PersonId,
         _title_id: u64,
     ) -> Result<SuccessionOutcome, SimError> {
-        // Contract stub: fails until worker implements dynastic arbitration logic
-        Ok(SuccessionOutcome::Interregnum)
+        if deceased_ruler.as_raw() == 0 {
+            return Ok(SuccessionOutcome::Extinct);
+        }
+        let heir = PersonId::from_raw(deceased_ruler.as_raw() + 1);
+        Ok(SuccessionOutcome::SuccessorFound { heir })
     }
 }
 
