@@ -1,0 +1,36 @@
+name: "AI Agent Work Order (SDD Leaf Task)"
+description: "Dispatched leaf-node coding task with strict file-path boundary locks and deterministic verification"
+title: "[TASK]: "
+labels: ["agent-task", "status:ready"]
+body:
+  - type: input
+    id: worker_id
+    attributes:
+      label: "Assigned Worker ID"
+      placeholder: "e.g., worker-or-01"
+    validations:
+      required: true
+  - type: input
+    id: allowed_paths
+    attributes:
+      label: "Allowed Write Paths"
+      description: "Comma-separated file or glob paths this worker is strictly permitted to modify (locked via Upstash Redis SETNX)"
+      placeholder: "crates/rh-sys-demography/src/*, specs/demography/*"
+    validations:
+      required: true
+  - type: textarea
+    id: contract_ref
+    attributes:
+      label: "Frozen Interface / Contract Specification"
+      description: "Direct references to .spec/active/SPEC-XXX.md, Rust traits, or reference scripts on main"
+      placeholder: ".spec/active/SPEC-015-births-f1.md (commit a61e919)"
+    validations:
+      required: true
+  - type: textarea
+    id: verification_cmd
+    attributes:
+      label: "Verification Command"
+      description: "Exact deterministic command that MUST exit 0 before commit/PR"
+      placeholder: "cargo test -p rh-sys-demography && python3 -I specs/demography/selftest_m2_f1.py"
+    validations:
+      required: true
