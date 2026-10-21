@@ -2,7 +2,7 @@
 id: SPR-013
 title: "Walking skeleton C: the stream, the sifter, replay and rungs 1-2 (P1.0, increment C)"
 type: how-to
-status: CLOSED
+status: ARCHIVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
@@ -11,6 +11,8 @@ created: 2026-10-16
 updated: 2026-10-17
 version: 1.1.0
 ---
+> [!NOTE]
+> **ARCHIVED BASELINE:** Traditional sprint-based tracking has been superseded by Specification-Driven Development (SDD v2.0). All future deliverables are tracked as Spec Waves in `.spec/ARCHITECT_BACKLOG.md`.
 
 > **BLUF:** Increment C of the walking skeleton (WP P1.0): World Stream v0 and the sealed Parquet chronicle (`rh-stream`), `rh-cli tail`, the `life_ends` pattern with its DuckDB twin (`rh-sifter` v0), journal replay end to end, and rungs 1 and 2 (`household`, `hamlet`) on the same binary. Developers: AGT-002-CORE (AGT-002-TOOLS for the twin and its check). Testers: AGT-003-DET and AGT-003-IF (one Tester session may hold both roles, on a different model from the Developer's). About 3.5 agent-days. **APPROVED by the director at G0** (C3; D30, 2026-10-16). SPR-011's rulings 1–19 bind this sprint and are not repeated here.
 

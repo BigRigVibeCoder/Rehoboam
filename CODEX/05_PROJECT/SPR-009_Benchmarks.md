@@ -2,7 +2,7 @@
 id: SPR-009
 title: "Benchmark harness and regression gate"
 type: how-to
-status: CLOSED
+status: ARCHIVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
@@ -11,6 +11,8 @@ created: 2026-10-16
 updated: 2026-10-16
 version: 1.11.0
 ---
+> [!NOTE]
+> **ARCHIVED BASELINE:** Traditional sprint-based tracking has been superseded by Specification-Driven Development (SDD v2.0). All future deliverables are tracked as Spec Waves in `.spec/ARCHITECT_BACKLOG.md`.
 
 > **BLUF:** Measure speed from the start: criterion benches, a 10% regression gate on instruction counts (stable on shared runners and laptops), wall-clock trends on the on-demand VM, serial-fraction instrumentation and the vitals line. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 3 agent-days.
 

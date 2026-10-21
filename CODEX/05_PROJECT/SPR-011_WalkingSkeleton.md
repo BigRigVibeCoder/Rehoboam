@@ -2,7 +2,7 @@
 id: SPR-011
 title: "Walking skeleton A: engine prerequisites (P1.0, increment A)"
 type: how-to
-status: CLOSED
+status: ARCHIVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
@@ -11,6 +11,8 @@ created: 2026-10-16
 updated: 2026-10-17
 version: 1.2.0
 ---
+> [!NOTE]
+> **ARCHIVED BASELINE:** Traditional sprint-based tracking has been superseded by Specification-Driven Development (SDD v2.0). All future deliverables are tracked as Spec Waves in `.spec/ARCHITECT_BACKLOG.md`.
 
 > **BLUF:** Increment A of the walking skeleton (WP P1.0): the engine prerequisites the first real system needs. An engine-purity lint (A-14), a 32-bit probability type with keyed uniform draws (A-21), draws keyed by the entity's epoch (A-29, which regenerates the `smoke` baseline), ledger rows with the life-course log, and authored numbers compiled exactly into plane A. Developer: AGT-002-CORE. Testers: AGT-003-DET and AGT-003-IF (one Tester session may hold both roles, on a different model from the Developer's). About 3 agent-days. **APPROVED by the director at G0** (C3; D30, 2026-10-16). The director approved P1.0 as one plan run as three sprints (ruling 1): this sprint, SPR-012 (`solo` lives and dies) and SPR-013 (the stream, the sifter, replay and rungs 1–2). Rulings 1–19 below bind all three and stay here, numbered as the specs and code already cite them ("SPR-011 ruling N"). Task numbers T-00 to T-13 are kept across the three sprints, so "SPR-011 T-05" in older text means T-05 of the plan, now in SPR-012.
 

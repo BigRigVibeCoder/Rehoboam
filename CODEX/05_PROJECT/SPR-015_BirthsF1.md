@@ -2,7 +2,7 @@
 id: SPR-015
 title: "M2 F1 births: age-specific fertility, partnering, households and kinship, genealogical ids at runtime, the derived per-system index, and the 0.3.0 promotion (P1.3, part a)"
 type: how-to
-status: APPROVED
+status: ARCHIVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
@@ -11,6 +11,8 @@ created: 2026-10-17
 updated: 2026-10-18
 version: 0.2.3
 ---
+> [!NOTE]
+> **ARCHIVED BASELINE:** Traditional sprint-based tracking has been superseded by Specification-Driven Development (SDD v2.0). All future deliverables are tracked as Spec Waves in `.spec/ARCHITECT_BACKLOG.md`.
 
 > **BLUF:** Builds the F1 births slice of the next-version M2 spec (`specs/systems/next/M2.demography.odd.toml` 0.3.0, PR #50, REV-SPR-015 closed) in `rh-core`, `rh-sys-demography`, `rh-worldgen`, `rh-ids` and `rh-contracts`:
 > - **the derived per-system index in `rh-core`** (C2; the Architect's W4 ruling): a system declares an index built from its own columns at construction and at restore, kept by a serial post-merge `&mut` hook, never hashed or keyframed; F9's issued-id table and the kinship, spouse and children-by-parent lookups live in it, and M7 reuses it;

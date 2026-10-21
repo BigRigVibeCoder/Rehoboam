@@ -2,7 +2,7 @@
 id: SPR-026
 title: "World Stream v1: the live edge over a local socket, viewer cursors and rh-protocol (P1.17, part a)"
 type: how-to
-status: CLOSED
+status: ARCHIVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
@@ -11,6 +11,8 @@ created: 2026-10-17
 updated: 2026-10-18
 version: 1.0.0
 ---
+> [!NOTE]
+> **ARCHIVED BASELINE:** Traditional sprint-based tracking has been superseded by Specification-Driven Development (SDD v2.0). All future deliverables are tracked as Spec Waves in `.spec/ARCHITECT_BACKLOG.md`.
 
 > **BLUF:** Builds the live edge of IF-0 (`specs/stream/wire_v1.md`, PR #60). This document calls it World Stream v1. The sprint delivers:
 > - **`rh-protocol`:** the frame codec, the JSON-RPC control plane and the `Catchup` viewer state machine.

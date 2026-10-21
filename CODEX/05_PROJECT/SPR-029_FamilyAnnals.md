@@ -2,7 +2,7 @@
 id: SPR-029
 title: "Family annals v0 in python/: real annals over real sealed runs, with the provenance sidecar (V-NAR-05) and no model (V-NAR-07); the run's inputs exported by rh-cli with the genesis cross-checked against the run, a port of the reference renderer, the multi-segment chronicle digest, the G1a reading package (P2.8a)"
 type: how-to
-status: APPROVED
+status: ARCHIVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, stream]
@@ -11,6 +11,8 @@ created: 2026-10-18
 updated: 2026-10-18
 version: 0.3.0
 ---
+> [!NOTE]
+> **ARCHIVED BASELINE:** Traditional sprint-based tracking has been superseded by Specification-Driven Development (SDD v2.0). All future deliverables are tracked as Spec Waves in `.spec/ARCHITECT_BACKLOG.md`.
 
 > **BLUF:** Builds the family-annals contract that is already on `main` (`specs/annals/annals_v0.md`, `templates_v0.toml`, the exact reference `selftest_annals_v0.py`, `lint_templates.py`, the three fixture chronicles and their 17 goldens; `REV-SPR-029` closed, D49 and D50 ruled) as a plane-C tool that renders **real annals from real sealed runs**. **Priority 1** under D62 (the director's execution priorities of 2026-10-18: the engine core first, then the viewer, then era packs; `docs/decisions-log.md:7`, which names this sprint): G1a's last criterion is "[H] You read the templated family history of 3 seeds" (`docs/11_roadmap.md:220`; the director's ≈ 2–4 hours, `:94`), and this plan builds what the director reads.
 > - **The inputs, exported by `rh-cli`** (tool plane, `rh-golden`): `rh-cli annals-inputs <run-dir> --into <dir>` writes the world directory the reference already reads (`chronicle_A.txt`, `world.toml`, `names.toml`, `keyframe.toml`). The chronicle is every sealed channel-A segment in the canonical text form, the lines `rh-cli tail --canonical` prints, with one `#segment` comment per segment. The keyframe extract is rebuilt from the run's history tuple at genesis (finding F-2), and **checked against the run twice** before it is written: the rebuilt living founders against the chronicle's tick-0 `LIFE_ENTRY` lines (ruling G16), and the rebuilt world advanced one sim-year along the run's journal against rung 1 of the run's `run.ladder`, which covers the house, tenure and title rows the founders' lines do not (ruling A3). The run-directory format does not change.

@@ -2,7 +2,7 @@
 id: SPR-020
 title: "The event envelope in the engine: roles, anchored snapshots, typed edges, origin and provenance of change (P1.9)"
 type: how-to
-status: CLOSED
+status: ARCHIVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
@@ -11,6 +11,8 @@ created: 2026-10-17
 updated: 2026-10-18
 version: 1.0.0
 ---
+> [!NOTE]
+> **ARCHIVED BASELINE:** Traditional sprint-based tracking has been superseded by Specification-Driven Development (SDD v2.0). All future deliverables are tracked as Spec Waves in `.spec/ARCHITECT_BACKLOG.md`.
 
 > **BLUF:** Builds the event envelope v0 (`specs/chronicle/envelope_v0.md`, merged in PR #61) in the engine:
 > - the Registry's role vocabulary, typed;

@@ -2,7 +2,7 @@
 id: SPR-022
 title: "M7 F1 (b), as SPR-022a and SPR-022b: ruler-exit hazards at the reference institutional state, the murder timer and the feud stock, deposition and claims, regencies, regrants, vocations and great-house dormancy (SIM-9) (P1.7, part b)"
 type: how-to
-status: APPROVED
+status: ARCHIVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, simulation]
@@ -11,6 +11,8 @@ created: 2026-10-18
 updated: 2026-10-18
 version: 0.3.0
 ---
+> [!NOTE]
+> **ARCHIVED BASELINE:** Traditional sprint-based tracking has been superseded by Specification-Driven Development (SDD v2.0). All future deliverables are tracked as Spec Waves in `.spec/ARCHITECT_BACKLOG.md`.
 
 > **BLUF (the one-page brief).** M7 F1, second half, in `rh-sys-dynasty`, against M7 0.6.0 as SPR-021a froze it. It runs as two sprints (X8), and both are **C2** (X6, X12).
 >

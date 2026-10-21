@@ -2,7 +2,7 @@
 id: SPR-001
 title: "Repository bootstrap and CI"
 type: how-to
-status: CLOSED
+status: ARCHIVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
@@ -11,6 +11,8 @@ created: 2026-10-16
 updated: 2026-10-16
 version: 1.2.0
 ---
+> [!NOTE]
+> **ARCHIVED BASELINE:** Traditional sprint-based tracking has been superseded by Specification-Driven Development (SDD v2.0). All future deliverables are tracked as Spec Waves in `.spec/ARCHITECT_BACKLOG.md`.
 
 > **BLUF:** Create the Cargo workspace, the Python packages and CI, so that every later sprint lands in a checked, lint-guarded repository. Developer: AGT-002-CORE (with AGT-002-TOOLS for Python). Testers: AGT-003-IF. Scope-bounded; at most about 3 agent-days.
 

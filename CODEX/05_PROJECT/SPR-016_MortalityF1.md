@@ -2,7 +2,7 @@
 id: SPR-016
 title: "M2 F1 mortality: fixed-point exp and ln, Brass at any (alpha, beta), the infant sub-schedule, the old-age tail and the density modifier; the 0.3.1 bump (P1.3, part b)"
 type: how-to
-status: APPROVED
+status: ARCHIVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
@@ -11,6 +11,8 @@ created: 2026-10-17
 updated: 2026-10-17
 version: 0.2.0
 ---
+> [!NOTE]
+> **ARCHIVED BASELINE:** Traditional sprint-based tracking has been superseded by Specification-Driven Development (SDD v2.0). All future deliverables are tracked as Spec Waves in `.spec/ARCHITECT_BACKLOG.md`.
 
 > **BLUF:** Builds `05.1` §6 item 4's fixed-point `exp`, `ln` and `prob_from_hazard` on a new `Q32_32` type in `rh_core::fixed`, bit-equal to `specs/numerics/exp_ln_v0.py`'s golden file, and the M2 spec's `[algorithm.mortality_f1]` MR0–MR13 in `rh-sys-demography`: Brass at any (α, β) on a 438-knot schedule, the infant sub-schedule below one year, the logistic old-age tail to 120, the density modifier (inert in every P1a world), the newborn's first draw and the deferral-consistent re-sample. At β = 1, under capacity, ages 1 to 90, the F1 schedule reproduces rung 0 bit for bit (the reference's check 1). `rh-manifest` accepts any β in the Registry bounds and compiles the two new parameters, refusing a non-integer `density_capacity` as MR2 says. SPR-012's draws golden is folded into the F1 model (W19). The frozen M2 moves from 0.3.0 to **0.3.1** (the interim rule out).
 >

@@ -2,7 +2,7 @@
 id: SPR-028
 title: "The M9 validation harness v0 in two stages: (A) the harness contract and its reviewed reference, censoring-aware estimators, 32-seed ensembles, the demography bands as gates on the seed-mean r, V-GOLD-03's CRN-paired comparison and the run report; (B) the isolation harness (V-SF-22) for M2, M7 and T1.minds under typed forcing, the dynasty report from channel A, and coverage (A-15) (P1.10)"
 type: how-to
-status: APPROVED
+status: ARCHIVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, validation, testing]
@@ -11,6 +11,8 @@ created: 2026-10-18
 updated: 2026-10-18
 version: 0.3.1
 ---
+> [!NOTE]
+> **ARCHIVED BASELINE:** Traditional sprint-based tracking has been superseded by Specification-Driven Development (SDD v2.0). All future deliverables are tracked as Spec Waves in `.spec/ARCHITECT_BACKLOG.md`.
 
 > **BLUF:** Builds M9 v0 (`docs/11` P1.10, `docs/11_roadmap.md:200`: "the isolation harness (V-SF-22), the demography and dynasty bands first, censoring-aware lifespans, 32-seed ensembles, the auto-generated run report"), the tool that turns G1a's statistical rows into evidence, plus BCK-002 A-15's coverage (ruling M-10). **Priority 1** under D62 (the director's execution priorities of 2026-10-18: the engine core first, then the viewer, then era packs; `docs/decisions-log.md:7`): this plan carries G1a's demography row (`:211`), its isolation row (`:212`) and the reported succession bands (`:214`). Two stages, each its own PR, Tester pass and audit:
 > - **Stage A, PR `SPR-028a`** (C1), the harness:

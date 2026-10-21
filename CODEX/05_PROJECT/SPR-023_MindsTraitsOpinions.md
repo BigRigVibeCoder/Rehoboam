@@ -2,7 +2,7 @@
 id: SPR-023
 title: "Minds v0, part a: rh-minds, named actors promoted by M7's criteria, HEXACO traits and ambition, relations and opinion modifiers (P3.2a, part a)"
 type: how-to
-status: APPROVED
+status: ARCHIVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, simulation]
@@ -11,6 +11,8 @@ created: 2026-10-18
 updated: 2026-10-18
 version: 0.3.1
 ---
+> [!NOTE]
+> **ARCHIVED BASELINE:** Traditional sprint-based tracking has been superseded by Specification-Driven Development (SDD v2.0). All future deliverables are tracked as Spec Waves in `.spec/ARCHITECT_BACKLOG.md`.
 
 > **BLUF:** Builds the first slice of `T1.minds` in a new plane-A crate, `rh-minds`, against the **T1-A** spec (T1 0.4.0, a reviewed spec PR the Architect is commissioning; X7):
 > - **the mind table**, keyed by a new column `mind.person`, appended in promotion order and read through the derived index; traits and ambition drawn once by `trait_draw`, kept through dormancy and reused on re-promotion (round 3 MAJ-9);

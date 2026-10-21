@@ -2,7 +2,7 @@
 id: SPR-012
 title: "Walking skeleton B: solo lives and dies (P1.0, increment B)"
 type: how-to
-status: CLOSED
+status: ARCHIVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
@@ -11,6 +11,8 @@ created: 2026-10-16
 updated: 2026-10-17
 version: 1.1.0
 ---
+> [!NOTE]
+> **ARCHIVED BASELINE:** Traditional sprint-based tracking has been superseded by Specification-Driven Development (SDD v2.0). All future deliverables are tracked as Spec Waves in `.spec/ARCHITECT_BACKLOG.md`.
 
 > **BLUF:** Increment B of the walking skeleton (WP P1.0): `solo` lives and dies. The M2 rung-0 mortality schedule in fixed point, the `rh-worldgen` stub that writes founders, `rh-sys-demography` (the first real system crate) and `rh-cli run <world>` with the `solo` golden ladder. Developer: AGT-002-CORE. Testers: AGT-003-DET and AGT-003-STAT (one Tester session may hold both roles, on a different model from the Developer's). About 3 agent-days. **APPROVED by the director at G0** (C3; D30, 2026-10-16). SPR-011's rulings 1–19 bind this sprint and are not repeated here.
 

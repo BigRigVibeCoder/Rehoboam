@@ -2,7 +2,7 @@
 id: SPR-033
 title: "The voxel viewer's first sprint, in two stages: (a) the Bevy-free core: the workspace, the binary greedy mesher, hamlet's terrain from a written spec with a Python reference, the isolation lint and the viewer's CI job; (b) the Bevy app: the pin and toolchain, the cameras, the render-work level-of-detail controller, the HUD, the bench and the live panel over IF-0"
 type: how-to
-status: APPROVED
+status: ARCHIVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, observability, stream]
@@ -11,6 +11,8 @@ created: 2026-10-17
 updated: 2026-10-18
 version: 1.5.0
 ---
+> [!NOTE]
+> **ARCHIVED BASELINE:** Traditional sprint-based tracking has been superseded by Specification-Driven Development (SDD v2.0). All future deliverables are tracked as Spec Waves in `.spec/ARCHITECT_BACKLOG.md`.
 
 > **BLUF:** the first sprint of the viewer lane (priority 2, D62), **in two stages in one plan, as SPR-038 has. Each stage is its own PR, Tester pass and audit.**
 >

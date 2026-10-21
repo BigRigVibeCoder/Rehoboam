@@ -2,7 +2,7 @@
 id: SPR-025
 title: "Minds v0, part c: stress and its exact accounting, grief with damping, mental breaks from the typed break table, the refractory period, the cascade scenario (P3.2a, part c)"
 type: how-to
-status: APPROVED
+status: ARCHIVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, simulation]
@@ -11,6 +11,8 @@ created: 2026-10-18
 updated: 2026-10-18
 version: 0.3.0
 ---
+> [!NOTE]
+> **ARCHIVED BASELINE:** Traditional sprint-based tracking has been superseded by Specification-Driven Development (SDD v2.0). All future deliverables are tracked as Spec Waves in `.spec/ARCHITECT_BACKLOG.md`.
 
 > **BLUF:** Builds the stress half of `T1.minds` 0.5.0 in `rh-minds` (SAGA-11; `05.3` §2.1). T1-I/S, promoted by SPR-024a, specifies it.
 > - **Stress** is a `q8_8` value on 0–100 with three accounting columns. V-SAGA-16's identity therefore holds exactly; it gates G1a.

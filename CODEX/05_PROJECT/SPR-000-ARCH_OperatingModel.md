@@ -2,7 +2,7 @@
 id: SPR-000-ARCH
 title: "Set up the operating model (CODEX, governance, agents, tooling)"
 type: how-to
-status: CLOSED
+status: ARCHIVED
 owner: architect
 agents: [architect]
 tags: [sprint, governance]
@@ -11,6 +11,8 @@ created: 2026-10-16
 updated: 2026-10-16
 version: 1.0.0
 ---
+> [!NOTE]
+> **ARCHIVED BASELINE:** Traditional sprint-based tracking has been superseded by Specification-Driven Development (SDD v2.0). All future deliverables are tracked as Spec Waves in `.spec/ARCHITECT_BACKLOG.md`.
 
 > **BLUF:** The Architect's setup sprint for ADR-0032: CODEX areas, adapted governance GOV-001–008, six agent boot docs, templates, the roadmap front page and backlogs, P0 sprints SPR-001–009 planned in full, the generated manifest, and `bin/check_all.sh`. No design document or engine contract was changed. Closed after its audit, VER-SPR-000-ARCH.
 

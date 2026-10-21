@@ -2,7 +2,7 @@
 id: SPR-019
 title: "Population synthesis v0 and the dynastic back-fill: the anonymous rest of a people from the compiled schedule, couples by fixed-point IPF, dependent children and households; each dynasty's pre-epoch genealogy and tenure log by its succession law; the M2 fold (0.3.2) and the back-fill table in the unpromoted M7 draft (P1.2)"
 type: how-to
-status: APPROVED
+status: ARCHIVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, simulation]
@@ -11,6 +11,8 @@ created: 2026-10-17
 updated: 2026-10-18
 version: 0.3.3
 ---
+> [!NOTE]
+> **ARCHIVED BASELINE:** Traditional sprint-based tracking has been superseded by Specification-Driven Development (SDD v2.0). All future deliverables are tracked as Spec Waves in `.spec/ARCHITECT_BACKLOG.md`.
 
 > **BLUF:** Builds `specs/worldgen/population_synthesis.toml` (PR #62, `REV-SPR-019` closed on `698e23d`; D46 approved) in `rh-worldgen`, bit-equal to `specs/worldgen/golden/population_synthesis_v0.txt` (hamlet and the manor at two seeds each; the manor's tenure logs under all seven laws over twenty seeds in two configurations) and to the genesis digests of SPR-030's fixture worlds (`golden/fixture_worlds_v0.txt`):
 > - **population synthesis** (`[algorithm.population_synthesis]` P0–P12): for the anonymous rest of a people, persons from the compiled F1 schedule's stationary age-sex marginal by systematic allocation with a keyed offset, married couples by fixed-point iterative proportional fitting rounded to both marginals by a bipartite flow, dependent children assigned to eligible mothers, households, and residence by S3's rule; `hamlet`'s 14 anonymous founders are the first;

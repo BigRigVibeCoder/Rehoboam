@@ -2,7 +2,7 @@
 id: SPR-024
 title: "Minds v0, part b, in two stages: event-driven IAUS with the typed considerations and response curves and same-instant agenda semantics (024a); marry, seek office, press a claim and feud, and M7 and T1 in the build (024b) (P3.2a, part b)"
 type: how-to
-status: APPROVED
+status: ARCHIVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, simulation]
@@ -11,6 +11,8 @@ created: 2026-10-18
 updated: 2026-10-18
 version: 0.3.0
 ---
+> [!NOTE]
+> **ARCHIVED BASELINE:** Traditional sprint-based tracking has been superseded by Specification-Driven Development (SDD v2.0). All future deliverables are tracked as Spec Waves in `.spec/ARCHITECT_BACKLOG.md`.
 
 > **BLUF:** Builds the decision half of `T1.minds` in `rh-minds`, in **two stages** (X8; REV-MINDS N2). Each stage is its own PR, Tester pass and audit.
 >

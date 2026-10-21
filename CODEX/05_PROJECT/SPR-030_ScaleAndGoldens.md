@@ -2,7 +2,7 @@
 id: SPR-030
 title: "Determinism and performance at scale, in three stages: (A) A-32's machinery allocations, the serial numbers (A-45), benches 1–2, the per-draw overhead (A-46) and the A-68 probe; (B1) twin_vales as the fifth golden world, CRN pairing (V-DET-17) on the engine and the population bands; (B2) the G1a session on kingdom_10k with the pre-registered verdict, V-PERF-09, the live edge (A-67), the per-instant cost at scale (A-60, A-68) and bench 3 (P1.14)"
 type: how-to
-status: APPROVED
+status: ARCHIVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, determinism, testing]
@@ -11,6 +11,8 @@ created: 2026-10-18
 updated: 2026-10-18
 version: 0.3.0
 ---
+> [!NOTE]
+> **ARCHIVED BASELINE:** Traditional sprint-based tracking has been superseded by Specification-Driven Development (SDD v2.0). All future deliverables are tracked as Spec Waves in `.spec/ARCHITECT_BACKLOG.md`.
 
 > **BLUF:** Closes P1.14 (`docs/11_roadmap.md:202`) and supplies most of G1a's scale evidence. **Priority 1** under D62 (the director's execution priorities of 2026-10-18: the engine core first, then the viewer, then era packs; `docs/decisions-log.md:7`): this plan carries G1a's determinism row on a dynastic fixture world (`:207`), its CRN row (`:210`), its envelope row (`:215`), its stream row's V-PERF-09 (`:218`) and its performance row (`:219`). Three stages, each its own PR, Tester pass and audit:
 > - **Stage A, PR `SPR-030a`** (C2 with `[perf-baseline]`, by T-11's class: ruling G3), the machinery:

@@ -2,7 +2,7 @@
 id: SPR-010
 title: "rh-core::fixed: fixed-point and money types"
 type: how-to
-status: CLOSED
+status: ARCHIVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
@@ -11,6 +11,8 @@ created: 2026-10-16
 updated: 2026-10-16
 version: 1.2.0
 ---
+> [!NOTE]
+> **ARCHIVED BASELINE:** Traditional sprint-based tracking has been superseded by Specification-Driven Development (SDD v2.0). All future deliverables are tracked as Spec Waves in `.spec/ARCHITECT_BACKLOG.md`.
 
 > **BLUF:** Build the fixed-point number types that every threshold quantity in plane A must use (DET-3): `Q8_8`, `Q16_16` and money in i64 minor units, with saturating arithmetic and one documented rounding rule. Found missing from the P0 plan by the SPR-001 audit; no other sprint delivered it. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 2 agent-days.
 

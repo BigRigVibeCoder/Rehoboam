@@ -2,7 +2,7 @@
 id: SPR-021
 title: "M7 F1 (a), as SPR-021a and SPR-021b: titles, succession law and immediate succession through the death path (V-SAGA-19); house membership at birth; the promotion of M7; the instant log's events and the core genealogy index (P1.7, part a)"
 type: how-to
-status: APPROVED
+status: ARCHIVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, simulation]
@@ -11,6 +11,8 @@ created: 2026-10-18
 updated: 2026-10-18
 version: 0.3.1
 ---
+> [!NOTE]
+> **ARCHIVED BASELINE:** Traditional sprint-based tracking has been superseded by Specification-Driven Development (SDD v2.0). All future deliverables are tracked as Spec Waves in `.spec/ARCHITECT_BACKLOG.md`.
 
 > **BLUF (the one-page brief).** M7 F1, first half, in a new system crate, `rh-sys-dynasty`. It runs as two sprints (X8), and both are **C2**.
 >

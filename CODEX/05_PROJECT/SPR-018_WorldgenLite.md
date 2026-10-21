@@ -2,7 +2,7 @@
 id: SPR-018
 title: "Worldgen-lite: the elevation raster, regions, seats and routes (M1.regions F0), residence at genesis and at birth (S3.migration F0), the validator's two household refusals, bench 4 (P1.1a; PRJ-002 ruling M-6)"
 type: how-to
-status: APPROVED
+status: ARCHIVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, simulation]
@@ -11,6 +11,8 @@ created: 2026-10-17
 updated: 2026-10-17
 version: 0.3.0
 ---
+> [!NOTE]
+> **ARCHIVED BASELINE:** Traditional sprint-based tracking has been superseded by Specification-Driven Development (SDD v2.0). All future deliverables are tracked as Spec Waves in `.spec/ARCHITECT_BACKLOG.md`.
 
 > **BLUF:** Builds the two genesis specs of `REV-SPR-018` (PR #52, closed):
 > - **worldgen-lite** (`specs/systems/M1.regions.odd.toml` `[algorithm.worldgen_lite]` W0–W10): a u16 elevation raster from a heightmap template, K regions by keyed seeds, one per land component, and an integer Dijkstra flood, one seat per region, one route per adjacency, in `rh-worldgen`, bit-equal to `specs/worldgen/golden/worldgen_lite_v0.txt` (ten cases, 119 lines);

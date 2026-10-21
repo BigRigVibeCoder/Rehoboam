@@ -2,7 +2,7 @@
 id: SPR-027
 title: "World Stream v1, part b: the materializer, the control endpoint and the pace command, tail filters and the digest, the Textual TUI stub (P1.17, part b)"
 type: how-to
-status: APPROVED
+status: ARCHIVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, stream]
@@ -11,6 +11,8 @@ created: 2026-10-17
 updated: 2026-10-18
 version: 0.2.3
 ---
+> [!NOTE]
+> **ARCHIVED BASELINE:** Traditional sprint-based tracking has been superseded by Specification-Driven Development (SDD v2.0). All future deliverables are tracked as Spec Waves in `.spec/ARCHITECT_BACKLOG.md`.
 
 > **BLUF:** Finishes World Stream v1 (`05.10`; `docs/11` P1.17) on top of SPR-026's live edge and SPR-013's replay:
 > - **the materializer** (V-STR-02): `rh_golden::materialize(run_dir, tick)`, built on `replay.rs`'s keyframe-resume path with no writer attached, giving the exact `state_hash` and a readable dump after Bookkeeping of any published tick, exposed as `rh-cli materialize`;

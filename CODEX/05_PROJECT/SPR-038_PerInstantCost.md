@@ -2,7 +2,7 @@
 id: SPR-038
 title: "Per-instant engine cost in two stages: (A) owned columns by index, exact gating of every check after a change, O(N+L) checks, positional compaction; (B) the check cadence as a run parameter, the release compile-out of the write guards' value checks, the incremental month-end digest, the instant log (`inserted()`, `exited()`), and the real-world benches (BCK-002 A-60)"
 type: how-to
-status: APPROVED
+status: ARCHIVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, determinism]
@@ -11,6 +11,8 @@ created: 2026-10-18
 updated: 2026-10-18
 version: 0.3.4
 ---
+> [!NOTE]
+> **ARCHIVED BASELINE:** Traditional sprint-based tracking has been superseded by Specification-Driven Development (SDD v2.0). All future deliverables are tracked as Spec Waves in `.spec/ARCHITECT_BACKLOG.md`.
 
 > **BLUF:** Removes the fixed per-instant engine overhead that SPR-014 exposed when it bound M2's `Day`/`Vital` drain to every day start (BCK-002 A-60: about 360 instants a year where there were 12–14), and the costs that grow with the life-course log, **in two stages in one plan, as SPR-019 has. Each stage is its own PR, Tester pass and audit.**
 >

@@ -2,7 +2,7 @@
 id: SPR-017
 title: "The Registry effect language v0 in rh-registry: the evaluator, succession laws, the kinship prelude and verb effects (P1.15)"
 type: how-to
-status: CLOSED
+status: ARCHIVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
@@ -11,6 +11,8 @@ created: 2026-10-17
 updated: 2026-10-18
 version: 1.0.0
 ---
+> [!NOTE]
+> **ARCHIVED BASELINE:** Traditional sprint-based tracking has been superseded by Specification-Driven Development (SDD v2.0). All future deliverables are tracked as Spec Waves in `.spec/ARCHITECT_BACKLOG.md`.
 
 > **BLUF:** Builds the Registry effect language v0 in `rh-registry`. The spec is `specs/registry/effect_language_v0.md` 0.5.0 (PR #41, `50e3c61`), approved by the director as D37 with D14, D4 and D12. The sprint delivers:
 > - **the typed, total front end and evaluator,** with the 16 compile-time error classes and the two run-time invariants (`E_TRUNCATED`, `E_RNG_REUSE`);

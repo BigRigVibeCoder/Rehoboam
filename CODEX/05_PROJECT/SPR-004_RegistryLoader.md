@@ -2,7 +2,7 @@
 id: SPR-004
 title: "Registry v0 loader and ownership lint"
 type: how-to
-status: CLOSED
+status: ARCHIVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
@@ -11,6 +11,8 @@ created: 2026-10-16
 updated: 2026-10-16
 version: 1.1.0
 ---
+> [!NOTE]
+> **ARCHIVED BASELINE:** Traditional sprint-based tracking has been superseded by Specification-Driven Development (SDD v2.0). All future deliverables are tracked as Spec Waves in `.spec/ARCHITECT_BACKLOG.md`.
 
 > **BLUF:** Load the Mechanics Registry and manifests in Rust, generate their JSON Schema, and enforce column ownership from the Registry and the system specs. Developer: AGT-002-CORE. Testers: AGT-003-IF. Scope-bounded; at most about 3 agent-days.
 
