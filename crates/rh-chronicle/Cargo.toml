@@ -1,0 +1,19 @@
+[package]
+name = "rh-chronicle"
+description = "Chronicle writer and cinematic event envelope ring buffer (WAVE-004 / SPEC-004)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[package.metadata.rehoboam]
+plane = "A"
+kind = "machinery"
+
+[lints]
+workspace = true
+
+[dependencies]
+rh-core = { version = "0.0.0", path = "../rh-core" }
+rh-events = { version = "0.0.0", path = "../rh-events" }
+rh-ids = { version = "0.0.0", path = "../rh-ids" }

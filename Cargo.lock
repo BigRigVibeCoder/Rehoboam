@@ -863,6 +863,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rh-chronicle"
+version = "0.0.0"
+dependencies = [
+ "rh-core",
+ "rh-events",
+ "rh-ids",
+]
+
+[[package]]
 name = "rh-cli"
 version = "0.0.0"
 dependencies = [
@@ -1026,6 +1035,16 @@ dependencies = [
 
 [[package]]
 name = "rh-sys-dynast"
+version = "0.0.0"
+dependencies = [
+ "rh-core",
+ "rh-events",
+ "rh-ids",
+ "rh-registry",
+]
+
+[[package]]
+name = "rh-sys-minds"
 version = "0.0.0"
 dependencies = [
  "rh-core",
