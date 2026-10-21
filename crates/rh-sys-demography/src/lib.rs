@@ -11,9 +11,11 @@
 //! REF: `CODEX/05_PROJECT/SPR-012_WalkingSkeletonB.md` T-05, T-07; SPR-011 rulings 5–8, 17.
 #![forbid(unsafe_code)]
 
+pub mod contracts;
 pub mod demography;
 pub mod schedule;
 
+pub use contracts::{DeathDrainOutcome, ScheduleDeathDrain, ScheduleDeathDrainStub};
 pub use demography::{Demography, DemographyError, apply_death};
 
 use rh_registry::WorldSpec;

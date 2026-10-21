@@ -153,6 +153,7 @@ PINNED_LABELS = MappingProxyType(
         "rh-protocol": ("tool", "tool"),
         # SPR-012: the first real system crate (M2.demography) and the worldgen stub (ruling 10).
         "rh-sys-demography": ("A", "system"),
+        "rh-sys-dynast": ("A", "system"),
         "rh-worldgen": ("A", "machinery"),
         # SPR-013 (SPR-011 rulings 13, 14): the World Stream's one channel-A writer, and the
         # downstream sifter of plane C.
@@ -425,6 +426,7 @@ ENGINE_CRATES = frozenset(
         "rh-snapshot",
         "rh-stream",
         "rh-sys-demography",
+        "rh-sys-dynast",
         "rh-sys-smoke",
         "rh-worldgen",
     }

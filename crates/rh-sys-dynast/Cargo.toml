@@ -1,0 +1,20 @@
+[package]
+name = "rh-sys-dynast"
+description = "M7.dynasty: titles, succession law, dynastic claims and inheritance (WAVE-002)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[package.metadata.rehoboam]
+plane = "A"
+kind = "system"
+
+[lints]
+workspace = true
+
+[dependencies]
+rh-core = { version = "0.0.0", path = "../rh-core" }
+rh-events = { version = "0.0.0", path = "../rh-events" }
+rh-ids = { version = "0.0.0", path = "../rh-ids" }
+rh-registry = { version = "0.0.0", path = "../rh-registry" }
