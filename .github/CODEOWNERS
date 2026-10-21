@@ -1,0 +1,27 @@
+# ==============================================================================
+# CODEOWNERS — Zero-Friction Blast-Radius Protection for Rehoboam Swarm (D-14)
+# ==============================================================================
+# Tier 1 (Human-Only Immutable Locks): Only @BigRigVibeCoder can modify the
+# Constitution or CI gate definitions.
+# Tier 2 (Architect-Autonomous Locks): (and @BigRigVibeCoder)
+# can autonomously update frozen specs, shared traits, and Cargo manifests so
+# the worker swarm never stalls waiting for human approval.
+# ==============================================================================
+
+# ── TIER 1: HUMAN-ONLY IMMUTABLE CONSTITUTIONAL LOCKS ─────────────────────────
+/CONSTITUTION.md            @BigRigVibeCoder
+/CLAUDE.md                  @BigRigVibeCoder
+/CODEX/10_GOVERNANCE/       @BigRigVibeCoder
+/.forgejo/workflows/        @BigRigVibeCoder
+/.github/workflows/         @BigRigVibeCoder
+/.forgejo/CODEOWNERS        @BigRigVibeCoder
+/.github/CODEOWNERS         @BigRigVibeCoder
+
+# ── TIER 2: ARCHITECT-AUTONOMOUS CONTRACT & WORKSPACE LOCKS ───────────────────
+# Workers are blocked from these paths, but can commit freely.
+/Cargo.toml                 @BigRigVibeCoder
+/Cargo.lock                 @BigRigVibeCoder
+/rust-toolchain.toml        @BigRigVibeCoder
+/crates/rh-core/            @BigRigVibeCoder
+/crates/rh-ids/             @BigRigVibeCoder
+/.spec/                     @BigRigVibeCoder

@@ -1,0 +1,46 @@
+# ==============================================================================
+# .forgejo/workflows/ci.yml — Ephemeral MicroVM / Sandbox CI Gate for Rehoboam
+# ==============================================================================
+# Runs on the remote Forgejo Runner (cerberus-runner-do / Exuberant / DO MicroVM),
+# NEVER on the e2-micro Control Plane.
+# ==============================================================================
+name: Cerberus SDD Gate
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  boundary-and-verify:
+    runs-on: cerberus-microvm
+    steps:
+      - name: Scion Blobless Sparse Checkout
+        run: |
+          git init .
+          git remote add origin "${{ github.server_url }}/${{ github.repository }}.git"
+          git fetch --filter=blob:none --depth=1 origin main "${{ github.head_ref }}"
+          git checkout FETCH_HEAD
+
+      - name: SDD Boundary Gate (Allowed Write Paths & CODEOWNERS)
+        run: |
+          python3 -I bin/gen_manifest.py --check
+
+      - name: Affected Crate & Spec Verification
+        run: |
+          CHANGED=$(git diff --name-only origin/main)
+          echo "Changed files:"
+          echo "${CHANGED}"
+          if echo "${CHANGED}" | grep -q "^specs/demography/"; then
+            python3 -I specs/demography/selftest_m2_f1.py
+          fi
+          if echo "${CHANGED}" | grep -q "^crates/"; then
+            CRATES=$(echo "${CHANGED}" | awk -F/ '/^crates\// {print "-p " $2}' | sort -u | tr '\n' ' ')
+            if [ -n "${CRATES}" ]; then
+              cargo test ${CRATES}
+            fi
+          fi
