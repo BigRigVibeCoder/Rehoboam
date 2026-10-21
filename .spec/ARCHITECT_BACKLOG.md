@@ -20,7 +20,7 @@
 | Wave ID | Phase | Spec Target | Domain Crate(s) | Status | Audit Reference |
 |:---|:---|:---|:---|:---|:---|
 | **WAVE-001** | P1a | `SPEC-001`: Demography Births & Spec-Lint Verification | `specs/demography/*`, `crates/rh-sys-demography/*` | `COMPLETED ✅` | `VER-SPEC-001_WaveAudit.md` (PASS) |
-| **WAVE-002** | P1a | `SPEC-002`: Mortality, Succession & Cohort Aging Invariants | `crates/rh-sys-demography/*`, `crates/rh-sys-dynast/*`, `specs/demography/*` | `QUEUED ⏳ (Replenish Next)` | Pending execution |
+| **WAVE-002** | P1a | `SPEC-002`: Mortality, Succession & Cohort Aging Invariants | `crates/rh-sys-demography/*`, `crates/rh-sys-dynast/*`, `specs/demography/*` | `ACTIVE 🚀` | `.spec/active/SPEC-002_mortality_succession.md` |
 | **WAVE-003** | P1a | `SPEC-003`: Minds v0 & Mental Break Invariants | `crates/rh-sys-minds/*`, `specs/minds/*` | `PLANNED` | Pending execution |
 | **WAVE-004** | P1a | `SPEC-004`: Chronicle Writer & Cinematic Event Envelope Integration | `crates/rh-chronicle/*`, `crates/rh-events/*`, `specs/annals/*` | `PLANNED` | Pending execution |
 | **WAVE-005** | P1a Cutover | `SPEC-005`: World Stream v1 & Gate G1a Golden Run Verification | `crates/rh-stream/*`, `crates/rh-golden/*`, `python/rehoboam_calib/*` | `PLANNED (Gate G1a)` | Pending Gate G1a |
