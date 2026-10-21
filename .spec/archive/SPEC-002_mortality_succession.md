@@ -2,7 +2,7 @@
 
 - **Sprint / Wave:** `WAVE-002` (P1a Bloodlines)
 - **Author:** Architect Coordinator (`claude-architect`)
-- **Status:** `ACTIVE` *(Moves to `.spec/archive/` with `VER-SPEC-002_WaveAudit.md` upon wave completion)*
+- **Status:** `CLOSED` *(Moves to `.spec/archive/` with `VER-SPEC-002_WaveAudit.md` upon wave completion)*
 - **Created:** 2026-10-21
 
 ---

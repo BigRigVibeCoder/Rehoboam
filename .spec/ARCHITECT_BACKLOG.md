@@ -184,3 +184,4 @@ flowchart TD
 | Spec ID | Wave ID | Audit File | Date | Verdict | Auditor |
 |:---|:---|:---|:---|:---|:---|
 | `SPEC-001` | `WAVE-001` | `.spec/archive/VER-SPEC-001_WaveAudit.md` | 2026-10-21 | `PASS` | `claude-architect` |
+| `SPEC-002` | `WAVE-002` | `.spec/archive/VER-SPEC-002_WaveAudit.md` | 2026-10-21 | `PASS` | `claude-architect` |
